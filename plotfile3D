@@ -1,0 +1,49 @@
+set term x11 1
+# set ylabel "Lattice Thermal Conductivity (relative to no defect)"
+# set xlabel "Defect concentration"
+
+set xrange [-2:2]
+set yrange [-2:2]
+set size ratio -1
+
+# set title "Relative LTC, PC = [1;1.11111], defect = [m;1.11111]"
+# splot "Apos.txt" pt 7 notitle # For 3D data
+splot "Apos.txt"  pt 7 lc rgb 'red' notitle
+     
+# set term postscript eps color
+set term png
+set output "Apos.png"
+replot
+
+set term x11 2
+# set ylabel "Lattice Thermal Conductivity (relative to no defect)"
+# set xlabel "Defect concentration"
+
+set xrange [-2:2]
+set yrange [-2:2]
+
+# set title "Relative LTC, PC = [1;1.11111], defect = [m;1.11111]"
+# splot "Apos.txt" pt 7 notitle # For 3D data
+splot "Bpos.txt"  pt 7 lc rgb 'blue' notitle
+     
+# set term postscript eps color
+set term png
+set output "Bpos.png"
+replot
+
+set term x11 3
+# set ylabel "Lattice Thermal Conductivity (relative to no defect)"
+# set xlabel "Defect concentration"
+
+set xrange [-2:2]
+set yrange [-2:2]
+
+# set title "Relative LTC, PC = [1;1.11111], defect = [m;1.11111]"
+# splot "Apos.txt" pt 7 notitle # For 3D data
+splot "Apos.txt"  pt 7 lc rgb 'red' notitle, \
+     "Bpos_final.txt"  pt 7 lc rgb 'blue' notitle
+     
+# set term postscript eps color
+set term png
+set output "ABpos.png"
+replot
