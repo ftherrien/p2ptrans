@@ -3,14 +3,16 @@ module transform
   implicit none
 
   public :: &
-       init_random_seed, &
-       norm, &
        trans, &
        center, &
-       dist
-
+       mapping
+       
   private :: &
-       eye
+       eye, &
+       init_random_seed, &
+       norm, &
+       dist, &
+       dist2
 
   contains
 
@@ -31,9 +33,12 @@ module transform
 
   end subroutine init_random_seed
 
-  subroutine trans(pos,tetha,u,vec)
+  subroutine trans(pos,n,tetha,u,vec)
 
-    double precision, intent(inout), dimension(:,:), allocatable :: &
+    integer, intent(in) :: &
+         n ! Number of atoms
+    
+    double precision, intent(inout), dimension(3,n) :: &
          pos  ! position matrix
 
     double precision, intent(in), dimension(3,1) :: &
@@ -58,73 +63,79 @@ module transform
 
     tvec = vec(:,1) + sum(pos,2) / size(pos,2)
 
-    call center(pos)
+    call center(pos,n)
     
     pos = matmul(R,pos) + spread(tvec,2,size(pos,2))
     
   end subroutine trans
 
-  subroutine center(pos)
+  subroutine center(pos,n)
 
-    double precision, intent(inout), dimension(:,:), allocatable :: &
+    integer, intent(in) :: &
+         n ! Number of atoms
+    
+    double precision, intent(inout), dimension(3,n) :: &
          pos  ! position matrix
 
     pos = pos - spread(sum(pos,2) / size(pos,2),2,size(pos,2))
     
   end subroutine center
 
-  function dist(posA,posB)
+  function cost(posA,posB,n)
 
-    double precision, intent(inout), dimension(:,:), allocatable :: &
+    integer, intent(in) :: &
+         n ! Number of atoms
+    double precision, intent(inout), dimension(3,n) :: &
          posA, posB  ! Rotation axis
-    double precision, dimension(:,:), allocatable :: &
+    double precision, dimension(n,n) :: &
+         cost
+    integer :: &
+         i,j ! Iterators
+    
+    cost = 0
+    
+    do i=1,size(posA,2)
+       do j=1,size(posA,2)
+          cost(i,j) = norm(posA(:,i)-posB(:,j))
+       enddo
+    enddo
+    
+  end function cost
+  
+  function dist(posA,posB,n)
+
+    integer, intent(in) :: &
+         n ! Number of atoms
+    double precision, intent(inout), dimension(3,n) :: &
+         posA, posB  ! Rotation axis
+    double precision, dimension(n,n) :: &
          dmat
     double precision :: &
          dist
-    integer :: &
-         i,j ! Iterators
-
-    allocate(dmat(size(posA,2),size(posA,2)))
     
-    dmat = 0
+    dmat = cost(posA, posB, n)
     
-    do i=1, size(posA,2)
-       do j=1, size(posA,2)
-          dmat(i,j) = norm(posA(:,i)-posB(:,j))
-       enddo
-    enddo
-
-    ! write(*,'(200(F10.5,F10.5,F10.5,F10.5,F10.5,/))') dmat
-
     dist = max(maxval(minval(dmat,2)), maxval(minval(dmat,1))) 
     
   end function dist
+  
+  function dist2(posA,posB,n)
 
-  function dist2(posA,posB)
-
-    double precision, intent(inout), dimension(:,:), allocatable :: &
+    integer, intent(in) :: &
+         n ! Number of atoms
+    double precision, intent(inout), dimension(3,n) :: &
          posA, posB  ! Rotation axis
-    double precision, dimension(:,:), allocatable :: &
+    double precision, dimension(n,n) :: &
          dmat
     double precision :: &
          dist2
-    integer :: &
-         i,j ! Iterators
     
-    allocate(dmat(size(posA,2),size(posA,2)))
+    dmat = cost(posA, posB, n)
     
-    dmat = 0
-    
-    do i=1,size(posA,2)
-       do j=1,i-1
-          dmat(i,j) = norm(posA(:,i)-posB(:,j))
-       enddo
-    enddo
-
     dist2 = sum(dmat) 
     
   end function dist2
-
+  
   function eye() result(a)
     !Copied from Rosetta Code at: https://rosettacode.org/wiki/Identity_matrix#Fortran
     ! Checked and modified for double
@@ -143,5 +154,81 @@ module transform
     norm = sqrt(sum(a**2))
 
   end function norm
+
+  subroutine mapping(Apos, Bpos, n, map, dmin)
+
+    use hungarian
+    
+    integer, intent(in) :: &
+         n ! Total number of atoms 
+
+    double precision, intent(inout), dimension(3,n) :: &
+         Apos, Bpos ! Position of the atoms
+
+    integer, intent(out), dimension(n) :: &
+         map ! List of index
+
+    double precision, intent(out) :: &
+         dmin
+    
+    double precision, dimension(3,n) :: &
+         newBpos ! new positions of the atoms 
+
+    double precision, dimension(3,1) :: &
+         vec, & ! Translation vecto
+         u      ! Rotation axis
+
+    double precision :: &
+         d, &   ! Distance between the two structures
+         tetha   ! Rotation angle
+
+    integer :: &
+         i   ! Iterator
+
+    integer, parameter :: &
+         n_iter = 100000 ! Number of Monte-Carlo iterations
+
+    double precision, parameter :: &
+         pi = 3.141592653589793d0
+
+    ! Center both cells at the geometric center
+    call center(Bpos,n)
+    call center(Apos,n)
+
+    ! Initital distance as the reference
+    dmin = dist(Apos,Bpos,n)
+    
+    ! Optimization iterations
+    do i=1,n_iter
+
+       ! Random translation, rotation axis and angle
+       call random_number(tetha)
+       call random_number(vec)
+       call random_number(u)
+       u = (u - reshape((/0.5d0,0.5d0,0.5d0/),(/3,1/))) ! Recasts vector in the 8 octans
+       vec = vec - reshape((/0.5d0,0.5d0,0.5d0/),(/3,1/))
+       u = u / norm(u) ! Normalizes
+       vec = dmin * vec / sqrt(3.0d0) ! Moves less when close
+       tetha = 2*pi*tetha
+
+       newBpos = Bpos
+
+       call trans(newBpos,n,tetha,u,vec) ! MC step
+
+       d = dist(Apos,newBpos,n)
+
+       ! Keep only better results no need for a temp for now
+       if (d <= dmin) then
+          dmin = d
+          Bpos = newBpos
+       endif
+
+    enddo
+
+    ! Finds the best mapping
+    call munkres(dmin,map,cost(Apos,Bpos,n),n)
+    
+  end subroutine mapping
+   
 
 end module transform
