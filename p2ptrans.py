@@ -1,4 +1,4 @@
-from transform import transform as tr
+from p2ptrans import transform as tr
 import numpy as np
 import numpy.linalg as la
 from mpl_toolkits.mplot3d import Axes3D
@@ -10,7 +10,7 @@ ax.set_xlim3d(-1,1)
 ax.set_ylim3d(-1,1)
 ax.set_zlim3d(-1,1)
 
-n = 50
+n = 300
 
 # Create a random Apos
 #Apos = np.random.random((3,n))
@@ -37,9 +37,15 @@ ax.scatter(Bpos.T[:,0],Bpos.T[:,1],Bpos.T[:,2])
 
 Bpos = np.asfortranarray(Bpos)
 Apos = np.asfortranarray(Apos)
-mapMat, dmin = tr.mapping(Apos, Bpos)
-
-mapMat = mapMat-1 # Fortran index to python index
+cBpos = np.asfortranarray(Bpos)
+cApos = np.asfortranarray(Apos)
+cmapMat, cdmin = tr.fastmapping(cApos, cBpos,50, 0.1, 0.01)
+mapMat, dmin = tr.fastmapping(Apos, Bpos, 50, 0.1, 0.01)
+print("max diff",max(sum((cApos - Apos)**2,0)))
+print("max diff",max(sum((cBpos - Bpos)**2,0)))
+print(cdmin)
+print(cmapMat)
+#mapMat = mapMat-1 # Fortran index to python index
 
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')

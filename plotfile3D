@@ -40,7 +40,7 @@ set yrange [-2:2]
 
 # set title "Relative LTC, PC = [1;1.11111], defect = [m;1.11111]"
 # splot "Apos.txt" pt 7 notitle # For 3D data
-splot "Apos.txt"  pt 7 lc rgb 'red' notitle, \
+splot "Apos_final.txt"  pt 7 lc rgb 'red' notitle, \
      "Bpos_final.txt"  pt 7 lc rgb 'blue' notitle
      
 # set term postscript eps color

@@ -1,20 +1,17 @@
 COMP = gfortran
 COMP2 = f2py
 
-mod_files = transform.f90 main.f90 
+files = transform.f90 tiling.f90
+functions = trans center mapping fastmapping sphere parallelepiped
 flags = --f90exec=gfortran
 
 #-I/usr/lib64/openmpi/lib/ -L/usr/lib64/openmpi/lib/ -lmpi
 
-all: transform main
+all: p2ptrans
 
-main: $(mod_files) 
-	$(COMP) $^ -o $@
-
-transform: lap.f90 transform.f90
+p2ptrans: $(files) lap.f90
 	$(COMP) -c -fPIC lap.f90
-	$(COMP2) -c $(flags) -I. lap.o -m $@ transform.f90 only: trans center mapping 
+	$(COMP2) -c $(flags) -I. lap.o -m $@ $(files) only: $(functions)
 
 clean:
 	rm -f *.mod *.so
-
