@@ -13,11 +13,11 @@ Bcell = np.array([[-1/2,1/2,0],[1,1,0],[0,0,1]]).T
 # Plotting the cell vectors of A and B
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
-ax.quiver(np.zeros(3), np.zeros(3), np.zeros(3), Bcell[0,:], Bcell[1,:], Bcell[2,:])
-ax.quiver(np.zeros(3), np.zeros(3), np.zeros(3), Acell[0,:], Acell[1,:], Acell[2,:])
-ax.set_xlim([0, 10])
-ax.set_ylim([0, 10])
-ax.set_zlim([0, 10])
+ax.quiver(np.ones(3), np.ones(3), np.zeros(3), Bcell[0,:], Bcell[1,:], Bcell[2,:])
+ax.quiver(-np.ones(3), -np.ones(3), np.zeros(3), Acell[0,:], Acell[1,:], Acell[2,:])
+ax.set_xlim([-5, 5])
+ax.set_ylim([-5, 5])
+ax.set_zlim([-5, 5])
 
 ASC = t.sphere(Acell,100)
 BSC = t.sphere(Bcell,100)
@@ -42,12 +42,6 @@ ax.set_xlim([minXAxis, maxXAxis])
 ax.set_ylim([minXAxis, maxXAxis])
 ax.set_zlim([minXAxis, maxXAxis])
 
-fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
-ax.set_xlim3d(-1,1)
-ax.set_ylim3d(-1,1)
-ax.set_zlim3d(-1,1)
-
 # # <><><><><><><><><><><><><><><><><><
 # # Create a random Apos and B with random small displacement
 # n = 100
@@ -62,7 +56,7 @@ ax.set_zlim3d(-1,1)
 
 # tr.trans(Bpos,tetha,u,vec)
 
-# Bpos = Bpos + np.random.random((3,n))*0.1
+# Bpos = Bpos + np.random.random((3,n))*0.2
 
 # # <><><><><><><><><><><><><><><><><>
 
@@ -78,17 +72,19 @@ for i in range(np.shape(atom_Apos)[0]):
     Apos = np.concatenate((Apos, ASC + Acell.dot(atom_Apos[i:i+1,:].T).dot(np.ones((1,np.shape(ASC)[1])))), axis=1)
     Bpos = np.concatenate((Bpos, BSC + Bcell.dot(atom_Bpos[i:i+1,:].T).dot(np.ones((1,np.shape(BSC)[1])))), axis=1)
 
-
-# ax.scatter(Apos.T[:,0],Apos.T[:,1],Apos.T[:,2])
-# ax.scatter(Bpos.T[:,0],Bpos.T[:,1],Bpos.T[:,2])
-
+    
 Apos = np.asfortranarray(Apos)
 Bpos = np.asfortranarray(Bpos)
 t_time = time.time()
 mapMat, dmin = tr.fastmapping(Apos, Bpos, atoms,10000, 0.1, 0.1, 0.5)
 t_time = time.time() - t_time
-fig = plt.figure()
+Bpos = np.asanyarray(Bpos)
+Apos = np.asanyarray(Apos)
 
+mapMat = mapMat-1 # Fortran index to python index)
+
+# Plotting the Apos and Bpos overlayed
+fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
 ax.scatter(Apos.T[:,0],Apos.T[:,1],Apos.T[:,2])
 ax.scatter(Bpos.T[:,0],Bpos.T[:,1],Bpos.T[:,2])
@@ -97,13 +93,17 @@ ax.set_xlim([-maxXAxis, maxXAxis])
 ax.set_ylim([-maxXAxis, maxXAxis])
 ax.set_zlim([-maxXAxis, maxXAxis])
 
-#mapMat = mapMat-1 # Fortran index to python index)
+# Mapping lattice
+disps = Bpos[:,mapMat] - Apos
 
-Bpos = np.asanyarray(Bpos)
-Apos = np.asanyarray(Apos)
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+ax.quiver(Apos.T[:,0],Apos.T[:,1],Apos.T[:,2],disps.T[:,0], disps.T[:,1], disps.T[:,2])
+maxXAxis = np.max([Apos.max(), Bpos.max()])
+ax.set_xlim([-maxXAxis, maxXAxis])
+ax.set_ylim([-maxXAxis, maxXAxis])
+ax.set_zlim([-maxXAxis, maxXAxis])
 
-# Directional plot
-dirA = np.array([1,0,0])
 
 print(dmin)
 print(mapMat)
