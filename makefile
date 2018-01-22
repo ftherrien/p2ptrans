@@ -1,5 +1,5 @@
 COMP = gfortran
-COMP2 = f2py
+COMP2 = python3 -m numpy.f2py
 
 files = transform.f90 tiling.f90
 functions = trans center mapping fastmapping sphere parallelepiped

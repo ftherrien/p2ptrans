@@ -75,14 +75,13 @@ module tiling
     diag = max(norm(Acell(:,1) - Acell(:,2) + Acell(:,3)),diag)
     diag = max(norm(-Acell(:,1) - Acell(:,2) + Acell(:,3)),diag)
     
-    
-    rad = (det(Acell,3)*ncell*3/(4*pi))**(1.0d0/3.0d0) + diag
+    rad = (abs(det(Acell,3))*ncell*3/(4*pi))**(1.0d0/3.0d0) + diag
 
-    nnx = int(2*rad*norm(cross(Acell(:,1),Acell(:,2)))/(2*dot_product(Acell(:,3),cross(Acell(:,1),Acell(:,2)))))+1
-    nny = int(2*rad*norm(cross(Acell(:,3),Acell(:,1)))/(2*dot_product(Acell(:,2),cross(Acell(:,3),Acell(:,1)))))+1
-    nnz = int(2*rad*norm(cross(Acell(:,2),Acell(:,3)))/(2*dot_product(Acell(:,1),cross(Acell(:,2),Acell(:,3)))))+1
+    nnx = abs(int(2*rad*norm(cross(Acell(:,1),Acell(:,2)))/(2*dot_product(Acell(:,3),cross(Acell(:,1),Acell(:,2))))))+1
+    nny = abs(int(2*rad*norm(cross(Acell(:,3),Acell(:,1)))/(2*dot_product(Acell(:,2),cross(Acell(:,3),Acell(:,1))))))+1
+    nnz = abs(int(2*rad*norm(cross(Acell(:,2),Acell(:,3)))/(2*dot_product(Acell(:,1),cross(Acell(:,2),Acell(:,3))))))+1
 
-    print*, 'Test',nnx, nny, nnz, rad, ncell
+    print*, 'Square cell dimensions:',nnx, nny, nnz
 
     l = 0
     dists = 0

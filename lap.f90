@@ -50,7 +50,7 @@ contains
     step = 1
     tmp = 0
 
-    CC = int(1d9*C)
+    CC = int(2.0d0**31/maxval(C)*C)
 
     allocate(M(n,n))      ! mask matrix - contains starred zeros
     allocate(rowCover(n)) ! to keep track of covered rows

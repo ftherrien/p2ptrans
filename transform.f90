@@ -14,6 +14,7 @@ module transform
        norm, &
        dist, &
        dist2, &
+       gradient_descent_rand, &
        gradient_descent, &
        u2angles, &
        angles2u
@@ -359,7 +360,119 @@ module transform
     
   end function angles2u
 
-  subroutine gradient_descent(tetha, u, vec, Apos, Bpos, n,atoms,n_atoms, n_iter, rate1, rate2, T)
+    subroutine gradient_descent(tetha, u, vec, Apos, Bpos, n,atoms,n_atoms, n_iter, rate1, rate2)
+    
+    integer, intent(in) :: &
+         n, n_iter, n_atoms ! Number of atoms
+
+    double precision, intent(in) :: &
+         rate1, & ! Rate for angles
+         rate2 ! Rate for disp
+             
+    integer, intent(in), dimension(n_atoms) :: &
+         atoms
+
+    double precision, intent(in), dimension(3,n) :: &
+         Apos, Bpos ! Position of the atoms
+    
+    double precision, dimension(3,n) :: &
+         pos, postmp ! position matrix
+    
+    double precision, intent(inout), dimension(3,1) :: &
+         u, &    ! Rotation axis (unitary vector)
+         vec     ! Translation vector
+
+    double precision, dimension(3,1) :: &
+         vec_tmp, & ! Temporary vector
+         vec_out, & ! Output vec
+         u_min
+
+    double precision, intent(inout) :: &
+         tetha    ! angle of rotation
+
+    double precision :: &
+         dist_plus, & ! distance when adding dx
+         dist_minus, & ! distance when substracting dx
+         tetha_out, & ! Output angle
+         a1, & ! Initial value of phi in u
+         a2, & ! Initial value of tetha in u
+         a1_out, & ! First output angle in u
+         a2_out ! Second output angle in u
+    
+    integer :: &
+         i,j ! Iterator
+
+    double precision, parameter :: &
+         dx = 1d-5  ! Derivative step
+    
+    ! u vector
+       call u2angles(a1,a2,u)
+    
+    do j=1, n_iter
+
+       ! Tetha
+       pos = Bpos
+       call trans(pos,n,tetha + dx,u,vec)
+       dist_plus = dist(Apos,pos,n,atoms, n_atoms)
+       
+       pos = Bpos
+       call trans(pos,n,tetha - dx,u,vec)
+       dist_minus = dist(Apos,pos,n,atoms, n_atoms)
+       
+       tetha_out = tetha - rate1*(dist_plus - dist_minus) / ( 2 * dx )
+
+       !a1
+       pos = Bpos
+       call trans(pos,n,tetha,angles2u(a1+dx,a2),vec)
+       dist_plus = dist(Apos,pos,n,atoms, n_atoms)
+
+       pos = Bpos
+       call trans(pos,n,tetha,angles2u(a1-dx,a2),vec)
+       dist_minus = dist(Apos,pos,n,atoms, n_atoms)
+
+       a1_out = a1 - rate1*(dist_plus - dist_minus) / ( 2 * dx )
+
+       !a2
+       pos = Bpos
+       call trans(pos,n,tetha,angles2u(a1,a2+dx),vec)
+       dist_plus = dist(Apos,pos,n,atoms, n_atoms)
+       
+       pos = Bpos
+       call trans(pos,n,tetha,angles2u(a1,a2-dx),vec)
+       dist_minus = dist(Apos,pos,n,atoms, n_atoms)
+
+       a2_out = a2 - rate1*(dist_plus - dist_minus) / ( 2 * dx )
+       
+       ! vec
+       do i=1,3
+
+          vec_tmp = vec
+
+          pos = Bpos
+          vec_tmp(i,1) = vec(i,1) + dx
+          call trans(pos,n,tetha,u,vec_tmp)
+          dist_plus = dist(Apos,pos,n,atoms, n_atoms)
+
+          pos = Bpos
+          vec_tmp(i,1) = vec(i,1) - dx
+          call trans(pos,n,tetha,u,vec_tmp)
+          dist_minus = dist(Apos,pos,n,atoms, n_atoms)
+
+          vec_out(i,1) = vec(i,1) - rate2*(dist_plus - dist_minus) / ( 2 * dx )
+          
+       enddo
+          
+       tetha = tetha_out
+       a1 = a1_out
+       a2 = a2_out
+       u = angles2u(a1_out, a2_out)
+       vec = vec_out
+
+    enddo
+    
+  end subroutine gradient_descent
+  
+  subroutine gradient_descent_rand(tetha, u, vec, Apos, Bpos, n,atoms,n_atoms, n_iter, rate1, rate2, T)
     
     integer, intent(in) :: &
          n, n_iter, n_atoms ! Number of atoms
@@ -522,7 +635,7 @@ module transform
     u = u_min
     vec = vec_min
     
-  end subroutine gradient_descent
+  end subroutine gradient_descent_rand
 
   subroutine fastmapping(map, dmin, Apos, Bpos, n, atoms, n_atoms, n_iter, rate1, rate2, T)
 
@@ -548,7 +661,7 @@ module transform
     
     integer, intent(out), dimension(n) :: &
          map ! List of index
-
+    
     double precision, intent(out) :: &
          dmin
     
@@ -562,6 +675,9 @@ module transform
     double precision, allocatable, dimension(:,:) :: &
          dmat
 
+    double precision, dimension(n,n) :: &
+         mat
+    
     integer :: &
          i, &
          n_cell
@@ -583,8 +699,10 @@ module transform
     u = u / norm(u) ! Normalizes
     tetha = 2*pi*tetha
     
-    call gradient_descent(tetha, u, vec, Apos, Bpos, n,atoms,n_atoms,n_iter, rate1, rate2, T)
+    call gradient_descent_rand(tetha, u, vec, Apos, Bpos, n,atoms,n_atoms,n_iter, rate1, rate2, T)
     
+    call gradient_descent(tetha, u, vec, Apos, Bpos, n,atoms,n_atoms,n_iter, rate1/100.0d0, rate2/10.0d0)
+
     call trans(Bpos,n,tetha,u,vec)
     
     ! Finds the best mapping
@@ -603,6 +721,11 @@ module transform
        map(n_cell*i+1:n_cell*(i+atoms(i+1))) = map(n_cell*i+1:n_cell*(i+atoms(i+1))) + n_cell*i
 
     enddo
+
+    ! ! Print the cost matrix
+    ! mat = cost(Apos,Bpos,n)   
+    ! write(*,"(10(F5.3,X))") mat   
+    ! call munkres(dmin,map,cost(Apos,Bpos,n),n)
 
     dmin = dist(Apos, Bpos, n, atoms, n_atoms)
     
