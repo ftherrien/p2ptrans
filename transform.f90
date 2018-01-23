@@ -123,7 +123,7 @@ module transform
          n_cell, & ! Number of cells
          i
     integer, parameter :: &
-         type = 2 ! Type of distance. 1: Hausdorff, 2. Sum of distances 
+         type = 1 ! Type of distance. 1: Hausdorff, 2. Sum of distances 
          
 
     if (type == 1) then
@@ -411,9 +411,6 @@ module transform
     double precision, parameter :: &
          dx = 1d-5  ! Derivative step
     
-    ! u vector
-       call u2angles(a1,a2,u)
-    
     do j=1, n_iter
 
        ! Tetha
@@ -426,31 +423,9 @@ module transform
        dist_minus = dist(Apos,pos,n,atoms, n_atoms)
        
        tetha_out = tetha - rate1*(dist_plus - dist_minus) / ( 2 * dx )
-
-       !a1
-       pos = Bpos
-       call trans(pos,n,tetha,angles2u(a1+dx,a2),vec)
-       dist_plus = dist(Apos,pos,n,atoms, n_atoms)
-
-       pos = Bpos
-       call trans(pos,n,tetha,angles2u(a1-dx,a2),vec)
-       dist_minus = dist(Apos,pos,n,atoms, n_atoms)
-
-       a1_out = a1 - rate1*(dist_plus - dist_minus) / ( 2 * dx )
-
-       !a2
-       pos = Bpos
-       call trans(pos,n,tetha,angles2u(a1,a2+dx),vec)
-       dist_plus = dist(Apos,pos,n,atoms, n_atoms)
-       
-       pos = Bpos
-       call trans(pos,n,tetha,angles2u(a1,a2-dx),vec)
-       dist_minus = dist(Apos,pos,n,atoms, n_atoms)
-
-       a2_out = a2 - rate1*(dist_plus - dist_minus) / ( 2 * dx )
-       
+     
        ! vec
-       do i=1,3
+       do i=1,2
 
           vec_tmp = vec
 
@@ -469,9 +444,6 @@ module transform
        enddo
        
        tetha = tetha_out
-       a1 = a1_out
-       a2 = a2_out
-       u = angles2u(a1_out, a2_out)
        vec = vec_out
 
     enddo
@@ -536,9 +508,6 @@ module transform
 
     call init_random_seed()
     
-    ! u vector
-       call u2angles(a1,a2,u)
-    
     do j=1, n_iter
 
        call random_number(rand_rate1)
@@ -556,31 +525,9 @@ module transform
        dist_minus = dist(Apos,pos,n,atoms, n_atoms)
        
        tetha_out = tetha - rand_rate1*(dist_plus - dist_minus) / ( 2 * dx )
-
-       !a1
-       pos = Bpos
-       call trans(pos,n,tetha,angles2u(a1+dx,a2),vec)
-       dist_plus = dist(Apos,pos,n,atoms, n_atoms)
-
-       pos = Bpos
-       call trans(pos,n,tetha,angles2u(a1-dx,a2),vec)
-       dist_minus = dist(Apos,pos,n,atoms, n_atoms)
-
-       a1_out = a1 - rand_rate1*(dist_plus - dist_minus) / ( 2 * dx )
-
-       !a2
-       pos = Bpos
-       call trans(pos,n,tetha,angles2u(a1,a2+dx),vec)
-       dist_plus = dist(Apos,pos,n,atoms, n_atoms)
-       
-       pos = Bpos
-       call trans(pos,n,tetha,angles2u(a1,a2-dx),vec)
-       dist_minus = dist(Apos,pos,n,atoms, n_atoms)
-
-       a2_out = a2 - rand_rate1*(dist_plus - dist_minus) / ( 2 * dx )
        
        ! vec
-       do i=1,3
+       do i=1,2
 
           vec_tmp = vec
 
@@ -599,14 +546,13 @@ module transform
        enddo
 
        pos = Bpos
-       call trans(pos,n,tetha_out,angles2u(a1_out,a2_out),vec_out)
+       call trans(pos,n,tetha_out,u,vec_out)
        dist_cur = dist(Apos,pos,n,atoms, n_atoms)
 
        if (j==1) then
           dist_prev = dist_cur
           dist_min = dist_cur
           tetha_min = tetha
-          u_min = u
           vec_min = vec
        endif
        
@@ -617,15 +563,11 @@ module transform
           dist_prev = dist_cur
           
           tetha = tetha_out
-          a1 = a1_out
-          a2 = a2_out
-          u = angles2u(a1_out, a2_out)
           vec = vec_out
 
           if (dist_cur < dist_min) then
              dist_min = dist_cur
              tetha_min = tetha
-             u_min = u
              vec_min = vec
           endif
        else
@@ -636,7 +578,6 @@ module transform
     enddo
 
     tetha = tetha_min
-    u = u_min
     vec = vec_min
     
   end subroutine gradient_descent_rand
@@ -698,9 +639,7 @@ module transform
     ! Random initial step
     call random_number(tetha)
     vec = 0 
-    call random_number(u)
-    u = (u - reshape((/0.5d0,0.5d0,0.5d0/),(/3,1/))) ! Recasts vector in the 8 octans
-    u = u / norm(u) ! Normalizes
+    u = reshape((/0,0,1/),(/3,1/))
     tetha = 2*pi*tetha
     
     call gradient_descent_rand(tetha, u, vec, Apos, Bpos, n,atoms,n_atoms,n_iter, rate1, rate2, T)

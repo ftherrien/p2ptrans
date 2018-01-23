@@ -4,7 +4,8 @@ module tiling
 
   public :: &
        parallelepiped, &
-       sphere
+       sphere, &
+       circle
        
   private :: &
        calc_angles, &
@@ -106,6 +107,68 @@ module tiling
 
   end subroutine sphere  
 
+  subroutine circle(Acell,ncell,ASC)
+
+    double precision, intent(in), dimension(2,2) :: &
+         Acell ! Matrix containing the 2 cell vectors
+
+    integer, intent(in) :: &
+         ncell ! Number of repetition in each direction
+
+    double precision, intent(out), dimension(2,ncell) :: &
+         ASC ! Position of each cell in the SC
+
+    double precision, dimension(ncell) :: &
+         dists
+    
+    integer :: &
+         i,j,l,nnx,nny, &
+         pos
+
+    double precision :: &
+         rad, dist, &
+         diag, area
+
+    double precision, parameter :: &
+         pi = 3.141592653589793d+0
+
+    ! Diagonals (This is probably overkill)
+    ! Finds the longest diagonal to add it to the radius of the circle such that there is
+    ! at least n intger number of cells in the sphere.
+    diag = 0
+    diag = max(norm(Acell(:,1) + Acell(:,2)),diag)
+    diag = max(norm(-Acell(:,1) + Acell(:,2)),diag)
+
+    area = sqrt((Acell(1,1)*Acell(2,2))**2 + (Acell(2,1)*Acell(1,2))**2)
+    
+    rad = sqrt(area*ncell/pi) + diag
+
+    nnx = abs(int(rad*norm(Acell(:,2))/area))+1
+    nny = abs(int(rad*norm(Acell(:,1))/area))+1
+
+    print*, 'Square cell dimensions:',nnx ,nny
+
+    l = 0
+    dists = 0
+    do i=-nnx,nnx
+       do j=-nny,nny
+             dist = norm(matmul(Acell,(/i+0.5d0,j+0.5d0/)))
+             if (dist <= rad) then
+                l=l+1
+                if (l<=ncell) then
+                   dists(l) = dist
+                   ASC(:,l) = matmul(Acell,(/i,j/))
+                elseif (maxval(dists) > dist) then
+                   pos = maxloc(dists,1)
+                   dists(pos) = dist
+                   ASC(:,pos) = matmul(Acell,(/i,j/))
+                endif
+             endif
+       enddo
+    enddo
+
+  end subroutine circle  
+  
   subroutine calc_angles(A,lengths,angles)
 
     double precision, parameter :: &
@@ -173,7 +236,7 @@ module tiling
   function norm(a)
 
     double precision :: norm
-    double precision, dimension(3), intent(in) :: a
+    double precision, dimension(:), intent(in) :: a
     
     norm = sqrt(sum(a**2))
     
