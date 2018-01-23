@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 from p2ptrans import tiling as t
 import time
 
+random = False
+
 # Setting the unit cells of A and B
 Acell = np.array([[1,0,0],[0,1,0],[0,0,1]])
 Bcell = np.array([[-1/2,1/2,0],[1,1,0],[0,0,1]]).T
@@ -42,41 +44,41 @@ ax.set_xlim([minXAxis, maxXAxis])
 ax.set_ylim([minXAxis, maxXAxis])
 ax.set_zlim([minXAxis, maxXAxis])
 
-# # <><><><><><><><><><><><><><><><><><
-# # Create a random Apos and B with random small displacement
-# n = 100
-# Apos = np.random.random((3,n))*3
 
-# # Transform Apos to get Bpos
-# tetha = 2*np.pi*np.random.random()
-# vec = np.random.random((3,1))-0.5
-# u = np.random.random((3,1))-0.5
-# u = u/la.norm(u)
-# Bpos = np.asfortranarray(np.array(Apos))
+if random:
+    # Create a random Apos and B with random small displacement
+    atoms = np.array([1]) # One atom
+    n = 100
+    Apos = np.random.random((3,n))*3
+    
+    # Transform Apos to get Bpos
+    tetha = 2*np.pi*np.random.random()
+    vec = np.random.random((3,1))-0.5
+    u = np.random.random((3,1))-0.5
+    u = u/la.norm(u)
+    Bpos = np.asfortranarray(np.array(Apos))
 
-# tr.trans(Bpos,tetha,u,vec)
+    tr.trans(Bpos,tetha,u,vec)
+    
+    Bpos = Bpos + np.random.random((3,n))*0
+else:
+    # Adds atoms to A and B
+    atom_Apos = np.array([[0,0,0]])
+    atom_Bpos = np.array([[0,0,0]])
+    atoms = np.array([1]) # One atom
 
-# Bpos = Bpos + np.random.random((3,n))*0.2
-
-# # <><><><><><><><><><><><><><><><><>
-
-# Adds atoms to A and B
-atom_Apos = np.array([[0,0,0]])
-atom_Bpos = np.array([[0,0,0]])
-atoms = np.array([1]) # One atom
-
-
-Apos = np.array([[],[],[]])
-Bpos = np.array([[],[],[]])
-for i in range(np.shape(atom_Apos)[0]):
-    Apos = np.concatenate((Apos, ASC + Acell.dot(atom_Apos[i:i+1,:].T).dot(np.ones((1,np.shape(ASC)[1])))), axis=1)
-    Bpos = np.concatenate((Bpos, BSC + Bcell.dot(atom_Bpos[i:i+1,:].T).dot(np.ones((1,np.shape(BSC)[1])))), axis=1)
-
+    Apos = np.array([[],[],[]])
+    Bpos = np.array([[],[],[]])
+    for i in range(np.shape(atom_Apos)[0]):
+        Apos = np.concatenate((Apos, ASC + Acell.dot(atom_Apos[i:i+1,:].T).dot(np.ones((1,np.shape(ASC)[1])))), axis=1)
+        Bpos = np.concatenate((Bpos, BSC + Bcell.dot(atom_Bpos[i:i+1,:].T).dot(np.ones((1,np.shape(BSC)[1])))), axis=1)
+        
     
 Apos = np.asfortranarray(Apos)
 Bpos = np.asfortranarray(Bpos)
 t_time = time.time()
-mapMat, dmin = tr.fastmapping(Apos, Bpos, atoms,10000, 0.1, 0.1, 0.5)
+mapMat, dmin = tr.fastmapping(Apos, Bpos, atoms,10000, 0.01, 0.00001, 5) # For dist 2 (not necessarily optimal)
+# mapMat, dmin = tr.fastmapping(Apos, Bpos, atoms,10000, 0.1, 0.1, 0.5) # For dist 1  
 t_time = time.time() - t_time
 Bpos = np.asanyarray(Bpos)
 Apos = np.asanyarray(Apos)
@@ -104,13 +106,9 @@ ax.set_xlim([-maxXAxis, maxXAxis])
 ax.set_ylim([-maxXAxis, maxXAxis])
 ax.set_zlim([-maxXAxis, maxXAxis])
 
-
 print(dmin)
 print(mapMat)
-print("Expected Order:", all(mapMat == np.arange(100)+1))
+print("Expected Order:", all(mapMat == np.arange(len(mapMat))))
 print("Mapping time:", t_time)
 
 plt.show()
-
-
-

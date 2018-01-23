@@ -13,7 +13,6 @@ module transform
        init_random_seed, &
        norm, &
        dist, &
-       dist2, &
        gradient_descent_rand, &
        gradient_descent, &
        u2angles, &
@@ -123,40 +122,47 @@ module transform
     integer :: &
          n_cell, & ! Number of cells
          i
+    integer, parameter :: &
+         type = 2 ! Type of distance. 1: Hausdorff, 2. Sum of distances 
+         
 
-    dist = 0
-
-    n_cell = n/sum(atoms)
+    if (type == 1) then
     
-    do i=0,n_atoms-1
+       dist = 0
 
-       allocate(dmat(n_cell*atoms(i+1),n_cell*atoms(i+1)))
-       dmat = cost(Apos(:,n_cell*i+1:n_cell*(i+atoms(i+1))), &
-                   Bpos(:,n_cell*i+1:n_cell*(i+atoms(i+1))), &
-                   n_cell*atoms(i+1))
-       dist = max(maxval(minval(dmat,2)), maxval(minval(dmat,1)),dist) 
-       deallocate(dmat)
+       n_cell = n/sum(atoms)
+    
+       do i=0,n_atoms-1
+
+          allocate(dmat(n_cell*atoms(i+1),n_cell*atoms(i+1)))
+          dmat = cost(Apos(:,n_cell*i+1:n_cell*(i+atoms(i+1))), &
+               Bpos(:,n_cell*i+1:n_cell*(i+atoms(i+1))), &
+               n_cell*atoms(i+1))
+          dist = max(maxval(minval(dmat,2)), maxval(minval(dmat,1)),dist) 
+          deallocate(dmat)
        
-    enddo
+       enddo
+
+    else if (type == 2) then
+
+       dist = 0
+
+       n_cell = n/sum(atoms)
+    
+       do i=0,n_atoms-1
+
+          allocate(dmat(n_cell*atoms(i+1),n_cell*atoms(i+1)))
+          dmat = cost(Apos(:,n_cell*i+1:n_cell*(i+atoms(i+1))), &
+               Bpos(:,n_cell*i+1:n_cell*(i+atoms(i+1))), &
+               n_cell*atoms(i+1))
+          dist = sum(dmat) + dist
+          deallocate(dmat)
+       
+       enddo
+
+    endif
     
   end function dist
-  
-  function dist2(Apos,Bpos,n)
-
-    integer, intent(in) :: &
-         n ! Number of atoms
-    double precision, intent(in), dimension(3,n) :: &
-         Apos, Bpos  ! Rotation axis
-    double precision, dimension(n,n) :: &
-         dmat
-    double precision :: &
-         dist2
-    
-    dmat = cost(Apos, Bpos, n)
-    
-    dist2 = sum(dmat) 
-    
-  end function dist2
   
   function eye() result(a)
     !Copied from Rosetta Code at: https://rosettacode.org/wiki/Identity_matrix#Fortran
@@ -461,7 +467,7 @@ module transform
           vec_out(i,1) = vec(i,1) - rate2*(dist_plus - dist_minus) / ( 2 * dx )
           
        enddo
-          
+       
        tetha = tetha_out
        a1 = a1_out
        a2 = a2_out
@@ -609,8 +615,6 @@ module transform
        if (dist_cur <= dist_prev .or. accept <= exp(-(dist_cur-dist_prev)/T)) then
 
           dist_prev = dist_cur
-
-          !print*, dist_cur
           
           tetha = tetha_out
           a1 = a1_out
