@@ -105,6 +105,27 @@ module transform
     enddo
     
   end function cost
+
+   function cost_test(Apos,Bpos,n) result(cost)
+
+    integer, intent(in) :: &
+         n ! Number of atoms
+    double precision, intent(in), dimension(3,n) :: &
+         Apos, Bpos  ! Rotation axis
+    double precision, dimension(n,n) :: &
+         cost
+    integer :: &
+         i,j ! Iterators
+    
+    cost = 0
+    
+    do i=1,size(Apos,2)
+       do j=1,size(Apos,2)
+          cost(i,j) = exp(norm(Apos(:,i)-Bpos(:,j)))
+       enddo
+    enddo
+    
+  end function cost_test
   
   function dist(Apos, Bpos, n, atoms, n_atoms)
 
@@ -423,7 +444,8 @@ module transform
        dist_minus = dist(Apos,pos,n,atoms, n_atoms)
        
        tetha_out = tetha - rate1*(dist_plus - dist_minus) / ( 2 * dx )
-     
+
+       
        ! vec
        do i=1,2
 
@@ -440,7 +462,7 @@ module transform
           dist_minus = dist(Apos,pos,n,atoms, n_atoms)
 
           vec_out(i,1) = vec(i,1) - rate2*(dist_plus - dist_minus) / ( 2 * dx )
-          
+                    
        enddo
        
        tetha = tetha_out
@@ -525,6 +547,7 @@ module transform
        dist_minus = dist(Apos,pos,n,atoms, n_atoms)
        
        tetha_out = tetha - rand_rate1*(dist_plus - dist_minus) / ( 2 * dx )
+
        
        ! vec
        do i=1,2
@@ -542,6 +565,7 @@ module transform
           dist_minus = dist(Apos,pos,n,atoms, n_atoms)
 
           vec_out(i,1) = vec(i,1) - rand_rate2*(dist_plus - dist_minus) / ( 2 * dx )
+
           
        enddo
 
@@ -582,7 +606,7 @@ module transform
     
   end subroutine gradient_descent_rand
 
-  subroutine fastmapping(map, dmin, Apos, Bpos, n, atoms, n_atoms, n_iter, rate1, rate2, T)
+  subroutine fastmapping(map,map2, dmin, Apos, Bpos, n, atoms, n_atoms, n_iter, rate1, rate2, T)
 
     use hungarian
     
@@ -605,7 +629,7 @@ module transform
          atoms !Number of atoms of each type
     
     integer, intent(out), dimension(n) :: &
-         map ! List of index
+         map, map2 ! List of index
     
     double precision, intent(out) :: &
          dmin
@@ -615,10 +639,11 @@ module transform
          u      ! Rotation axis
 
     double precision :: &
-         tetha   ! Rotation angle
+         tetha, & ! Rotation angle
+         d
 
     double precision, allocatable, dimension(:,:) :: &
-         dmat
+         dmat, dmat2
 
     double precision, dimension(n,n) :: &
          mat
@@ -644,12 +669,14 @@ module transform
     
     call gradient_descent_rand(tetha, u, vec, Apos, Bpos, n,atoms,n_atoms,n_iter, rate1, rate2, T)
     
-    call gradient_descent(tetha, u, vec, Apos, Bpos, n,atoms,n_atoms,n_iter, rate1/100.0d0, rate2/10.0d0)
+    call gradient_descent(tetha, u, vec, Apos, Bpos, n,atoms,n_atoms,n_iter, rate1/100.0d0, rate2/100.0d0)
 
     call trans(Bpos,n,tetha,u,vec)
     
     ! Finds the best mapping
     n_cell = n/sum(atoms)
+
+    dmin = 0
     
     do i=0,n_atoms-1
 
@@ -657,8 +684,25 @@ module transform
        dmat = cost(Apos( : , n_cell*i+1 : n_cell*(i+atoms(i+1)) ), &
                    Bpos( : , n_cell*i+1 : n_cell*(i+atoms(i+1)) ), &
                    n_cell*atoms(i+1))
+
+       dmat2 = cost_test(Apos( : , &
+            n_cell*i+1 : n_cell*(i+atoms(i+1)) ), &
+            Bpos( : , n_cell*i+1 : n_cell*(i+atoms(i+1)) ), &
+            n_cell*atoms(i+1))
        
-       call munkres(dmin,map(n_cell*i+1:n_cell*(i+atoms(i+1))),dmat,n_cell*atoms(i+1))      
+       ! Print the cost matrix
+       write(*,"(20(F8.5,X))") dmat
+       write(*,*) "-------------------------------------"
+       write(*,"(20(F8.5,X))") dmat2
+       write(*,*) "-------------------------------------"
+       write(*,"(20(E8.3E1,X))") dmat2
+       
+       call munkres(d,map(n_cell*i+1:n_cell*(i+atoms(i+1))),dmat,n_cell*atoms(i+1))
+
+       call munkres(d,map2(n_cell*i+1:n_cell*(i+atoms(i+1))),dmat2,n_cell*atoms(i+1))
+
+       dmin = dmin + d
+       
        deallocate(dmat)
 
        map(n_cell*i+1:n_cell*(i+atoms(i+1))) = map(n_cell*i+1:n_cell*(i+atoms(i+1))) + n_cell*i

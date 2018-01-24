@@ -38,7 +38,7 @@ contains
 
     integer, intent(in) :: n      ! dimension of C - assumed to be a (nxn) square matrix
     double precision, intent(in),  dimension(n,n) :: C   ! cost matrix (min sum)
-    integer, dimension(n,n) :: CC   ! cost matrix (min sum)
+    double precision, dimension(n,n) :: CC   ! cost matrix (min sum)
     
     double precision, intent(out) :: sumSol ! maximal sum
     integer, dimension(n), intent(out) :: jSol ! solution indices
@@ -50,7 +50,7 @@ contains
     step = 1
     tmp = 0
 
-    CC = int(2.0d0**31/maxval(C)*C)
+    CC = C
 
     allocate(M(n,n))      ! mask matrix - contains starred zeros
     allocate(rowCover(n)) ! to keep track of covered rows
@@ -94,6 +94,7 @@ contains
        sumSol = sumSol + C(jSol(i),i)
     enddo
 
+    
     deallocate(M)
     deallocate(rowCover)
     deallocate(colCover)
@@ -105,11 +106,11 @@ contains
     ! all elements of that row. Go to step 2.
 
     integer, intent(in) :: n      ! dimension of C - assumed to be a (nxn) square matrix
-    integer, intent(inout),  dimension(n,n) :: CC   ! cost matrix (min sum)
+    double precision, intent(inout),  dimension(n,n) :: CC   ! cost matrix (min sum)
 
     integer, intent(out) :: step
 
-    integer :: minVal, i, j
+    double precision :: minVal, i, j
 
     do i = 1, n
        minVal = CC(1,i)
@@ -129,7 +130,7 @@ contains
     ! its row and column then star Z. Go to step 3.
 
     integer, intent(in) :: n      ! dimension of C - assumed to be a (nxn) square matrix
-    integer, intent(inout),  dimension(n,n) :: CC   ! cost matrix (min sum)
+    double precision, intent(inout),  dimension(n,n) :: CC   ! cost matrix (min sum)
 
 
     integer, intent(out) :: step
@@ -161,7 +162,7 @@ contains
     ! go to step 4.
 
     integer, intent(in) :: n      ! dimension of C - assumed to be a (nxn) square matrix
-    integer, intent(inout),  dimension(n,n) :: CC   ! cost matrix (min sum)
+    double precision, intent(inout),  dimension(n,n) :: CC   ! cost matrix (min sum)
 
 
     integer, intent(out) :: step
@@ -193,7 +194,7 @@ contains
     ! the starred zero. Continue until no uncovered zeros is left. Go to step 6.
 
     integer, intent(in) :: n      ! dimension of C - assumed to be a (nxn) square matrix
-    integer, intent(inout),  dimension(n,n) :: CC   ! cost matrix (min sum)
+    double precision, intent(inout),  dimension(n,n) :: CC   ! cost matrix (min sum)
 
 
     integer, intent(out) :: step
@@ -253,7 +254,7 @@ contains
     ! and columns. Return to step 3.
 
     integer, intent(in) :: n      ! dimension of C - assumed to be a (nxn) square matrix
-    integer, intent(inout),  dimension(n,n) :: CC   ! cost matrix (min sum)
+    double precision, intent(inout),  dimension(n,n) :: CC   ! cost matrix (min sum)
 
     integer, intent(out) :: step
 
@@ -323,11 +324,13 @@ contains
     ! and substract it from uncovered columns. Return to step 4.
 
     integer, intent(in) :: n      ! dimension of C - assumed to be a (nxn) square matrix
-    integer, intent(inout),  dimension(n,n) :: CC   ! cost matrix (min sum)
+    double precision, intent(inout),  dimension(n,n) :: CC   ! cost matrix (min sum)
 
     integer, intent(out) :: step
 
-    integer :: i, j, minVal
+    integer :: i, j
+
+    double precision :: minVal
 
     minVal = huge(i)
 

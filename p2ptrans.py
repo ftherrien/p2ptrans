@@ -20,8 +20,8 @@ ax.quiver(-np.ones(3), -np.ones(3), Acell[0,:], Acell[1,:])
 ax.set_xlim([-5, 5])
 ax.set_ylim([-5, 5])
 
-ASC = t.circle(Acell,100)
-BSC = t.circle(Bcell,100)
+ASC = t.circle(Acell,20)
+BSC = t.circle(Bcell,20)
 
 # Plot gamma points of each A cell
 fig = plt.figure()
@@ -46,8 +46,8 @@ ax.set_aspect('equal')
 if random:
     # Create a random Apos and B with random small displacement
     atoms = np.array([1]) # One atom
-    n = 100
-    Apos = np.concatenate([np.random.random((2,n))*3, np.zeros((1,np.shape(Apos)[1]))]) 
+    n = 10
+    Apos = np.concatenate([np.random.random((2,n))*3, np.zeros((1,n))]) 
     
     # Transform Apos to get Bpos
     tetha = 2*np.pi*np.random.random()
@@ -58,9 +58,9 @@ if random:
 
     tr.trans(Bpos,tetha,u,vec)
 
-    randDisp = np.concatenate([np.random.random((2,n))*0.1, np.zeros((1,np.shape(Apos)[1]))])
+    randDisp = np.concatenate([np.random.random((2,n)), np.zeros((1,np.shape(Apos)[1]))])
     
-    Bpos = Bpos + randDisp
+    Bpos = Bpos + randDisp*0
 else:
     # Adds atoms to A and B
     atom_Apos = np.array([[0,0]])
@@ -80,8 +80,8 @@ Apos = np.asfortranarray(Apos)
 Bpos = np.asfortranarray(Bpos)
 
 t_time = time.time()
-mapMat, dmin = tr.fastmapping(Apos, Bpos, atoms,10000, 0.01, 0.00001, 5) # For dist 2 (not necessarily optimal)
-# mapMat, dmin = tr.fastmapping(Apos, Bpos, atoms,10000, 0.1, 0.1, 0.5) # For dist 1  
+# mapMat, dmin = tr.fastmapping(Apos, Bpos, atoms,10000, 0.01, 0.00001, 5) # For dist 2 (not necessarily optimal)
+mapMat, mapMat2, dmin = tr.fastmapping(Apos, Bpos, atoms,10000, 0.1, 0.1, 1) # For dist 1  
 t_time = time.time() - t_time
 Bpos = np.asanyarray(Bpos)
 Apos = np.asanyarray(Apos)
@@ -90,6 +90,7 @@ Apos = Apos[:2,:]
 Bpos = Bpos[:2,:]
 
 mapMat = mapMat-1 # Fortran index to python index)
+mapMat2 = mapMat2-1 # Fortran index to python index)
 
 # Plotting the Apos and Bpos overlayed
 fig = plt.figure()
@@ -105,9 +106,21 @@ ax.set_aspect('equal')
 Apos_map = Apos[:,mapMat]
 disps = Apos_map - Bpos
 
-# fig = plt.figure()
-# ax = fig.add_subplot(111)
+fig = plt.figure()
+ax = fig.add_subplot(111)
 ax.quiver(Bpos.T[:,0], Bpos.T[:,1],disps.T[:,0], disps.T[:,1], scale_units='xy', scale=1)
+maxXAxis = np.max([Apos.max(), Bpos.max()]) + 1
+ax.set_xlim([-maxXAxis, maxXAxis])
+ax.set_ylim([-maxXAxis, maxXAxis])
+ax.set_aspect('equal')
+
+# Mapping lattice 2
+Apos_map = Apos[:,mapMat2]
+disps2 = Apos_map - Bpos
+
+fig = plt.figure()
+ax = fig.add_subplot(111)
+ax.quiver(Bpos.T[:,0], Bpos.T[:,1],disps2.T[:,0], disps2.T[:,1], scale_units='xy', scale=1)
 maxXAxis = np.max([Apos.max(), Bpos.max()]) + 1
 ax.set_xlim([-maxXAxis, maxXAxis])
 ax.set_ylim([-maxXAxis, maxXAxis])
@@ -115,7 +128,11 @@ ax.set_aspect('equal')
 
 print(dmin)
 print(mapMat)
+print(mapMat2)
 print("Expected Order:", all(mapMat == np.arange(len(mapMat))))
 print("Mapping time:", t_time)
+
+print((np.concatenate([[la.norm(disps,axis=0)],[np.exp(la.norm(disps,axis=0))],[la.norm(disps2,axis=0)],[np.exp(la.norm(disps2,axis=0))]],axis=0)).T)
+print([sum(la.norm(disps,axis=0)),sum(np.exp(la.norm(disps,axis=0))),sum(la.norm(disps2,axis=0)),sum(np.exp(la.norm(disps2,axis=0)))])
 
 plt.show()
