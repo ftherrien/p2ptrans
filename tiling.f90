@@ -122,7 +122,7 @@ module tiling
          dists
     
     integer :: &
-         i,j,l,nnx,nny, &
+         i,j,k,l,nnx,nny, &
          pos
 
     double precision :: &
@@ -149,25 +149,30 @@ module tiling
     print*, 'Square cell dimensions:',nnx ,nny
 
     l = 0
-    dists = 0
+    dists = -1
     do i=-nnx,nnx
        do j=-nny,nny
-             dist = norm(matmul(Acell,(/i+0.5d0,j+0.5d0/)))
-             if (dist <= rad) then
-                l=l+1
-                if (l<=ncell) then
-                   dists(l) = dist
-                   ASC(:,l) = matmul(Acell,(/i,j/))
-                elseif (maxval(dists) > dist) then
-                   pos = maxloc(dists,1)
-                   dists(pos) = dist
-                   ASC(:,pos) = matmul(Acell,(/i,j/))
-                endif
+          dist = norm(matmul(Acell,(/i+0.5d0,j+0.5d0/)))
+          if (dist <= rad) then
+             
+             if (l < ncell) l=l+1
+             if (l == 1) then
+                dists(1) = dist
+             else if (dist < dists(l) .or. dists(l) == -1) then
+                k=0
+                do while (dist < dists(l-1-k))
+                   k=k+1
+                enddo
+                dists(l-k+1:ncell) = dists(l-k:ncell-1)
+                dists(l-k) = dist
+                ASC(:,l-k+1:ncell) = ASC(:,l-k:ncell-1)
+                ASC(:,l-k) = matmul(Acell,(/i,j/))
              endif
+          endif
        enddo
     enddo
 
-  end subroutine circle  
+  end subroutine circle
   
   subroutine calc_angles(A,lengths,angles)
 

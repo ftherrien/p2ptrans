@@ -13,6 +13,8 @@ module transform
        init_random_seed, &
        norm, &
        dist, &
+       cost, &
+       cost_map, &
        gradient_descent_rand, &
        gradient_descent, &
        u2angles, &
@@ -100,19 +102,19 @@ module transform
     
     do i=1,size(Apos,2)
        do j=1,size(Apos,2)
-          cost(i,j) = norm(Apos(:,i)-Bpos(:,j))
+          cost(i,j) = exp(-(norm(Apos(:,i))/5)**2)*norm(Apos(:,i)-Bpos(:,j)) ! PARAM
        enddo
     enddo
     
   end function cost
 
-   function cost_test(Apos,Bpos,n) result(cost)
+   function cost_map(Apos,Bpos) result(cost)
 
-    integer, intent(in) :: &
-         n ! Number of atoms
-    double precision, intent(in), dimension(3,n) :: &
-         Apos, Bpos  ! Rotation axis
-    double precision, dimension(n,n) :: &
+    double precision, intent(in), dimension(:,:) :: &
+         Apos  ! Rotation axis
+    double precision, intent(in), dimension(:,:) :: &
+         Bpos  ! Rotation axis
+    double precision, dimension(size(Apos,2),size(Apos,2)) :: &
          cost
     integer :: &
          i,j ! Iterators
@@ -120,12 +122,12 @@ module transform
     cost = 0
     
     do i=1,size(Apos,2)
-       do j=1,size(Apos,2)
-          cost(i,j) = exp(norm(Apos(:,i)-Bpos(:,j)))
+       do j=1,size(Bpos,2)
+          cost(i,j) = norm(Apos(:,i)-Bpos(:,j))
        enddo
     enddo
     
-  end function cost_test
+  end function cost_map
   
   function dist(Apos, Bpos, n, atoms, n_atoms)
 
@@ -606,7 +608,7 @@ module transform
     
   end subroutine gradient_descent_rand
 
-  subroutine fastmapping(map,map2, dmin, Apos, Bpos, n, atoms, n_atoms, n_iter, rate1, rate2, T)
+  subroutine fastmapping(map, nmap, dmin, Apos, Bpos, n, atoms, n_atoms, n_iter, rate1, rate2, T)
 
     use hungarian
     
@@ -625,14 +627,20 @@ module transform
     double precision, intent(inout), dimension(3,n) :: &
          Apos, Bpos ! Position of the atoms
 
+    double precision, allocatable, dimension(:,:) :: &
+         inBpos ! Position of the atoms
+
     integer, intent(in), dimension(n_atoms) :: &
          atoms !Number of atoms of each type
     
     integer, intent(out), dimension(n) :: &
-         map, map2 ! List of index
+         map ! List of index
     
     double precision, intent(out) :: &
          dmin
+
+    integer, intent(out), dimension(n_atoms) :: &
+         nmap
     
     double precision, dimension(3,1) :: &
          vec, & ! Translation vecto
@@ -643,7 +651,7 @@ module transform
          d
 
     double precision, allocatable, dimension(:,:) :: &
-         dmat, dmat2
+         dmat
 
     double precision, dimension(n,n) :: &
          mat
@@ -680,29 +688,18 @@ module transform
     
     do i=0,n_atoms-1
 
-       allocate(dmat(n_cell*atoms(i+1),n_cell*atoms(i+1)))
-       dmat = cost(Apos( : , n_cell*i+1 : n_cell*(i+atoms(i+1)) ), &
-                   Bpos( : , n_cell*i+1 : n_cell*(i+atoms(i+1)) ), &
-                   n_cell*atoms(i+1))
-
-       dmat2 = cost_test(Apos( : , &
-            n_cell*i+1 : n_cell*(i+atoms(i+1)) ), &
-            Bpos( : , n_cell*i+1 : n_cell*(i+atoms(i+1)) ), &
-            n_cell*atoms(i+1))
+       nmap(i+1) = n_cell*atoms(i+1)*0.5d0
        
-       ! Print the cost matrix
-       write(*,"(20(F8.5,X))") dmat
-       write(*,*) "-------------------------------------"
-       write(*,"(20(F8.5,X))") dmat2
-       write(*,*) "-------------------------------------"
-       write(*,"(20(E8.3E1,X))") dmat2
+       allocate(dmat(n_cell*atoms(i+1),n_cell*atoms(i+1)))
+       
+       
+       dmat = cost_map(Apos( : , n_cell*i+1 : n_cell*(i+atoms(i+1)) ), &
+                       Bpos( : , n_cell*i+1 : n_cell*i+nmap(i+1)))
        
        call munkres(d,map(n_cell*i+1:n_cell*(i+atoms(i+1))),dmat,n_cell*atoms(i+1))
 
-       call munkres(d,map2(n_cell*i+1:n_cell*(i+atoms(i+1))),dmat2,n_cell*atoms(i+1))
-
        dmin = dmin + d
-       
+
        deallocate(dmat)
 
        map(n_cell*i+1:n_cell*(i+atoms(i+1))) = map(n_cell*i+1:n_cell*(i+atoms(i+1))) + n_cell*i
