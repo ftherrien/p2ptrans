@@ -21,7 +21,7 @@ ax.set_xlim([-5, 5])
 ax.set_ylim([-5, 5])
 
 ASC = t.circle(Acell,100)
-BSC = t.circle(Bcell,50)
+BSC = t.circle(Bcell,100)
 
 # Plot gamma points of each A cell
 fig = plt.figure()
@@ -87,15 +87,17 @@ Bpos = np.asfortranarray(Bpos)
 
 t_time = time.time()
 # mapMat, dmin = tr.fastmapping(Apos, Bpos, atoms,10000, 0.01, 0.00001, 5) # For dist 2 (not necessarily optimal)
+frac = 0.5
+nb = int(np.shape(Bpos)[1]*frac)
 Acell_tmp = np.identity(3)
 Acell_tmp[:2,:2] = Acell
-mapMat, dmin = tr.fastmapping(Apos, Bpos, Acell_tmp, la.inv(Acell_tmp), atoms,10000, 0.1, 0.1, 1) # For dist 1  
+mapMat, dmin = tr.fastmapping(Apos, Bpos, frac, Acell_tmp, la.inv(Acell_tmp), atoms,10000, 0.1, 0.1, 1) # For dist 1  
 t_time = time.time() - t_time
 Bpos = np.asanyarray(Bpos)
 Apos = np.asanyarray(Apos)
 
 Apos = Apos[:2,:]
-Bpos = Bpos[:2,:]
+Bpos = Bpos[:2,:nb]
 
 mapMat = mapMat-1 # Fortran index to python index)
 
