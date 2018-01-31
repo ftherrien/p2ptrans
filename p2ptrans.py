@@ -9,8 +9,8 @@ import time
 random = False
 
 # Setting the unit cells of A and B
-Acell = np.array([[1,0],[0,1]])
-Bcell = np.array([[-1/2,1/2],[1,1]]).T
+Acell = np.array([[1,0],[0,1]]).T
+Bcell = np.array([[-1/2,1/2],[1,1]]).T 
 
 # Plotting the cell vectors of A and B
 fig = plt.figure()
@@ -20,8 +20,8 @@ ax.quiver(-np.ones(3), -np.ones(3), Acell[0,:], Acell[1,:])
 ax.set_xlim([-5, 5])
 ax.set_ylim([-5, 5])
 
-ASC = t.circle(Acell,100)
-BSC = t.circle(Bcell,100)
+ASC = t.circle(Acell,200)
+BSC = t.circle(Bcell,200)
 
 # Plot gamma points of each A cell
 fig = plt.figure()
@@ -55,7 +55,7 @@ if random:
     vec = np.random.random((3,1))-0.5
     vec[2] = 0
     u = np.array([0,0,1])
-    Bpos = np.asfortranarray(np.array(Apos))
+    Bpos = np.asfortranarray(np.array(Apos))*1.2
 
     tr.trans(Bpos,tetha,u,vec)
 
@@ -91,7 +91,7 @@ frac = 0.5
 nb = int(np.shape(Bpos)[1]*frac)
 Acell_tmp = np.identity(3)
 Acell_tmp[:2,:2] = Acell
-mapMat, dmin = tr.fastmapping(Apos, Bpos, frac, Acell_tmp, la.inv(Acell_tmp), atoms,10000, 0.1, 0.1, 1) # For dist 1  
+mapMat, dmin = tr.fastmapping(Apos, Bpos, frac, Acell_tmp, la.inv(Acell_tmp), atoms,10000, 0.01, 0.1, 5) # For dist 1  
 t_time = time.time() - t_time
 Bpos = np.asanyarray(Bpos)
 Apos = np.asanyarray(Apos)
