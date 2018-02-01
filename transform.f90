@@ -1,5 +1,7 @@
 module transform
 
+  use hungarian
+  
   implicit none
 
   public :: &
@@ -169,13 +171,16 @@ module transform
          frac
     double precision, allocatable, dimension(:,:) :: &
          dmat
+    integer, dimension(size(Apos,2)) :: &
+         map ! List of index
     double precision :: &
-         dist
+         dist, &
+         d
     integer :: &
          An_cell, Bn_cell, & ! Number of cells
          i
     integer, parameter :: &
-         type = 4 ! Type of distance. 1: Hausdorff, 2: Sum of distances, 3: semi-Hausdorff 4: Semi-Semi-Hausdorff(ssh) 
+         type = 5 ! Type of distance. 1: Hausdorff, 2: Sum of distances, 3: semi-Hausdorff 4: Semi-Semi-Hausdorff(ssh) 
 
     if (type == 1) then
     
@@ -244,6 +249,29 @@ module transform
 
           enddo
 
+       else if (type == 5) then
+          
+          ! Finds the best mapping
+          An_cell = size(Apos,2)/sum(atoms)
+          Bn_cell = size(Bpos,2)/sum(atoms)
+
+          dist = 0
+
+          do i=0,n_atoms-1
+
+             allocate(dmat(An_cell*atoms(i+1),An_cell*atoms(i+1)))
+
+             dmat = cost_map(Apos( : , An_cell*i+1 : An_cell*(i+atoms(i+1)) ), &
+                  Bpos( : , Bn_cell*i+1 : Bn_cell*i + int(Bn_cell*atoms(i+1)*frac)))
+
+             call munkres(d,map(An_cell*i+1:An_cell*(i+atoms(i+1))),dmat,An_cell*atoms(i+1))
+
+             dist = dist + d
+
+             deallocate(dmat)
+
+          enddo
+
        endif
     
   end function dist
@@ -268,8 +296,6 @@ module transform
   end function norm
 
   subroutine mapping(map, dmin, Apos, Bpos, n, atoms, n_atoms)
-
-    use hungarian
     
     integer, intent(in) :: &
          n, & ! Total number of atoms
@@ -532,6 +558,7 @@ module transform
           
        enddo
 
+       
        vec = vec_out
        mat = mat_out
        
@@ -613,8 +640,8 @@ module transform
 
        call random_number(rand_rate1)
 
-       rand_rate2 = 10**rand_rate1*rate2
-       rand_rate1 = 10**rand_rate1*rate1
+       rand_rate2 = 100**rand_rate1*rate2
+       rand_rate1 = 100**rand_rate1*rate1
 
        ! mat
        do i=1,4
@@ -655,7 +682,8 @@ module transform
        if (dist_cur <= dist_prev .or. accept <= exp(-(dist_cur-dist_prev)/T)) then
 
           dist_prev = dist_cur
-          
+
+                   
           mat = mat_out
           vec = vec_out
 
@@ -753,8 +781,11 @@ module transform
 
     ! Random initial step
     call random_number(tmat)
-    tmat(3,:) = 0 ! For 2D only
-    tmat(:,3) = 0 ! For 2D only
+    tmat(3,:) = 0.0d0 ! For 2D only
+    tmat(:,3) = 0.0d0 ! For 2D only
+    tmat(3,3) = 1.0d0
+
+    vec = 0
         
     call gradient_descent_rand(tmat, vec, Apos, Bpos, &
          frac, atoms,n_atoms,n_iter, rate1, rate2, T)
@@ -778,7 +809,7 @@ module transform
 
        call cpu_time(start)
        dmat = cost_map(Apos( : , An_cell*i+1 : An_cell*(i+atoms(i+1)) ), &
-                       Bpos( : , Bn_cell*i+1 : Bn_cell*i + Bn_cell*atoms(i+1)*frac))
+                       Bpos( : , Bn_cell*i+1 : Bn_cell*i + int(Bn_cell*atoms(i+1)*frac)))
        call cpu_time(finish)
 
        print*, "dist_time", finish - start 
@@ -803,7 +834,7 @@ module transform
     ! call munkres(dmin,map,cost(Apos,Bpos,n),n)
 
 
-    dmin = dist(Apos, Bpos,frac,atoms, n_atoms)
+    ! dmin = dist(Apos, Bpos,frac,atoms, n_atoms)
     
   end subroutine fastmapping
   

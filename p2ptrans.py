@@ -20,8 +20,8 @@ ax.quiver(-np.ones(3), -np.ones(3), Acell[0,:], Acell[1,:])
 ax.set_xlim([-5, 5])
 ax.set_ylim([-5, 5])
 
-ASC = t.circle(Acell,200)
-BSC = t.circle(Bcell,200)
+ASC = t.circle(Acell,20)
+BSC = t.circle(Bcell,20)
 
 # Plot gamma points of each A cell
 fig = plt.figure()
@@ -47,7 +47,7 @@ ax.set_aspect('equal')
 if random:
     # Create a random Apos and B with random small displacement
     atoms = np.array([1]) # One atom
-    n = 100
+    n = 10
     Apos = np.concatenate([np.random.random((2,n))*3, np.zeros((1,n))]) 
     
     # Transform Apos to get Bpos
@@ -63,7 +63,7 @@ if random:
     
     Bpos = Bpos + randDisp*0
 
-    Bpos = Bpos[:,:int(n/2)]
+    # Bpos = Bpos[:,:int(n/2)]
     
 else:
     # Adds atoms to A and B
@@ -91,7 +91,7 @@ frac = 0.5
 nb = int(np.shape(Bpos)[1]*frac)
 Acell_tmp = np.identity(3)
 Acell_tmp[:2,:2] = Acell
-mapMat, dmin = tr.fastmapping(Apos, Bpos, frac, Acell_tmp, la.inv(Acell_tmp), atoms,10000, 0.01, 0.1, 5) # For dist 1  
+mapMat, dmin = tr.fastmapping(Apos, Bpos, frac, Acell_tmp, la.inv(Acell_tmp), atoms,10000, 0.01, 0.0001, 100) # For dist 1  
 t_time = time.time() - t_time
 Bpos = np.asanyarray(Bpos)
 Apos = np.asanyarray(Apos)

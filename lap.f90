@@ -110,7 +110,9 @@ contains
 
     integer, intent(out) :: step
 
-    double precision :: minVal, i, j
+    integer :: i, j
+    
+    double precision :: minVal
 
     do i = 1, n
        minVal = CC(1,i)
