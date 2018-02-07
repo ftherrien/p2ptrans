@@ -15,10 +15,13 @@ module transform
        init_random_seed, &
        norm, &
        dist, &
+       dist_separate, &
+       det, &
        free_trans, &
        cost, &
        cost_map, &
        gradient_descent_rand, &
+       gradient_descent_explore, &
        gradient_descent, &
        u2angles, &
        angles2u
@@ -116,6 +119,8 @@ module transform
     double precision, intent(in), dimension(3,3) :: &
          cell, &  ! cell
          icell ! inverse of cell
+
+    print*, "Center:",  matmul(cell,nint(matmul(icell,sum(pos,2)/size(pos,2))))
     
     pos = pos - spread(matmul(cell,nint(matmul(icell,sum(pos,2)/size(pos,2)))),2,size(pos,2))
     
@@ -159,18 +164,28 @@ module transform
     
   end function cost_map
   
-  function dist(Apos, Bpos, frac, atoms, n_atoms)
+  function dist(Apos, Bpos, frac, atoms, n_atoms, tmat, vec)
 
     integer, intent(in) :: &
          n_atoms ! Number of types of atoms
     double precision, intent(in), dimension(:,:) :: &
          Apos, Bpos  ! position matrix
+    double precision, dimension(size(Bpos,1),size(Bpos,2)) :: &
+         tBpos  ! position matrix
     integer, intent(in), dimension(n_atoms) :: &
          atoms
+    double precision, optional, intent(in), dimension(3,3) :: &
+         tmat
+    double precision, optional, intent(in), dimension(3) :: &
+         vec
+    double precision, dimension(3,3) :: &
+         rot_mat
     double precision, intent(in) :: &
          frac
     double precision, allocatable, dimension(:,:) :: &
          dmat
+    double precision, dimension(3) :: &
+         u_per
     integer, dimension(size(Apos,2)) :: &
          map ! List of index
     double precision :: &
@@ -179,10 +194,16 @@ module transform
     integer :: &
          An_cell, Bn_cell, & ! Number of cells
          i
-    integer, parameter :: &
-         type = 5 ! Type of distance. 1: Hausdorff, 2: Sum of distances, 3: semi-Hausdorff 4: Semi-Semi-Hausdorff(ssh) 
+    integer :: &
+         type_dist ! Type of distance. 1: Hausdorff, 2: Sum of distances, 3: semi-Hausdorff 4: Semi-Semi-Hausdorff(ssh) 5: Mapping distance 6. Mapping + stretching
 
-    if (type == 1) then
+    if (present(tmat) .and. present(vec)) then
+       type_dist = 6
+    else
+       type_dist = 5
+    endif
+    
+    if (type_dist == 1) then
     
        dist = 0
 
@@ -199,7 +220,7 @@ module transform
        
        enddo
 
-    else if (type == 2) then
+    else if (type_dist == 2) then
 
        dist = 0
 
@@ -216,7 +237,7 @@ module transform
        
        enddo
 
-       else if (type == 3) then
+       else if (type_dist == 3) then
     
        dist = 0
 
@@ -232,7 +253,7 @@ module transform
           deallocate(dmat)
        enddo
 
-       else if (type == 4) then
+       else if (type_dist == 4) then
 
           dist = 0
 
@@ -249,7 +270,7 @@ module transform
 
           enddo
 
-       else if (type == 5) then
+       else if (type_dist == 5) then
           
           ! Finds the best mapping
           An_cell = size(Apos,2)/sum(atoms)
@@ -272,9 +293,116 @@ module transform
 
           enddo
 
+       else if (type_dist == 6) then
+
+          ! This distance takes in the unrotated Bpos
+          
+          ! Finds the best mapping
+          An_cell = size(Apos,2)/sum(atoms)
+          Bn_cell = size(Bpos,2)/sum(atoms)
+
+          tBpos = free_trans(Bpos, tmat, vec) 
+          
+          dist = 0
+
+          do i=0,n_atoms-1
+
+             allocate(dmat(An_cell*atoms(i+1),An_cell*atoms(i+1)))
+
+             dmat = cost_map(Apos( : , An_cell*i+1 : An_cell*(i+atoms(i+1)) ), &
+                  tBpos( : , Bn_cell*i+1 : Bn_cell*i + int(Bn_cell*atoms(i+1)*frac)))
+
+             call munkres(d,map(An_cell*i+1:An_cell*(i+atoms(i+1))),dmat,An_cell*atoms(i+1))
+             rot_mat(:,1) = norm(tmat(:,1))*(/1,0,0/)
+             u_per = tmat(:,2) -  tmat(:,1)*dot_product(tmat(:,1), tmat(:,2))/norm(tmat(:,1))
+             rot_mat(:,2) = (/ dot_product(tmat(:,1), tmat(:,2))/norm(tmat(:,1)), &
+                  norm(u_per), 0.0d0/)
+             rot_mat(:,3) = (/ dot_product(tmat(:,1), tmat(:,3))/norm(tmat(:,1)), &
+                  dot_product(u_per, tmat(:,3))/norm(u_per), &
+                  det(tmat,3)/(norm(tmat(:,1))*norm(u_per))/)
+
+             ! Adding the mapping distance d and the stretching 
+             
+             dist = dist + d + sum(sqrt(sum((matmul(rot_mat,Bpos)-Bpos)**2,1)))
+             
+             deallocate(dmat)
+
+          enddo
+          
        endif
     
-  end function dist
+     end function dist
+
+    subroutine dist_separate(dist, stretch, Apos, Bpos, frac, atoms, n_atoms, rot_mat, tmat, vec)
+
+    integer, intent(in) :: &
+         n_atoms ! Number of types of atoms
+    double precision, intent(in), dimension(:,:) :: &
+         Apos, Bpos  ! position matrix
+    double precision, dimension(size(Bpos,1),size(Bpos,2)) :: &
+         tBpos  ! position matrix
+    integer, intent(in), dimension(n_atoms) :: &
+         atoms
+    double precision, intent(in), dimension(3,3) :: &
+         tmat
+    double precision, intent(in), dimension(3) :: &
+         vec
+    double precision, intent(out), dimension(3,3) :: &
+         rot_mat
+    double precision, intent(in) :: &
+         frac
+    double precision, allocatable, dimension(:,:) :: &
+         dmat
+    double precision, dimension(3) :: &
+         u_per
+    integer, dimension(size(Apos,2)) :: &
+         map ! List of index
+    double precision, intent(out) :: &
+         dist, &
+         stretch
+    double precision :: &
+         d
+    integer :: &
+         An_cell, Bn_cell, & ! Number of cells
+         i
+
+          ! This distance takes in the unrotated Bpos
+          
+          ! Finds the best mapping
+          An_cell = size(Apos,2)/sum(atoms)
+          Bn_cell = size(Bpos,2)/sum(atoms)
+
+          tBpos = free_trans(Bpos, tmat, vec) 
+          
+          dist = 0
+          stretch = 0
+
+          do i=0,n_atoms-1
+
+             allocate(dmat(An_cell*atoms(i+1),An_cell*atoms(i+1)))
+
+             dmat = cost_map(Apos( : , An_cell*i+1 : An_cell*(i+atoms(i+1)) ), &
+                  tBpos( : , Bn_cell*i+1 : Bn_cell*i + int(Bn_cell*atoms(i+1)*frac)))
+
+             call munkres(d,map(An_cell*i+1:An_cell*(i+atoms(i+1))),dmat,An_cell*atoms(i+1))
+             rot_mat(:,1) = norm(tmat(:,1))*(/1,0,0/)
+             u_per = tmat(:,2) -  tmat(:,1)*dot_product(tmat(:,1), tmat(:,2))/norm(tmat(:,1))
+             rot_mat(:,2) = (/ dot_product(tmat(:,1), tmat(:,2))/norm(tmat(:,1)), &
+                  norm(u_per), 0.0d0/)
+             rot_mat(:,3) = (/ dot_product(tmat(:,1), tmat(:,3))/norm(tmat(:,1)), &
+                  dot_product(u_per, tmat(:,3))/norm(u_per), &
+                  det(tmat,3)/(norm(tmat(:,1))*norm(u_per))/)
+
+             ! Adding the mapping distance d and the stretching 
+             
+             stretch = stretch + sum(sqrt(sum((matmul(rot_mat,Bpos)-Bpos)**2,1)))
+             dist = dist + d
+             
+             deallocate(dmat)
+
+          enddo
+          
+  end subroutine dist_separate
   
   function eye() result(a)
     !Copied from Rosetta Code at: https://rosettacode.org/wiki/Identity_matrix#Fortran
@@ -295,6 +423,28 @@ module transform
 
   end function norm
 
+  recursive function det(a,n) result(accumulation)
+    ! Copied from Rosetta Code at: https://rosettacode.org/wiki/Matrix_arithmetic#Fortran
+    ! Checked and modified for determinant only, and double precision
+    double precision, dimension(n,n), intent(in) :: a
+    integer, intent(in) :: n
+    double precision, dimension(n-1, n-1) :: b
+    double precision :: accumulation
+    integer :: i, sgn
+    if (n == 1) then
+       accumulation = a(1,1)
+    else
+       accumulation = 0
+       sgn = 1
+       do i=1, n
+          b(:, :(i-1)) = a(2:, :i-1)
+          b(:, i:) = a(2:, i+1:)
+          accumulation = accumulation + sgn * a(1, i) * det(b, n-1)
+          sgn = -sgn
+       enddo
+    endif
+  end function det
+  
   subroutine mapping(map, dmin, Apos, Bpos, n, atoms, n_atoms)
     
     integer, intent(in) :: &
@@ -504,7 +654,8 @@ module transform
 
     double precision, dimension(3,3) :: &
          mat_tmp, & ! Temporary transformation matrix
-         mat_out
+         mat_out, &
+         rmat
     
     double precision, dimension(3,1) :: &
          vec_tmp, & ! Temporary vector
@@ -512,7 +663,9 @@ module transform
 
     double precision :: &
          dist_plus, & ! distance when adding dx
-         dist_minus   ! distance when substracting dx
+         dist_minus, &   ! distance when substracting dx
+         dist_map, &
+         dist_stretch
     
     integer :: &
          i,j, & ! Iterator
@@ -534,12 +687,13 @@ module transform
           mat_tmp = mat
 
           mat_tmp((i-1)/2+1,modulo(i-1,2)+1) = mat((i-1)/2+1,modulo(i-1,2)+1) + dx
-          dist_plus = dist(Apos, free_trans(Bpos, mat_tmp, vec),frac,atoms,n_atoms)
+          dist_plus = dist( Apos, Bpos,frac,atoms,n_atoms, mat_tmp, vec)
 
           mat_tmp((i-1)/2+1,modulo(i-1,2)+1) = mat((i-1)/2+1,modulo(i-1,2)+1) - dx
-          dist_minus = dist(Apos, free_trans(Bpos, mat_tmp, vec),frac,atoms,n_atoms)
+          dist_minus = dist( Apos, Bpos,frac,atoms,n_atoms, mat_tmp, vec)
 
-          mat_out((i-1)/2+1,modulo(i-1,2)+1) = mat((i-1)/2+1,modulo(i-1,2)+1) - rate1*(dist_plus - dist_minus) / ( 2 * dx )
+          mat_out((i-1)/2+1,modulo(i-1,2)+1) = mat((i-1)/2+1,modulo(i-1,2)+1) - &
+               rate1*(dist_plus**2 - dist_minus**2) / ( 2 * dx )
 
        enddo
        
@@ -549,15 +703,21 @@ module transform
           vec_tmp = vec
 
           vec_tmp(i,1) = vec(i,1) + dx
-          dist_plus = dist(Apos,free_trans(Bpos, mat, vec_tmp),frac,atoms, n_atoms)
+          dist_plus = dist( Apos, Bpos,frac,atoms, n_atoms, mat, vec_tmp)
 
           vec_tmp(i,1) = vec(i,1) - dx
-          dist_minus = dist(Apos,free_trans(Bpos, mat, vec_tmp),frac,atoms, n_atoms)
+          dist_minus = dist( Apos, Bpos,frac,atoms, n_atoms, mat, vec_tmp)
 
-          vec_out(i,1) = vec(i,1) - rate2*(dist_plus - dist_minus) / ( 2 * dx )
+          vec_out(i,1) = vec(i,1) - &
+               rate2*(dist_plus**2 - dist_minus**2) / ( 2 * dx )
           
        enddo
 
+       ! call dist_separate(dist_map, dist_stretch, Apos, Bpos, frac,atoms, n_atoms,rmat, mat_out, vec_out)
+
+       ! write(*,"(3(F5.3,X))") rmat
+       
+       ! print*, dist_map, dist_stretch 
        
        vec = vec_out
        mat = mat_out
@@ -626,7 +786,7 @@ module transform
     
     call init_random_seed()
 
-    dist_cur = dist(Apos,free_trans(Bpos, mat, vec),frac,atoms, n_atoms)
+    dist_cur = dist( Apos, Bpos, frac,atoms, n_atoms, mat, vec)
     
     dist_prev = dist_cur
     dist_min = dist_cur
@@ -649,10 +809,10 @@ module transform
           mat_tmp = mat
 
           mat_tmp((i-1)/2+1,modulo(i-1,2)+1) = mat((i-1)/2+1,modulo(i-1,2)+1) + dx
-          dist_plus = dist(Apos,free_trans(Bpos, mat_tmp, vec),frac,atoms,n_atoms)
+          dist_plus = dist( Apos, Bpos,frac,atoms,n_atoms, mat_tmp, vec)
           
           mat_tmp((i-1)/2+1,modulo(i-1,2)+1) = mat((i-1)/2+1,modulo(i-1,2)+1) - dx
-          dist_minus = dist(Apos,free_trans(Bpos, mat_tmp, vec) ,frac,atoms,n_atoms)
+          dist_minus = dist( Apos, Bpos,frac,atoms,n_atoms, mat_tmp, vec)
 
           mat_out((i-1)/2+1,modulo(i-1,2)+1) = mat((i-1)/2+1,modulo(i-1,2)+1) - rand_rate1*(dist_plus - dist_minus) / ( 2 * dx )
 
@@ -665,16 +825,16 @@ module transform
           vec_tmp = vec
 
           vec_tmp(i,1) = vec(i,1) + dx
-          dist_plus = dist(Apos,free_trans(Bpos, mat, vec_tmp),frac,atoms, n_atoms)
+          dist_plus = dist( Apos, Bpos, frac,atoms, n_atoms, mat, vec_tmp)
 
           vec_tmp(i,1) = vec(i,1) - dx
-          dist_minus = dist(Apos,free_trans(Bpos, mat, vec_tmp),frac,atoms, n_atoms)
+          dist_minus = dist( Apos, Bpos, frac,atoms, n_atoms, mat, vec_tmp)
 
           vec_out(i,1) = vec(i,1) - rand_rate2*(dist_plus - dist_minus) / ( 2 * dx )
           
        enddo
        
-       dist_cur = dist(Apos,free_trans(Bpos, mat_out, vec_out),frac,atoms, n_atoms)
+       dist_cur = dist( Apos, Bpos, frac,atoms, n_atoms, mat, vec_tmp)
 
        
        call random_number(accept)
@@ -683,7 +843,7 @@ module transform
 
           dist_prev = dist_cur
 
-                   
+                             
           mat = mat_out
           vec = vec_out
 
@@ -703,8 +863,109 @@ module transform
     
   end subroutine gradient_descent_rand
 
+    subroutine gradient_descent_explore(mat, vec, Apos, Bpos, frac, atoms, n_atoms, n_iter, rate1, rate2, T)
+    ! New Gradient Descent Random  
+    
+    integer, intent(in) :: &
+         n_iter, n_atoms ! Number of atoms
 
-  subroutine fastmapping(map, dmin, Apos,na, Bpos, nb, frac, Acell, iAcell, atoms, n_atoms, n_iter, rate1, rate2, T)
+    double precision, intent(in) :: &
+         rate1, & ! Rate for angles
+         rate2, & ! Rate for disp
+         T, & ! Monte-Carlo temperature
+         frac ! Fraction of A and B to use in optimisation
+         
+    double precision :: &
+         rand_rate1, & ! Rate for angles
+         rand_rate2 ! Rate for disp
+    
+    integer, intent(in), dimension(n_atoms) :: &
+         atoms
+
+    double precision, intent(in), dimension(:,:) :: &
+         Apos, Bpos ! Centered position of the atoms
+    
+    double precision, dimension(3,size(Bpos,2)) :: &
+         pos, postmp ! position matrix
+    
+    double precision, intent(inout), dimension(3,1) :: &
+         vec     ! Translation vector
+
+    double precision, intent(inout), dimension(3,3) :: &
+         mat    ! Transformation matrix
+
+    double precision, dimension(3,3) :: &
+         mat_tmp, & ! Temporary transformation matrix
+         mat_out, & ! Output transformation matrix
+         mat_min
+    
+    double precision, dimension(3,1) :: &
+         vec_out, & ! Output vec
+         vec_min
+    
+    double precision :: &
+         dist_plus, & ! distance when adding dx
+         dist_minus, & ! distance when substracting dx
+         accept, & ! Accept step
+         dist_cur, &
+         dist_map, &
+         dist_stretch, &
+         dist_min, &
+         mul_vec
+    
+    integer :: &
+         i,j, & ! Iterator
+         n ! Size of Bpos
+
+    double precision, parameter :: &
+         dx = 1d-5, &  ! Derivative step
+         max_mat = 3, &
+         max_vec = 1
+
+    integer, parameter :: &
+         n_conv = 50
+
+    n = size(Bpos,2)
+    
+    call init_random_seed()
+
+    mul_vec = max_vec*2*maxval(sqrt(sum(Bpos**2,1)))/sqrt(3.0d0)
+    
+    dist_min = dist( Apos, Bpos, frac,atoms, n_atoms, mat, vec)
+    mat_min = mat
+    vec_min = vec
+    
+    do j=1, int(n_iter/n_conv)
+
+       call random_number(mat)
+       call random_number(vec)
+
+       mat = mat*max_mat
+
+       vec = vec - reshape((/0.5d0,0.5d0,0.5d0/),(/3,1/))
+       vec = vec * mul_vec 
+       
+       call gradient_descent(mat, vec, Apos, Bpos, &
+            frac, atoms,n_atoms,n_conv, rate1, rate2)
+
+       ! call dist_separate(dist_map, dist_stretch, Apos, Bpos, frac,atoms, n_atoms, mat, vec)
+       
+       dist_cur = dist( Apos, Bpos, frac,atoms, n_atoms, mat, vec)
+       
+       if (dist_cur < dist_min) then
+          dist_min = dist_cur
+          mat_min = mat
+          vec_min = vec
+       endif
+
+    enddo
+
+    mat = mat_min
+    vec = vec_min
+    
+  end subroutine gradient_descent_explore
+
+  subroutine fastmapping(tmat, rmat, map, dmin, Apos,na, Bpos, nb, frac, Acell, iAcell, atoms, n_atoms, n_iter, rate1, rate2, T)
 
     use hungarian
     
@@ -751,7 +1012,9 @@ module transform
 
     double precision :: &
          tetha, & ! Rotation angle
-         d
+         d, &
+         dist_map, &
+         dist_stretch
 
     double precision, allocatable, dimension(:,:) :: &
          dmat
@@ -759,8 +1022,9 @@ module transform
     double precision, dimension(na,nb) :: &
          mat
 
-    double precision, dimension(3,3) :: &
-         tmat ! Transformation matrix
+    double precision, intent(out), dimension(3,3) :: &
+         tmat, & ! Transformation matrix
+         rmat    ! Rotation matrix
     
     integer :: &
          i, &
@@ -787,12 +1051,19 @@ module transform
 
     vec = 0
         
-    call gradient_descent_rand(tmat, vec, Apos, Bpos, &
+    call gradient_descent_explore(tmat, vec, Apos, Bpos, &
          frac, atoms,n_atoms,n_iter, rate1, rate2, T)
         
     call gradient_descent(tmat, vec, Apos, Bpos, &
-         frac, atoms,n_atoms,n_iter, rate1/100.0d0, rate2/100.0d0)
+         frac, atoms,n_atoms,n_iter, rate1/10, rate2/10)
 
+    call dist_separate(dist_map, dist_stretch, Apos, Bpos,frac,atoms, n_atoms,rmat, tmat, vec)
+
+
+    print*, "Final distances:", dist_map, dist_stretch
+    
+    dmin = dist_map + dist_stretch
+    
     Bpos = free_trans(Bpos, tmat, vec)
     
     call equivalent_center(Bpos,Acell,iAcell)
@@ -801,7 +1072,7 @@ module transform
     An_cell = size(Apos,2)/sum(atoms)
     Bn_cell = size(Bpos,2)/sum(atoms)
 
-    dmin = 0
+    !dmin = 0
     
     do i=0,n_atoms-1
        
@@ -820,7 +1091,7 @@ module transform
 
        print*, "munkres_time", finish - start
        
-       dmin = dmin + d
+       !dmin = dmin + d
 
        deallocate(dmat)
 
@@ -832,9 +1103,6 @@ module transform
     ! mat = cost(Apos,Bpos,n)   
     ! write(*,"(10(F5.3,X))") mat   
     ! call munkres(dmin,map,cost(Apos,Bpos,n),n)
-
-
-    ! dmin = dist(Apos, Bpos,frac,atoms, n_atoms)
     
   end subroutine fastmapping
   

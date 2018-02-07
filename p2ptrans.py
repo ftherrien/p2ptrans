@@ -1,4 +1,5 @@
 from p2ptrans import transform as tr
+
 import numpy as np
 import numpy.linalg as la
 # from mpl_toolkits.mplot3d import Axes3D
@@ -9,8 +10,10 @@ import time
 random = False
 
 # Setting the unit cells of A and B
-Acell = np.array([[1,0],[0,1]]).T
-Bcell = np.array([[-1/2,1/2],[1,1]]).T 
+Bcell = np.array([[1,0],[0,1]]).T
+# Bcell = np.array([[-1/2*0.9,1/2*0.9],[1,1]]).T 
+Acell = np.array([[0.5,0],[0,0.5]]).T 
+
 
 # Plotting the cell vectors of A and B
 fig = plt.figure()
@@ -20,8 +23,8 @@ ax.quiver(-np.ones(3), -np.ones(3), Acell[0,:], Acell[1,:])
 ax.set_xlim([-5, 5])
 ax.set_ylim([-5, 5])
 
-ASC = t.circle(Acell,20)
-BSC = t.circle(Bcell,20)
+ASC = t.circle(Acell,30)
+BSC = t.circle(Bcell,30)
 
 # Plot gamma points of each A cell
 fig = plt.figure()
@@ -91,7 +94,8 @@ frac = 0.5
 nb = int(np.shape(Bpos)[1]*frac)
 Acell_tmp = np.identity(3)
 Acell_tmp[:2,:2] = Acell
-mapMat, dmin = tr.fastmapping(Apos, Bpos, frac, Acell_tmp, la.inv(Acell_tmp), atoms,10000, 0.01, 0.0001, 100) # For dist 1  
+saveBpos = np.array(Bpos)
+tmat, rmat, mapMat, dmin = tr.fastmapping(Apos, Bpos, frac, Acell_tmp, la.inv(Acell_tmp), atoms,10000, 0.0001, 0.0001, 10) # For dist 6  
 t_time = time.time() - t_time
 Bpos = np.asanyarray(Bpos)
 Apos = np.asanyarray(Apos)
