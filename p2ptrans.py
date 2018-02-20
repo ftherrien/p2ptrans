@@ -1,5 +1,4 @@
 from p2ptrans import transform as tr
-
 import numpy as np
 import numpy.linalg as la
 # from mpl_toolkits.mplot3d import Axes3D
@@ -10,9 +9,10 @@ import time
 random = False
 
 # Setting the unit cells of A and B
-Bcell = np.array([[1,0],[0,1]]).T
-# Bcell = np.array([[-1/2*0.9,1/2*0.9],[1,1]]).T 
-Acell = np.array([[0.5,0],[0,0.5]]).T 
+# Acell = np.array([[1,0],[0,1]]).T
+Acell = np.array([[-1/2*1.5,1/2*1.5],[1*0.9,1*0.9]]).T
+Bcell = np.array([[-1/2,1/2],[1,1]]).T 
+# Bcell = np.array([[0.5,0],[0,0.5]]).T 
 
 
 # Plotting the cell vectors of A and B
@@ -23,8 +23,8 @@ ax.quiver(-np.ones(3), -np.ones(3), Acell[0,:], Acell[1,:])
 ax.set_xlim([-5, 5])
 ax.set_ylim([-5, 5])
 
-ASC = t.circle(Acell,30)
-BSC = t.circle(Bcell,30)
+ASC = t.circle(Acell,20)
+BSC = t.circle(Bcell,20)
 
 # Plot gamma points of each A cell
 fig = plt.figure()
@@ -82,7 +82,7 @@ else:
         Bpos = np.concatenate((Bpos, BSC + Bcell.dot(atom_Bpos[i:i+1,:].T).dot(np.ones((1,np.shape(BSC)[1])))), axis=1)
 
         
-    Apos = np.concatenate([Apos,np.zeros((1,np.shape(Apos)[1]))]) # Adds the third dimension
+    Apos = np.concatenate([Apos,np.zeros((1,np.shape(Apos)[1]))]) # Adds the third dimension«
     Bpos = np.concatenate([Bpos,np.zeros((1,np.shape(Bpos)[1]))])
     
 Apos = np.asfortranarray(Apos)
@@ -95,7 +95,7 @@ nb = int(np.shape(Bpos)[1]*frac)
 Acell_tmp = np.identity(3)
 Acell_tmp[:2,:2] = Acell
 saveBpos = np.array(Bpos)
-tmat, rmat, mapMat, dmin = tr.fastmapping(Apos, Bpos, frac, Acell_tmp, la.inv(Acell_tmp), atoms,10000, 0.0001, 0.0001, 10) # For dist 6  
+tmat, rmat, mapMat, dmin = tr.fastmapping(Apos, Bpos, frac, Acell_tmp, la.inv(Acell_tmp), atoms,50000, 0.0001, 0.0001, 10) # For dist 6  
 t_time = time.time() - t_time
 Bpos = np.asanyarray(Bpos)
 Apos = np.asanyarray(Apos)

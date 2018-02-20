@@ -8,7 +8,8 @@ module transform
        trans, &
        center, &
        mapping, &
-       fastmapping
+       fastmapping, &
+       test_ds
        
   private :: &
        eye, &
@@ -73,9 +74,9 @@ module transform
 
     R = P + (eye() - P)*cos(tetha) + Q*sin(tetha)
 
-    tvec = vec(:,1) + sum(pos,2) / size(pos,2)
-
-    call center(pos,n)
+    tvec = vec(:,1) !+ sum(pos,2) / size(pos,2) TMP
+    
+    !call center(pos,n) TMP
     
     pos = matmul(R,pos) + spread(tvec,2,size(pos,2))
     
@@ -145,20 +146,30 @@ module transform
     
   end function cost
 
-   function cost_map(Apos,Bpos) result(cost)
+   function cost_map(Apos,Bpos,frac_in) result(cost)
 
     double precision, intent(in), dimension(:,:) :: &
          Apos, Bpos  ! Rotation axis
+    double precision, optional, intent(in) :: &
+         frac_in
+    double precision :: &
+         frac
     double precision, dimension(size(Apos,2),size(Apos,2)) :: &
          cost
     integer :: &
          i,j ! Iterators
     
     cost = 0
+
+    frac = 1
+    
+    if (present(frac_in)) frac = frac_in
     
     do i=1,size(Apos,2)
        do j=1,size(Bpos,2)
-          cost(i,j) = norm(Apos(:,i)-Bpos(:,j))
+          if (i <= int(frac*size(Apos,2)) .or. j <= int(frac*size(Bpos,2))) then 
+             cost(i,j) = norm(Apos(:,i)-Bpos(:,j))
+          endif
        enddo
     enddo
     
@@ -310,7 +321,7 @@ module transform
              allocate(dmat(An_cell*atoms(i+1),An_cell*atoms(i+1)))
 
              dmat = cost_map(Apos( : , An_cell*i+1 : An_cell*(i+atoms(i+1)) ), &
-                  tBpos( : , Bn_cell*i+1 : Bn_cell*i + int(Bn_cell*atoms(i+1)*frac)))
+                  tBpos( : , Bn_cell*i+1 : Bn_cell*(i+atoms(i+1))),frac)
 
              call munkres(d,map(An_cell*i+1:An_cell*(i+atoms(i+1))),dmat,An_cell*atoms(i+1))
              rot_mat(:,1) = norm(tmat(:,1))*(/1,0,0/)
@@ -321,10 +332,14 @@ module transform
                   dot_product(u_per, tmat(:,3))/norm(u_per), &
                   det(tmat,3)/(norm(tmat(:,1))*norm(u_per))/)
 
+             ! This is to avoid seeing an inversion in 2D as a rotation in a
+             ! prohibited axis. This is not necessary in 3D (but not wrong)
+             rot_mat(2,:) = rot_mat(3,3)/abs(rot_mat(3,3))*rot_mat(2,:)
+             rot_mat(3,3) = abs(rot_mat(3,3))
+             
              ! Adding the mapping distance d and the stretching 
              
-             dist = dist + d + sum(sqrt(sum((matmul(rot_mat,Bpos)-Bpos)**2,1)))
-             
+             dist = dist + d !+ sum(sqrt(sum((matmul(rot_mat,Bpos)-Bpos)**2,1))) TMP             
              deallocate(dmat)
 
           enddo
@@ -382,7 +397,7 @@ module transform
              allocate(dmat(An_cell*atoms(i+1),An_cell*atoms(i+1)))
 
              dmat = cost_map(Apos( : , An_cell*i+1 : An_cell*(i+atoms(i+1)) ), &
-                  tBpos( : , Bn_cell*i+1 : Bn_cell*i + int(Bn_cell*atoms(i+1)*frac)))
+                  tBpos( : , Bn_cell*i+1 : Bn_cell*(i+atoms(i+1))), frac)
 
              call munkres(d,map(An_cell*i+1:An_cell*(i+atoms(i+1))),dmat,An_cell*atoms(i+1))
              rot_mat(:,1) = norm(tmat(:,1))*(/1,0,0/)
@@ -393,6 +408,11 @@ module transform
                   dot_product(u_per, tmat(:,3))/norm(u_per), &
                   det(tmat,3)/(norm(tmat(:,1))*norm(u_per))/)
 
+             ! This is to avoid seeing an inversion in 2D as a rotation in a
+             ! prohibited axis. This is not necessary in 3D (but not wrong)
+             rot_mat(2,:) = rot_mat(3,3)/abs(rot_mat(3,3))*rot_mat(2,:)
+             rot_mat(3,3) = abs(rot_mat(3,3))
+
              ! Adding the mapping distance d and the stretching 
              
              stretch = stretch + sum(sqrt(sum((matmul(rot_mat,Bpos)-Bpos)**2,1)))
@@ -402,7 +422,84 @@ module transform
 
           enddo
           
-  end subroutine dist_separate
+        end subroutine dist_separate
+
+        subroutine test_ds(dist, stretch, Apos, Bpos,n, frac, atoms, n_atoms, rot_mat, tmat, vec)
+
+    integer, intent(in) :: &
+         n_atoms, & ! Number of types of atoms
+         n
+    double precision, intent(in), dimension(3,n) :: &
+         Apos, Bpos  ! position matrix
+    double precision, dimension(size(Bpos,1),size(Bpos,2)) :: &
+         tBpos  ! position matrix
+    integer, intent(in), dimension(n_atoms) :: &
+         atoms
+    double precision, intent(in), dimension(3,3) :: &
+         tmat
+    double precision, intent(in), dimension(3) :: &
+         vec
+    double precision, intent(out), dimension(3,3) :: &
+         rot_mat
+    double precision, intent(in) :: &
+         frac
+    double precision, allocatable, dimension(:,:) :: &
+         dmat
+    double precision, dimension(3) :: &
+         u_per
+    integer, dimension(size(Apos,2)) :: &
+         map ! List of index
+    double precision, intent(out) :: &
+         dist, &
+         stretch
+    double precision :: &
+         d
+    integer :: &
+         An_cell, Bn_cell, & ! Number of cells
+         i
+
+          ! This distance takes in the unrotated Bpos
+          
+          ! Finds the best mapping
+          An_cell = size(Apos,2)/sum(atoms)
+          Bn_cell = size(Bpos,2)/sum(atoms)
+
+          tBpos = free_trans(Bpos, tmat, vec) 
+          
+          dist = 0
+          stretch = 0
+
+          do i=0,n_atoms-1
+
+             allocate(dmat(An_cell*atoms(i+1),An_cell*atoms(i+1)))
+
+             dmat = cost_map(Apos( : , An_cell*i+1 : An_cell*(i+atoms(i+1)) ), &
+                  tBpos( : , Bn_cell*i+1 : Bn_cell*(i+atoms(i+1))), frac)
+
+             call munkres(d,map(An_cell*i+1:An_cell*(i+atoms(i+1))),dmat,An_cell*atoms(i+1))
+             rot_mat(:,1) = norm(tmat(:,1))*(/1,0,0/)
+             u_per = tmat(:,2) -  tmat(:,1)*dot_product(tmat(:,1), tmat(:,2))/norm(tmat(:,1))
+             rot_mat(:,2) = (/ dot_product(tmat(:,1), tmat(:,2))/norm(tmat(:,1)), &
+                  norm(u_per), 0.0d0/)
+             rot_mat(:,3) = (/ dot_product(tmat(:,1), tmat(:,3))/norm(tmat(:,1)), &
+                  dot_product(u_per, tmat(:,3))/norm(u_per), &
+                  det(tmat,3)/(norm(tmat(:,1))*norm(u_per))/)
+
+             ! This is to avoid seeing an inversion in 2D as a rotation in a
+             ! prohibited axis. This is not necessary in 3D (but not wrong)
+             rot_mat(2,:) = rot_mat(3,3)/abs(rot_mat(3,3))*rot_mat(2,:)
+             rot_mat(3,3) = abs(rot_mat(3,3))
+             
+             ! Adding the mapping distance d and the stretching 
+             
+             stretch = stretch + sum(sqrt(sum((matmul(rot_mat,Bpos)-Bpos)**2,1)))
+             dist = dist + d
+             
+             deallocate(dmat)
+
+          enddo
+          
+  end subroutine test_ds
   
   function eye() result(a)
     !Copied from Rosetta Code at: https://rosettacode.org/wiki/Identity_matrix#Fortran
@@ -676,8 +773,8 @@ module transform
 
     n = size(Bpos,2)
 
-    mat_out = 0
-    vec_out = 0
+    mat_out = mat
+    vec_out = vec
     
     do j=1, n_iter
 
@@ -725,6 +822,122 @@ module transform
     enddo
     
   end subroutine gradient_descent
+
+
+    subroutine ana_gd_rot(tetha, u, vec, Apos, Bpos, n_iter, rate1, rate2)
+    
+    integer, intent(in) :: &
+         n_iter ! Number of atoms
+
+    double precision, intent(in) :: &
+         rate1, & ! Rate for angles
+         rate2    ! Rate for disp
+    
+    double precision, intent(in), dimension(:,:) :: &
+         Apos, &
+         Bpos ! Bpos ordered according to the mapping
+    
+    double precision, dimension(3,size(Bpos,2)) :: &
+         E ! position matrix
+    
+    double precision, intent(inout), dimension(3,1) :: &         
+         vec, &     ! Translation vector
+         u
+         
+    double precision, intent(inout) :: &
+         tetha    ! Transformation matrix
+
+    double precision, dimension(3,3) :: &
+         Px, Py, Pt, P, & ! Temporary transformation matrix
+         Qx, Qy, Qt, Q, &
+         Mx, My, Mt, M
+
+    double precision, dimension(size(Bpos,2),1) :: &
+         ones
+    
+    double precision :: &
+         dist
+    
+    integer :: &
+         i,j ! Iterator
+
+    double precision, parameter :: &
+         dx = 1d-5  ! Derivative step
+
+    ones = 1.0d0
+    
+    do j=1, n_iter
+
+       P = matmul(u,transpose(u))
+       Q = transpose(reshape((/0.0d0,-u(3,1),u(2,1),u(3,1),0.0d0,-u(1,1),-u(2,1),u(1,1),0.0d0/),(/3,3/)))
+
+       M = P + (eye() - P)*cos(tetha) + Q*sin(tetha)
+       
+       dist = sum(sqrt(sum(free_trans(Bpos,M,vec),1)))
+       
+       E = Apos - (matmul(M,Bpos) + vec)
+       E = E / spread(sqrt(sum(E**2,1)),1,3)
+
+       Px = transpose(reshape((/2*u(1,1), &
+            u(2,1) , &
+            (u(1,1)*(1-u(2,1)**2) - 2*u(1,1)**3)/sqrt(u(1,1)**2*(1-u(2,1)**2)-u(1,1)**4), &
+            u(2,1)  , &
+            u(2,1)**2, &
+            -u(1,1)*u(2,1)**2/sqrt(u(2,1)**2*(1-u(1,1)**2)-u(2,1)**4), &
+            (u(1,1)*(1-u(2,1)**2) - 2*u(1,1)**3)/sqrt(u(1,1)**2*(1-u(2,1)**2)-u(1,1)**4) , &
+            -u(1,1)*u(2,1)**2/sqrt(u(2,1)**2*(1-u(1,1)**2)-u(2,1)**4), &
+            -2*u(1,1)/), &
+            (/3,3/)))
+       Qx = transpose(reshape((/0.0d0, &
+            u(1,1)/sqrt(1-u(1,1)**2-u(2,1)**2), &
+            u(2,1), &
+            -u(1,1)/sqrt(1-u(1,1)**2-u(2,1)**2), &
+            0.0d0, &
+            -1.0d0, &
+            -u(2,1), &
+            1.0d0, &
+            0.0d0/), &
+            (/3,3/)))
+
+       Mx = Px + (eye() - Px)*cos(tetha) + Qx*sin(tetha)
+
+       Py = transpose(reshape((/u(1,1)**2, &
+            u(1,1) , &
+            -u(2,1)*u(1,1)**2/sqrt(u(1,1)**2*(1-u(2,1)**2)-u(1,1)**4), &
+            u(1,1)  , &
+            2*u(2,1), &
+            (u(2,1)*(1-u(1,1)**2) - 2*u(2,1)**3)/sqrt(u(2,1)**2*(1-u(1,1)**2)-u(2,1)**4), &
+            -u(2,1)*u(1,1)**2/sqrt(u(1,1)**2*(1-u(2,1)**2)-u(1,1)**4) , &
+            (u(2,1)*(1-u(1,1)**2) - 2*u(2,1)**3)/sqrt(u(2,1)**2*(1-u(1,1)**2)-u(2,1)**4), &
+            -2*u(2,1)/), &
+            (/3,3/)))
+       Qy = transpose(reshape((/0.0d0, &
+            u(2,1)/sqrt(1-u(1,1)**2-u(2,1)**2), &
+            1.0d0, &
+            -u(2,1)/sqrt(1-u(1,1)**2-u(2,1)**2), &
+            0.0d0, &
+            u(1,1), &
+            -1.0d0, &
+            u(1,1), &
+            0.0d0/), &
+            (/3,3/)))
+
+       My = Py + (eye() - Py)*cos(tetha) + Qy*sin(tetha)
+
+       Pt = matmul(u,transpose(u))
+       Qt = transpose(reshape((/0.0d0,-u(3,1),u(2,1),u(3,1),0.0d0,-u(1,1),-u(2,1),u(1,1),0.0d0/),(/3,3/)))
+
+       Mt = Pt - (eye() - Pt)*sin(tetha) + Qt*cos(tetha)
+       
+       u(1,1) = u(1,1) + rate1*dist*sum(matmul(E,transpose(Bpos)) * Mx)
+       u(2,1) = u(2,1) + rate1*dist*sum(matmul(E,transpose(Bpos)) * My)
+       u(3,1) = sqrt(1-u(1,1)**2-u(2,1)**2)
+       tetha = tetha + rate1*dist*sum(matmul(E,transpose(Bpos)) * Mt)
+       vec = vec + rate2*dist*matmul(E,ones)
+       
+    enddo
+    
+  end subroutine ana_gd_rot
   
   subroutine gradient_descent_rand(mat, vec, Apos, Bpos, frac, atoms, n_atoms, n_iter, rate1, rate2, T)
     ! New Gradient Descent Random  
@@ -939,11 +1152,15 @@ module transform
 
        call random_number(mat)
        call random_number(vec)
-
+       
        mat = mat*max_mat
 
+       mat(3,:) = 0.0d0 ! For 2D only
+       mat(:,3) = 0.0d0 ! For 2D only
+       mat(3,3) = 1.0d0 ! For 2D only
+
        vec = vec - reshape((/0.5d0,0.5d0,0.5d0/),(/3,1/))
-       vec = vec * mul_vec 
+       vec = vec * mul_vec
        
        call gradient_descent(mat, vec, Apos, Bpos, &
             frac, atoms,n_atoms,n_conv, rate1, rate2)
@@ -1047,13 +1264,13 @@ module transform
     call random_number(tmat)
     tmat(3,:) = 0.0d0 ! For 2D only
     tmat(:,3) = 0.0d0 ! For 2D only
-    tmat(3,3) = 1.0d0
+    tmat(3,3) = 1.0d0 ! For 2D only
 
     vec = 0
-        
+
     call gradient_descent_explore(tmat, vec, Apos, Bpos, &
          frac, atoms,n_atoms,n_iter, rate1, rate2, T)
-        
+    
     call gradient_descent(tmat, vec, Apos, Bpos, &
          frac, atoms,n_atoms,n_iter, rate1/10, rate2/10)
 
@@ -1080,7 +1297,7 @@ module transform
 
        call cpu_time(start)
        dmat = cost_map(Apos( : , An_cell*i+1 : An_cell*(i+atoms(i+1)) ), &
-                       Bpos( : , Bn_cell*i+1 : Bn_cell*i + int(Bn_cell*atoms(i+1)*frac)))
+                       Bpos( : , Bn_cell*i+1 : An_cell*(i+atoms(i+1)) ), frac)
        call cpu_time(finish)
 
        print*, "dist_time", finish - start 
