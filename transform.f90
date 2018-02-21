@@ -21,6 +21,7 @@ module transform
        free_trans, &
        cost, &
        cost_map, &
+       analytical_gd_rot, &
        gradient_descent_rand, &
        gradient_descent_explore, &
        gradient_descent, &
@@ -46,7 +47,7 @@ module transform
 
   end subroutine init_random_seed
 
-  subroutine trans(pos,n,tetha,u,vec)
+  subroutine trans(pos,n,theta,u,vec)
 
     integer, intent(in) :: &
          n ! Number of atoms
@@ -62,7 +63,7 @@ module transform
          tvec    ! displacement from origin
     
     double precision, intent(in) :: &
-         tetha    ! angle of rotation
+         theta    ! angle of rotation
 
     double precision, dimension(3,3) :: &
          Q, & ! cross product matrix
@@ -72,7 +73,7 @@ module transform
     P = matmul(u,transpose(u))
     Q = transpose(reshape((/0.0d0,-u(3,1),u(2,1),u(3,1),0.0d0,-u(1,1),-u(2,1),u(1,1),0.0d0/),(/3,3/)))
 
-    R = P + (eye() - P)*cos(tetha) + Q*sin(tetha)
+    R = P + (eye() - P)*cos(theta) + Q*sin(theta)
 
     tvec = vec(:,1) !+ sum(pos,2) / size(pos,2) TMP
     
@@ -569,7 +570,7 @@ module transform
 
     double precision :: &
          d, &   ! Distance between the two structures
-         tetha   ! Rotation angle
+         theta   ! Rotation angle
 
     integer :: &
          i   ! Iterator
@@ -595,18 +596,18 @@ module transform
     do i=1,n_iter
 
        ! Random translation, rotation axis and angle
-       call random_number(tetha)
+       call random_number(theta)
        call random_number(vec)
        call random_number(u)
        u = (u - reshape((/0.5d0,0.5d0,0.5d0/),(/3,1/))) ! Recasts vector in the 8 octans
        vec = vec - reshape((/0.5d0,0.5d0,0.5d0/),(/3,1/))
        u = u / norm(u) ! Normalizes
        vec = dmin * vec / sqrt(3.0d0) ! Moves less when close
-       tetha = 2*pi*tetha
+       theta = 2*pi*theta
 
        newBpos = Bpos
 
-       call trans(newBpos,n,tetha,u,vec) ! MC step
+       call trans(newBpos,n,theta,u,vec) ! MC step
 
        d = dist(Apos,newBpos,frac,atoms, n_atoms)
 
@@ -824,7 +825,7 @@ module transform
   end subroutine gradient_descent
 
 
-    subroutine ana_gd_rot(tetha, u, vec, Apos, Bpos, n_iter, rate1, rate2)
+    subroutine analytical_gd_rot(theta, u, vec, Apos, Bpos, n_iter, rate1, rate2)
     
     integer, intent(in) :: &
          n_iter ! Number of atoms
@@ -845,7 +846,7 @@ module transform
          u
          
     double precision, intent(inout) :: &
-         tetha    ! Transformation matrix
+         theta    ! Transformation matrix
 
     double precision, dimension(3,3) :: &
          Px, Py, Pt, P, & ! Temporary transformation matrix
@@ -871,73 +872,77 @@ module transform
        P = matmul(u,transpose(u))
        Q = transpose(reshape((/0.0d0,-u(3,1),u(2,1),u(3,1),0.0d0,-u(1,1),-u(2,1),u(1,1),0.0d0/),(/3,3/)))
 
-       M = P + (eye() - P)*cos(tetha) + Q*sin(tetha)
+       M = P + (eye() - P)*cos(theta) + Q*sin(theta)
        
-       dist = sum(sqrt(sum(free_trans(Bpos,M,vec),1)))
+       dist = sum(sqrt(sum((Apos - free_trans(Bpos,M,vec))**2,1)))
+
+       print*, dist
        
-       E = Apos - (matmul(M,Bpos) + vec)
+       E = Apos - free_trans(Bpos,M,vec)
        E = E / spread(sqrt(sum(E**2,1)),1,3)
 
-       Px = transpose(reshape((/2*u(1,1), &
-            u(2,1) , &
-            (u(1,1)*(1-u(2,1)**2) - 2*u(1,1)**3)/sqrt(u(1,1)**2*(1-u(2,1)**2)-u(1,1)**4), &
-            u(2,1)  , &
-            u(2,1)**2, &
-            -u(1,1)*u(2,1)**2/sqrt(u(2,1)**2*(1-u(1,1)**2)-u(2,1)**4), &
-            (u(1,1)*(1-u(2,1)**2) - 2*u(1,1)**3)/sqrt(u(1,1)**2*(1-u(2,1)**2)-u(1,1)**4) , &
-            -u(1,1)*u(2,1)**2/sqrt(u(2,1)**2*(1-u(1,1)**2)-u(2,1)**4), &
-            -2*u(1,1)/), &
-            (/3,3/)))
-       Qx = transpose(reshape((/0.0d0, &
-            u(1,1)/sqrt(1-u(1,1)**2-u(2,1)**2), &
-            u(2,1), &
-            -u(1,1)/sqrt(1-u(1,1)**2-u(2,1)**2), &
-            0.0d0, &
-            -1.0d0, &
-            -u(2,1), &
-            1.0d0, &
-            0.0d0/), &
-            (/3,3/)))
+       ! ! ux and uy is for 3D only
+       ! Px = transpose(reshape((/2*u(1,1), &
+       !      u(2,1) , &
+       !      (u(1,1)*(1-u(2,1)**2) - 2*u(1,1)**3)/sqrt(u(1,1)**2*(1-u(2,1)**2)-u(1,1)**4), &
+       !      u(2,1)  , &
+       !      u(2,1)**2, &
+       !      -u(1,1)*u(2,1)**2/sqrt(u(2,1)**2*(1-u(1,1)**2)-u(2,1)**4), &
+       !      (u(1,1)*(1-u(2,1)**2) - 2*u(1,1)**3)/sqrt(u(1,1)**2*(1-u(2,1)**2)-u(1,1)**4) , &
+       !      -u(1,1)*u(2,1)**2/sqrt(u(2,1)**2*(1-u(1,1)**2)-u(2,1)**4), &
+       !      -2*u(1,1)/), &
+       !      (/3,3/)))
+       ! Qx = transpose(reshape((/0.0d0, &
+       !      u(1,1)/sqrt(1-u(1,1)**2-u(2,1)**2), &
+       !      u(2,1), &
+       !      -u(1,1)/sqrt(1-u(1,1)**2-u(2,1)**2), &
+       !      0.0d0, &
+       !      -1.0d0, &
+       !      -u(2,1), &
+       !      1.0d0, &
+       !      0.0d0/), &
+       !      (/3,3/)))
 
-       Mx = Px + (eye() - Px)*cos(tetha) + Qx*sin(tetha)
+       ! Mx = Px + (eye() - Px)*cos(theta) + Qx*sin(theta)
 
-       Py = transpose(reshape((/u(1,1)**2, &
-            u(1,1) , &
-            -u(2,1)*u(1,1)**2/sqrt(u(1,1)**2*(1-u(2,1)**2)-u(1,1)**4), &
-            u(1,1)  , &
-            2*u(2,1), &
-            (u(2,1)*(1-u(1,1)**2) - 2*u(2,1)**3)/sqrt(u(2,1)**2*(1-u(1,1)**2)-u(2,1)**4), &
-            -u(2,1)*u(1,1)**2/sqrt(u(1,1)**2*(1-u(2,1)**2)-u(1,1)**4) , &
-            (u(2,1)*(1-u(1,1)**2) - 2*u(2,1)**3)/sqrt(u(2,1)**2*(1-u(1,1)**2)-u(2,1)**4), &
-            -2*u(2,1)/), &
-            (/3,3/)))
-       Qy = transpose(reshape((/0.0d0, &
-            u(2,1)/sqrt(1-u(1,1)**2-u(2,1)**2), &
-            1.0d0, &
-            -u(2,1)/sqrt(1-u(1,1)**2-u(2,1)**2), &
-            0.0d0, &
-            u(1,1), &
-            -1.0d0, &
-            u(1,1), &
-            0.0d0/), &
-            (/3,3/)))
+       ! Py = transpose(reshape((/u(1,1)**2, &
+       !      u(1,1) , &
+       !      -u(2,1)*u(1,1)**2/sqrt(u(1,1)**2*(1-u(2,1)**2)-u(1,1)**4), &
+       !      u(1,1)  , &
+       !      2*u(2,1), &
+       !      (u(2,1)*(1-u(1,1)**2) - 2*u(2,1)**3)/sqrt(u(2,1)**2*(1-u(1,1)**2)-u(2,1)**4), &
+       !      -u(2,1)*u(1,1)**2/sqrt(u(1,1)**2*(1-u(2,1)**2)-u(1,1)**4) , &
+       !      (u(2,1)*(1-u(1,1)**2) - 2*u(2,1)**3)/sqrt(u(2,1)**2*(1-u(1,1)**2)-u(2,1)**4), &
+       !      -2*u(2,1)/), &
+       !      (/3,3/)))
+       ! Qy = transpose(reshape((/0.0d0, &
+       !      u(2,1)/sqrt(1-u(1,1)**2-u(2,1)**2), &
+       !      1.0d0, &
+       !      -u(2,1)/sqrt(1-u(1,1)**2-u(2,1)**2), &
+       !      0.0d0, &
+       !      u(1,1), &
+       !      -1.0d0, &
+       !      u(1,1), &
+       !      0.0d0/), &
+       !      (/3,3/)))
 
-       My = Py + (eye() - Py)*cos(tetha) + Qy*sin(tetha)
+       ! My = Py + (eye() - Py)*cos(theta) + Qy*sin(theta)
 
        Pt = matmul(u,transpose(u))
        Qt = transpose(reshape((/0.0d0,-u(3,1),u(2,1),u(3,1),0.0d0,-u(1,1),-u(2,1),u(1,1),0.0d0/),(/3,3/)))
 
-       Mt = Pt - (eye() - Pt)*sin(tetha) + Qt*cos(tetha)
+       Mt = Pt - (eye() - Pt)*sin(theta) + Qt*cos(theta)
        
-       u(1,1) = u(1,1) + rate1*dist*sum(matmul(E,transpose(Bpos)) * Mx)
-       u(2,1) = u(2,1) + rate1*dist*sum(matmul(E,transpose(Bpos)) * My)
-       u(3,1) = sqrt(1-u(1,1)**2-u(2,1)**2)
-       tetha = tetha + rate1*dist*sum(matmul(E,transpose(Bpos)) * Mt)
+       ! u(1,1) = u(1,1) + rate1*dist*sum(matmul(E,transpose(Bpos)) * Mx)
+       ! u(2,1) = u(2,1) + rate1*dist*sum(matmul(E,transpose(Bpos)) * My)
+       ! u(3,1) = sqrt(1-u(1,1)**2-u(2,1)**2)
+       theta = theta + rate1*dist*sum(matmul(E,transpose(Bpos)) * Mt)
        vec = vec + rate2*dist*matmul(E,ones)
+
        
     enddo
     
-  end subroutine ana_gd_rot
+  end subroutine analytical_gd_rot
   
   subroutine gradient_descent_rand(mat, vec, Apos, Bpos, frac, atoms, n_atoms, n_iter, rate1, rate2, T)
     ! New Gradient Descent Random  
@@ -1076,16 +1081,17 @@ module transform
     
   end subroutine gradient_descent_rand
 
-    subroutine gradient_descent_explore(mat, vec, Apos, Bpos, frac, atoms, n_atoms, n_iter, rate1, rate2, T)
+    subroutine gradient_descent_explore(mat, vec, Apos, Bpos, frac, atoms, n_atoms, n_iter, n_ana, n_conv, rate1, rate2)
     ! New Gradient Descent Random  
     
     integer, intent(in) :: &
-         n_iter, n_atoms ! Number of atoms
+         n_iter, n_atoms, & ! Number of atoms
+         n_ana, &
+         n_conv
 
     double precision, intent(in) :: &
          rate1, & ! Rate for angles
          rate2, & ! Rate for disp
-         T, & ! Monte-Carlo temperature
          frac ! Fraction of A and B to use in optimisation
          
     double precision :: &
@@ -1099,23 +1105,39 @@ module transform
          Apos, Bpos ! Centered position of the atoms
     
     double precision, dimension(3,size(Bpos,2)) :: &
-         pos, postmp ! position matrix
+         pos, postmp, & ! position matrix
+         tBpos
+
+    double precision, dimension(3,sum(int(frac*atoms*size(Apos,2)/sum(atoms)))) :: &
+         Apos_mapped, & ! position matrix
+         Bpos_opt, &
+         Bpos_test, &
+         Bpos_test2
     
-    double precision, intent(inout), dimension(3,1) :: &
+    double precision, intent(out), dimension(3,1) :: &
          vec     ! Translation vector
 
-    double precision, intent(inout), dimension(3,3) :: &
+    double precision, intent(out), dimension(3,3) :: &
          mat    ! Transformation matrix
 
     double precision, dimension(3,3) :: &
          mat_tmp, & ! Temporary transformation matrix
          mat_out, & ! Output transformation matrix
-         mat_min
+         mat_min, &
+         P,Q
     
     double precision, dimension(3,1) :: &
          vec_out, & ! Output vec
-         vec_min
-    
+         vec_min, &
+         u, &
+         u_min
+
+    double precision, allocatable, dimension(:,:) :: &
+         dmat
+
+    integer, allocatable, dimension(:) :: &
+         map
+         
     double precision :: &
          dist_plus, & ! distance when adding dx
          dist_minus, & ! distance when substracting dx
@@ -1124,50 +1146,108 @@ module transform
          dist_map, &
          dist_stretch, &
          dist_min, &
-         mul_vec
+         mul_vec, &
+         theta, &
+         theta_min
     
     integer :: &
-         i,j, & ! Iterator
-         n ! Size of Bpos
+         i,j,k,l, & ! Iterator
+         id, idx, &
+         n, & ! Size of Bpos
+         An_cell, Bn_cell
 
     double precision, parameter :: &
          dx = 1d-5, &  ! Derivative step
-         max_mat = 3, &
-         max_vec = 1
+         max_vec = 0.3d0, &
+         pi = 3.141592653589793d0
 
-    integer, parameter :: &
-         n_conv = 50
-
-    n = size(Bpos,2)
+    An_cell = size(Apos,2)/sum(atoms)
+    Bn_cell = size(Bpos,2)/sum(atoms)
     
     call init_random_seed()
 
-    mul_vec = max_vec*2*maxval(sqrt(sum(Bpos**2,1)))/sqrt(3.0d0)
+    mul_vec = max_vec*2*maxval(sqrt(sum(Bpos**2,1)))/sqrt(2.0d0) ! 2D only sqrt(3) in 3D
     
-    dist_min = dist( Apos, Bpos, frac,atoms, n_atoms, mat, vec)
-    mat_min = mat
-    vec_min = vec
+    dist_min = sum(sqrt(sum((Apos - Bpos)**2,1)))
     
-    do j=1, int(n_iter/n_conv)
+    do j=1, n_iter
 
-       call random_number(mat)
+       call random_number(theta)
+       call random_number(u)
        call random_number(vec)
        
-       mat = mat*max_mat
-
-       mat(3,:) = 0.0d0 ! For 2D only
-       mat(:,3) = 0.0d0 ! For 2D only
-       mat(3,3) = 1.0d0 ! For 2D only
+       theta = theta*2*pi
 
        vec = vec - reshape((/0.5d0,0.5d0,0.5d0/),(/3,1/))
        vec = vec * mul_vec
-       
-       call gradient_descent(mat, vec, Apos, Bpos, &
-            frac, atoms,n_atoms,n_conv, rate1, rate2)
+       vec(3,1) = 0.0d0 ! 2D only
 
-       ! call dist_separate(dist_map, dist_stretch, Apos, Bpos, frac,atoms, n_atoms, mat, vec)
+       ! ! 3D only
+       ! u = u - reshape((/0.5d0,0.5d0,0.5d0/),(/3,1/))
+       ! u = u / norm(u)
+       ! u(3,1) = abs(u(3,1))
+
+       u =  reshape((/0.0d0,0.0d0,1.0d0/),(/3,1/)) ! 2D only
+
+       print*, "New u"
        
-       dist_cur = dist( Apos, Bpos, frac,atoms, n_atoms, mat, vec)
+       do k=1, n_conv
+          
+          P = matmul(u,transpose(u))
+          Q = transpose(reshape((/0.0d0,-u(3,1),u(2,1), &
+               u(3,1),0.0d0,-u(1,1), &
+               -u(2,1),u(1,1),0.0d0/),(/3,3/)))
+
+          mat = P + (eye() - P)*cos(theta) + Q*sin(theta)
+          
+          tBpos = free_trans(Bpos,mat,vec)
+
+          id = 0
+          idx = 0
+          n = 0
+          
+          do i=0,n_atoms-1
+
+             id = id + n
+
+             n = An_cell*atoms(i+1)
+
+             allocate(dmat(n,n), map(n))
+
+             dmat = cost_map(Apos( : , id + 1 : id + n ), &
+                  tBpos( : , id + 1 : id + n ),frac)
+
+             call munkres(dist_map, map, dmat, n)
+
+             map = map + id
+
+             do l=1, int(n*frac)
+                idx = idx + 1 
+                Apos_mapped(:,idx) = Apos(:,map(l))
+                Bpos_opt(:,idx) = Bpos(:,id+l)
+                Bpos_test2(:,idx) = Bpos(:,id+l)
+                Bpos_test(:,idx:idx) = free_trans(Bpos(:,id+l:id+l),mat,vec)
+             enddo
+
+             deallocate(dmat,map)
+          
+          enddo
+
+          print*, "Remapped", dist_map
+          
+          call analytical_gd_rot(theta, u, vec, Apos_mapped, Bpos_opt, n_ana, rate1, rate2)
+          
+       enddo
+          
+       
+       P = matmul(u,transpose(u))
+       Q = transpose(reshape((/0.0d0,-u(3,1),u(2,1), &
+            u(3,1),0.0d0,-u(1,1), &
+            -u(2,1),u(1,1),0.0d0/),(/3,3/)))
+       
+       mat = P + (eye() - P)*cos(theta) + Q*sin(theta)
+
+       dist_cur = sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt,mat,vec))**2,1)))
        
        if (dist_cur < dist_min) then
           dist_min = dist_cur
@@ -1176,15 +1256,19 @@ module transform
        endif
 
     enddo
-
+    
     mat = mat_min
+    
     vec = vec_min
     
   end subroutine gradient_descent_explore
 
-  subroutine fastmapping(tmat, rmat, map, dmin, Apos,na, Bpos, nb, frac, Acell, iAcell, atoms, n_atoms, n_iter, rate1, rate2, T)
-
-    use hungarian
+  
+  subroutine fastmapping(tmat, rmat, map, dmin, &
+       Apos, na, Bpos, nb, &
+       frac, Acell, iAcell, atoms, n_atoms, &
+       n_iter, n_ana, n_conv, &
+       rate1, rate2)
     
     integer, intent(in) :: &
          na, nb, & ! Total number of atoms
@@ -1192,11 +1276,12 @@ module transform
 
     double precision, intent(in) :: &
          rate1, &  ! Rate of the gradient descent for angles
-         rate2, & ! Rate of the gradient descent for displacement
-         T
+         rate2     ! Rate of the gradient descent for displacement
          
     integer, intent(in) :: &
-         n_iter   ! Number of iteration of the gradient descent
+         n_iter, &   ! Number of iteration of the gradient descent
+         n_ana, &
+         n_conv
          
     double precision, intent(inout), dimension(3,na) :: &
          Apos ! Position of the atoms
@@ -1228,7 +1313,7 @@ module transform
          u      ! Rotation axis
 
     double precision :: &
-         tetha, & ! Rotation angle
+         theta, & ! Rotation angle
          d, &
          dist_map, &
          dist_stretch
@@ -1245,6 +1330,7 @@ module transform
     
     integer :: &
          i, &
+         n, id, &
          An_cell, Bn_cell
 
     real :: &
@@ -1269,17 +1355,17 @@ module transform
     vec = 0
 
     call gradient_descent_explore(tmat, vec, Apos, Bpos, &
-         frac, atoms,n_atoms,n_iter, rate1, rate2, T)
+         frac, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2)
     
-    call gradient_descent(tmat, vec, Apos, Bpos, &
-         frac, atoms,n_atoms,n_iter, rate1/10, rate2/10)
-
-    call dist_separate(dist_map, dist_stretch, Apos, Bpos,frac,atoms, n_atoms,rmat, tmat, vec)
-
-
-    print*, "Final distances:", dist_map, dist_stretch
+    ! call gradient_descent(tmat, vec, Apos, Bpos, &
+    !      frac, atoms,n_atoms,n_iter, rate1/10, rate2/10)
     
-    dmin = dist_map + dist_stretch
+    !call dist_separate(dist_map, dist_stretch, Apos, Bpos,frac,atoms, n_atoms,rmat, tmat, vec)
+
+
+    !print*, "Final distances:", dist_map, dist_stretch
+    
+    !dmin = dist_map + dist_stretch
     
     Bpos = free_trans(Bpos, tmat, vec)
     
@@ -1290,20 +1376,27 @@ module transform
     Bn_cell = size(Bpos,2)/sum(atoms)
 
     !dmin = 0
+
+    id = 0
+    n = 0
     
     do i=0,n_atoms-1
+
+       id = id + n
        
-       allocate(dmat(An_cell*atoms(i+1),An_cell*atoms(i+1)))
+       n = An_cell*atoms(i+1)
+       
+       allocate(dmat(n,n))
 
        call cpu_time(start)
-       dmat = cost_map(Apos( : , An_cell*i+1 : An_cell*(i+atoms(i+1)) ), &
-                       Bpos( : , Bn_cell*i+1 : An_cell*(i+atoms(i+1)) ), frac)
+       dmat = cost_map(Apos( : , id + 1 : id + n ), &
+                       Bpos( : , id + 1 : id + n ), frac)
        call cpu_time(finish)
 
        print*, "dist_time", finish - start 
        
        call cpu_time(start)
-       call munkres(d,map(An_cell*i+1:An_cell*(i+atoms(i+1))),dmat,An_cell*atoms(i+1))
+       call munkres(d,map(id + 1 : id + n),dmat,An_cell*atoms(i+1))
        call cpu_time(finish)
 
        print*, "munkres_time", finish - start
@@ -1312,10 +1405,21 @@ module transform
 
        deallocate(dmat)
 
-       map(An_cell*i+1:An_cell*(i+atoms(i+1))) = map(An_cell*i+1:An_cell*(i+atoms(i+1))) + An_cell*i
+       map(id + 1 : id + n) = map(id + 1 : id + n) + id
 
     enddo
 
+    dmin = d
+
+    rmat = 0
+
+    print*, "tmat",tmat 
+    print*, "rmat",rmat
+    print*, "map ",map 
+    print*, "dmin",dmin
+    print*, "Apos",Apos
+    print*, "Bpos",Bpos
+    
     ! ! Print the cost matrix
     ! mat = cost(Apos,Bpos,n)   
     ! write(*,"(10(F5.3,X))") mat   

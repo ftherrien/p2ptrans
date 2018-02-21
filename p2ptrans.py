@@ -9,10 +9,10 @@ import time
 random = False
 
 # Setting the unit cells of A and B
-# Acell = np.array([[1,0],[0,1]]).T
-Acell = np.array([[-1/2*1.5,1/2*1.5],[1*0.9,1*0.9]]).T
-Bcell = np.array([[-1/2,1/2],[1,1]]).T 
-# Bcell = np.array([[0.5,0],[0,0.5]]).T 
+Acell = np.array([[1,0],[0,1]]).T
+#Bcell = np.array([[-1/2*1.5,1/2*1.5],[1*0.9,1*0.9]]).T
+#Bcell = np.array([[-1/2,1/2],[1,1]]).T 
+Bcell = np.array([[0.5,0],[0,0.5]]).T 
 
 
 # Plotting the cell vectors of A and B
@@ -23,8 +23,8 @@ ax.quiver(-np.ones(3), -np.ones(3), Acell[0,:], Acell[1,:])
 ax.set_xlim([-5, 5])
 ax.set_ylim([-5, 5])
 
-ASC = t.circle(Acell,20)
-BSC = t.circle(Bcell,20)
+ASC = t.circle(Acell,100)
+BSC = t.circle(Bcell,100)
 
 # Plot gamma points of each A cell
 fig = plt.figure()
@@ -50,7 +50,7 @@ ax.set_aspect('equal')
 if random:
     # Create a random Apos and B with random small displacement
     atoms = np.array([1]) # One atom
-    n = 10
+    n = 30
     Apos = np.concatenate([np.random.random((2,n))*3, np.zeros((1,n))]) 
     
     # Transform Apos to get Bpos
@@ -58,7 +58,7 @@ if random:
     vec = np.random.random((3,1))-0.5
     vec[2] = 0
     u = np.array([0,0,1])
-    Bpos = np.asfortranarray(np.array(Apos))*1.2
+    Bpos = np.asfortranarray(np.array(Apos))
 
     tr.trans(Bpos,tetha,u,vec)
 
@@ -86,7 +86,7 @@ else:
     Bpos = np.concatenate([Bpos,np.zeros((1,np.shape(Bpos)[1]))])
     
 Apos = np.asfortranarray(Apos)
-Bpos = np.asfortranarray(Bpos)
+Bpos = np.asfortranarray(Bpos) 
 
 t_time = time.time()
 # mapMat, dmin = tr.fastmapping(Apos, Bpos, atoms,10000, 0.01, 0.00001, 5) # For dist 2 (not necessarily optimal)
@@ -95,7 +95,7 @@ nb = int(np.shape(Bpos)[1]*frac)
 Acell_tmp = np.identity(3)
 Acell_tmp[:2,:2] = Acell
 saveBpos = np.array(Bpos)
-tmat, rmat, mapMat, dmin = tr.fastmapping(Apos, Bpos, frac, Acell_tmp, la.inv(Acell_tmp), atoms,50000, 0.0001, 0.0001, 10) # For dist 6  
+tmat, rmat, mapMat, dmin = tr.fastmapping(Apos, Bpos, frac, Acell_tmp, la.inv(Acell_tmp), atoms,100, 10, 3, 0.0001, 0.0001) # For dist 6  
 t_time = time.time() - t_time
 Bpos = np.asanyarray(Bpos)
 Apos = np.asanyarray(Apos)

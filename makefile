@@ -3,7 +3,7 @@ COMP2 = python3 -m numpy.f2py
 
 files = tiling.f90 transform.f90
 functions = sphere parallelepiped circle trans center mapping fastmapping test_ds
-flags = --f90exec=gfortran
+flags = --f90exec=gfortran --opt=-O3
 
 #-I/usr/lib64/openmpi/lib/ -L/usr/lib64/openmpi/lib/ -lmpi
 
