@@ -147,7 +147,7 @@ contains
   end function cost_map
 
   subroutine mapping(Apos_mapped, Bpos_opt, Apos, Bpos, tBpos, frac, atoms, n_atoms)
-
+    
     integer, intent(in) :: &
          n_atoms ! Number of types of atoms
     double precision, intent(in), dimension(:,:) :: &
@@ -190,8 +190,6 @@ contains
             tBpos( : , id + 1 : id + n ),n_frac)
 
        call munkres(dist_map, map, dmat, n)
-
-       print*, "dist_map",  dist_map
        
        map = map + id
 
@@ -302,8 +300,6 @@ contains
 
        dist_prev = dist
        dist = sum(sqrt(sum((Apos - free_trans(Bpos,M,vec))**2,1)))
-
-       ! print*, dist, j ! TMP
 
        E = Apos - free_trans(Bpos,M,vec)
        E = E / spread(sqrt(sum(E**2,1)),1,3)
@@ -417,8 +413,7 @@ contains
        dist_prev = dist
        dist = sum(sqrt(sum((Apos - free_trans(Bpos,tmat,vec))**2,1)))
 
-       ! print*, dist, j ! TMP
-
+       
        E = Apos - free_trans(Bpos,tmat,vec)
        E = E / spread(sqrt(sum(E**2,1)),1,3)
 
@@ -460,17 +455,21 @@ contains
          icell ! inverse of cell
     
     double precision, dimension(3,size(Bpos,2)) :: &
-         pos, postmp, & ! position matrix
+         postmp, & ! position matrix
          tBpos
 
     double precision, dimension(3,int(frac*size(Apos,2)/sum(atoms))*sum(atoms)) :: &
          Apos_mapped, & ! position matrix
          Bpos_opt
     
-    double precision, intent(out), dimension(3,1) :: &
+    double precision, intent(out), dimension(3) :: &
          vec, &     ! Translation vector
          u
 
+    double precision, dimension(3) :: &
+         vec_local, &     ! Translation vector
+         u_local
+    
     double precision, intent(out) :: &
          theta
 
@@ -482,11 +481,6 @@ contains
          mat_out, & ! Output transformation matrix
          mat_min, &
          P,Q
-
-    double precision, dimension(3,1) :: &
-         vec_out, & ! Output vec
-         vec_min, &
-         u_min
 
     double precision, allocatable, dimension(:,:) :: &
          dmat
@@ -501,24 +495,28 @@ contains
          dist_cur, &
          dist_map, &
          dist_stretch, &
-         dist_min, &
-         theta_min, &
          mul_vec, &
-         diag
+         diag, &
+         theta_local
 
+    double precision, allocatable, dimension(:) :: &
+         dist_min, &
+         theta_min
+
+    double precision, allocatable, dimension(:,:) :: &
+         u_min, &
+         vec_min
+    
     integer :: &
          i,j,k,l, & ! Iterator
          id, idx, &
          n, & ! Size of Bpos
-         An_cell, Bn_cell
+         An_cell, Bn_cell, &
+         n_threads, thread, &
+         pos
 
     double precision, parameter :: &
          pi = 3.141592653589793d0
-
-    An_cell = size(Apos,2)/sum(atoms)
-    Bn_cell = size(Bpos,2)/sum(atoms)
-
-    call init_random_seed()
 
     diag = 0
     diag = max(norm(cell(:,1) + cell(:,2) + cell(:,3)),diag)
@@ -528,64 +526,88 @@ contains
 
     mul_vec = diag*2/sqrt(2.0d0) !Only in 2D sqrt(3) in 3D
     
-    dist_min = sum(sqrt(sum((Apos - Bpos)**2,1)))
-    u_min = u
-    theta_min = theta
-    vec_min = vec
+    !$omp parallel default(private) shared(dist_min, &
+    !$omp theta_min, u_min, vec_min, u, theta, vec) &
+    !$omp firstprivate(n_iter, mul_vec, cell, frac, &
+    !$omp icell, n_conv, n_ana, Apos, Bpos, rate1, rate2, atoms, n_atoms)
 
-    !$omp parallel do private(j) firstprivate(n_iter) shared(x, y)
+    call init_random_seed()
+    
+    n_threads = OMP_get_num_threads()
+
+    !$omp single
+    allocate(dist_min(n_threads), &
+         theta_min(n_threads), &
+         u_min(3,n_threads),&
+         vec_min(3,n_threads))
+    !$omp end single
+
+    thread = OMP_get_thread_num() + 1
+    
+    dist_min(thread) = sum(sqrt(sum((Apos - Bpos)**2,1)))
+    
+    !$omp do
     do j=1, n_iter
-
-       call random_number(theta)
-       call random_number(u)
-       call random_number(vec)
-
-       theta = theta*2*pi
-
-       vec = vec - reshape((/0.5d0,0.5d0,0.5d0/),(/3,1/))
-       vec(3,1) = 0.0d0 ! 2D only
-
-       vec = vec*mul_vec
        
-       vec = vec - matmul(cell,nint(matmul(icell,vec))) 
+       call random_number(theta_local)
+       call random_number(u_local)
+       call random_number(vec_local)
+
+       theta_local = theta_local*2*pi
+
+       vec_local = vec_local - (/0.5d0,0.5d0,0.5d0/)
+       vec_local(3) = 0.0d0 ! 2D only
+
+       vec_local = vec_local*mul_vec
+       
+       vec_local = vec_local - matmul(cell,nint(matmul(icell,vec_local))) 
 
        ! ! 3D only
-       ! u = u - reshape((/0.5d0,0.5d0,0.5d0/),(/3,1/))
-       ! u = u / norm(u)
-       ! u(3,1) = abs(u(3,1))
+       ! u_local = u_local - (/0.5d0,0.5d0,0.5d0/)
+       ! u_local = u_local / norm(u_local)
+       ! u_local(3) = abs(u_local(3))
 
-       u =  reshape((/0.0d0,0.0d0,1.0d0/),(/3,1/)) ! 2D only
+       u_local =  (/0.0d0,0.0d0,1.0d0/) ! 2D only
 
-       print*, "New u", j
-
+       write(*,*) "New initial step", thread, j
+       
        do k=1, n_conv
 
-          tBpos = free_trans(Bpos,rot_mat(theta,u),vec)
+          tBpos = free_trans(Bpos,rot_mat(theta_local,u_local),vec_local)
 
           call mapping(Apos_mapped, Bpos_opt, Apos, Bpos, tBpos, &
                frac, atoms, n_atoms)
 
-          call analytical_gd_rot(theta, u, vec, Apos_mapped, Bpos_opt, &
+          call analytical_gd_rot(theta_local, u_local, vec_local, Apos_mapped, Bpos_opt, &
                n_ana, rate1, rate2)
 
        enddo
 
-       dist_cur = sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt,rot_mat(theta,u),vec))**2,1)))
+       dist_cur = sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt,rot_mat(theta_local,u_local),vec_local))**2,1)))
 
-       if (dist_cur < dist_min) then
-          dist_min = dist_cur
-          theta_min = theta
-          u_min = u
-          vec_min = vec
+       if (dist_cur < dist_min(thread)) then
+          dist_min(thread) = dist_cur
+          theta_min(thread) = theta_local
+          u_min(:,thread) = u_local
+          vec_min(:,thread) = vec_local
        endif
 
     enddo
+    !$omp end do
 
-    u = u_min
+    !$omp single
+    pos = minloc(dist_min, 1)
+    u = u_min(:,pos)
+    theta = theta_min(pos)
+    vec = vec_min(:,pos)
 
-    theta = theta_min
-
-    vec = vec_min
+    deallocate(dist_min, &
+         theta_min, &
+         u_min,&
+         vec_min)
+    !$omp end single 
+    
+    !$omp end parallel
 
   end subroutine gradient_descent_explore
 
@@ -704,8 +726,6 @@ contains
 
           call mapping(Apos_mapped, Bpos_opt, Apos, Bpos, tBpos, &
                frac, atoms, n_atoms)
-
-          print*, "distance1:", sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt, tmat, vec))**2,1)))
           
           theta = 0
           tBpos_opt = free_trans(Bpos_opt,tmat,(/0.0d0,0.0d0,0.0d0/))
@@ -713,26 +733,25 @@ contains
           call analytical_gd_rot(theta, u, vec, Apos_mapped, tBpos_opt, &
                n_ana*100, rate1, rate2)
           
-          print*,i,j,"Adjustments:", theta
-          print*, "vec", vec
-
-          print*, "determinants", det(tmat,3), det(rot_mat(theta,u),3), det(matmul(rot_mat(theta,u),tmat),3)
-
           tmat = matmul(rot_mat(theta,u),tmat)
 
-          print*, "distance2:", sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt, tmat, vec))**2,1)))
           
           theta = 0
           
           call analytical_gd_rot(theta, u, vec, Apos_mapped, Bpos_opt, &
                n_ana*1000, rate1, rate2)
 
-          print*, "distance3:", sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt, rot_mat(theta,u), vec))**2,1)))
-
        enddo
 
-       call analytical_gd_free(tmat, vec, Apos_mapped, Bpos_opt, n_ana*100, rate1, rate2)
+       write(*,*) "--------------> Adjustment step:", i
 
+       write(*,*) "Stretched distance:", sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt, tmat, vec))**2,1)))
+
+       write(*,*) "Unstretched distance:", sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt, rot_mat(theta,u), vec))**2,1)))
+
+       call analytical_gd_free(tmat, vec, Apos_mapped, Bpos_opt, n_ana*100, rate1, rate2)
+       
+       
     enddo
     
     ! vec = vec + sum(free_trans(Bpos_opt,rot_mat(theta,u),vec) - Apos_mapped,2) / n_out

@@ -11,8 +11,8 @@ random = False
 # Setting the unit cells of A and B
 Acell = np.array([[1,0],[0,1]]).T
 #Bcell = np.array([[-1/2*1.1,1/2*1.1],[1,1]]).T
-Bcell = np.array([[-1/2,1/2],[1,1]]).T 
-#Bcell = np.array([[0.7,0],[0,0.5]]).T 
+#Bcell = np.array([[-1/2,1/2],[1,1]]).T 
+Bcell = np.array([[0.7,0],[0.3,0.5]]).T 
 
 
 # Plotting the cell vectors of A and B

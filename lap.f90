@@ -9,24 +9,18 @@
 ! -----------------------------------------------
 ! F. Brieuc - March 2017
 
+! Modified by Felix Therrien to keep only Khun-Munkres and to work
+! with double precision
+! January 2018
+
 module hungarian
 
   implicit none
 
-  ! norm for matrix representation C(j,i) : j = columns, i = rows
-  integer :: method ! 1: brute force (heap's algo) - 2: Munkre's algorithm
-  integer :: mode   ! 0: minimize sum, 1: maximize sum
-
-  ! following variables are use only for Munkres algo
-  integer, dimension(:,:), allocatable :: M    ! mask matrix
-  integer, dimension(:), allocatable :: rowCover, colCover !cover row and cols
-  integer :: pathRow0 = 0, pathCol0 = 0  ! starting point for path finding part
-
   public :: &
        munkres
   private :: &
-       step1, step2, step3, step4, step5, step6, &
-       method, mode, M, rowCover, colCover, pathRow0, pathCol0
+       step1, step2, step3, step4, step5, step6
 
 contains
 
@@ -42,10 +36,20 @@ contains
     
     double precision, intent(out) :: sumSol ! maximal sum
     integer, dimension(n), intent(out) :: jSol ! solution indices
-
+ 
     integer :: step, i, j, tmp
     logical :: done
 
+    integer, dimension(:,:), allocatable :: M    ! mask matrix
+    integer, dimension(:), allocatable :: rowCover, colCover !cover row and cols
+
+    integer :: pathRow0, pathCol0  ! starting point for path finding part
+
+    integer :: test
+
+    pathRow0 = 0
+    pathCol0 = 0
+    
     done = .false.
     step = 1
     tmp = 0
@@ -62,23 +66,20 @@ contains
        colCover(i) = 0
     enddo
 
-    method = 2 ! 1: brute force (heap's algo) - 2: Munkre's algorithm
-    mode = 0   ! 0: minimize sum, 1: maximize sum
-
     do while(.not. done)
        select case(step)
        case(1)
           call step1(step,n,CC)
        case(2)           
-          call step2(step,n,CC)
+          call step2(step,n,CC,M,rowCover, colCover)
        case(3)           
-          call step3(step,n,CC)
+          call step3(step,n,CC,M, colCover)
        case(4)           
-          call step4(step,n,CC)
+          call step4(step,n,CC,M,rowCover, colCover, pathRow0, pathCol0)
        case(5)           
-          call step5(step,n,CC)
+          call step5(step,n,CC,M,rowCover, colCover, pathRow0, pathCol0)
        case(6)           
-          call step6(step,n,CC)
+          call step6(step,n,CC,rowCover, colCover)
        case default ! done
           do i = 1, n
              do j = 1, n
@@ -126,7 +127,7 @@ contains
 
   end subroutine step1
 
-  subroutine step2(step, n, CC)
+  subroutine step2(step, n, CC, M, rowCover, colCover)
     ! Search for zeros.
     ! Find a zero (Z) in the matrix. If no zeros has been previously starred in
     ! its row and column then star Z. Go to step 3.
@@ -134,7 +135,10 @@ contains
     integer, intent(in) :: n      ! dimension of C - assumed to be a (nxn) square matrix
     double precision, intent(inout),  dimension(n,n) :: CC   ! cost matrix (min sum)
 
-
+    integer, dimension(:), intent(inout) :: rowCover, colCover !cover row and cols
+    
+    integer, dimension(:,:), intent(inout) :: M    ! mask matrix
+    
     integer, intent(out) :: step
 
     integer :: i, j
@@ -158,7 +162,7 @@ contains
 
   end subroutine step2
 
-  subroutine step3(step, n, CC)
+  subroutine step3(step, n, CC, M, colCover)
     ! cover each column containing a starred zero. If n column are covered
     ! the starred zero describe an optimal assignment and we are done otherwise
     ! go to step 4.
@@ -166,6 +170,9 @@ contains
     integer, intent(in) :: n      ! dimension of C - assumed to be a (nxn) square matrix
     double precision, intent(inout),  dimension(n,n) :: CC   ! cost matrix (min sum)
 
+    integer, dimension(:), intent(inout) :: colCover !cover row and cols
+    
+    integer, dimension(:,:), intent(inout) :: M    ! mask matrix
 
     integer, intent(out) :: step
 
@@ -190,7 +197,7 @@ contains
 
   end subroutine step3
 
-  subroutine step4(step, n, CC)
+  subroutine step4(step, n, CC, M, rowCover, colCover,pathRow0, pathCol0)
     ! Find a uncovered zero and prime it. If there is no starred zero in the row
     ! go to step 5. Otherwise, cover the row and uncover the column containing
     ! the starred zero. Continue until no uncovered zeros is left. Go to step 6.
@@ -198,7 +205,12 @@ contains
     integer, intent(in) :: n      ! dimension of C - assumed to be a (nxn) square matrix
     double precision, intent(inout),  dimension(n,n) :: CC   ! cost matrix (min sum)
 
+    integer, dimension(:), intent(inout) :: rowCover, colCover !cover row and cols
+    
+    integer, dimension(:,:), intent(inout) :: M    ! mask matrix
 
+    integer, intent(inout) :: pathRow0, pathCol0  ! starting point for path finding part
+    
     integer, intent(out) :: step
 
     logical :: done, starInRow
@@ -245,7 +257,7 @@ contains
 
   end subroutine step4
 
-  subroutine step5(step, n, CC)
+  subroutine step5(step, n, CC, M, rowCover, colCover, pathRow0, pathCol0)
     ! Augmenting path algorithm: construct a serie of alternating primed and
     ! starred zeros as follows. Let Z0 be the uncoverd primed zero found in
     ! step 4. Let Z1 be the starred zero in the column of Z0 (if any).
@@ -260,26 +272,39 @@ contains
 
     integer, intent(out) :: step
 
+    integer, dimension(:,:), intent(inout) :: M    ! mask matrix
+
+    integer, dimension(:), intent(inout) :: rowCover, colCover !cover row and cols
+
+    integer, intent(inout) :: pathRow0, pathCol0  ! starting point for path finding part
+    
     logical :: done
     integer :: i, j
     integer :: row, col
     integer :: pathCount
     integer, dimension(2*n+1,2) :: path
 
+    path = 0
+    
     pathCount = 1
 
     path(pathCount,1) = pathRow0
     path(pathCount,2) = pathCol0
-
+    
     done = .false.
 
     do while (.not. done)
+
+       if (path(1,1) /= pathRow0 .or. path(1,2) /= pathCol0) call abort
+       
        ! search for a starred zero in column
        row = 0
        col = path(pathCount,2)
+       
        do i = 1, n
           if (M(col,i) == 1) row = i
        enddo
+       
        if (row /= 0) then ! update path
           pathCount = pathCount + 1
           path(pathCount,1) = row
@@ -287,6 +312,7 @@ contains
        else
           done = .true.
        endif
+       
        if (.not. done) then
           ! search for a prime zero in row
           do j = 1, n
@@ -297,6 +323,7 @@ contains
           path(pathCount,1) = path(pathCount-1,1)
           path(pathCount,2) = col
        endif
+       
     enddo
 
     ! augment path
@@ -321,13 +348,15 @@ contains
 
   end subroutine step5
 
-  subroutine step6(step, n, CC)
+  subroutine step6(step, n, CC, rowCover, colCover)
     ! Search for the smallest uncovered value and add it to covered rows
     ! and substract it from uncovered columns. Return to step 4.
 
     integer, intent(in) :: n      ! dimension of C - assumed to be a (nxn) square matrix
     double precision, intent(inout),  dimension(n,n) :: CC   ! cost matrix (min sum)
 
+    integer, dimension(:), intent(inout) :: rowCover, colCover !cover row and cols
+    
     integer, intent(out) :: step
 
     integer :: i, j
