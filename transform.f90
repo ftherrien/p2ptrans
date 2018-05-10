@@ -595,6 +595,7 @@ contains
     enddo
     !$omp end do
 
+    !$omp barrier
     !$omp single
     pos = minloc(dist_min, 1)
     u = u_min(:,pos)
@@ -669,6 +670,7 @@ contains
 
     double precision, dimension(3) :: &
          vec, & ! Translation vecto
+         vec_rot, & ! Translation vector for the rotated unstretched matrix
          u      ! Rotation axis
 
     double precision :: &
@@ -737,8 +739,9 @@ contains
 
           
           theta = 0
+          vec_rot = vec
           
-          call analytical_gd_rot(theta, u, vec, Apos_mapped, Bpos_opt, &
+          call analytical_gd_rot(theta, u, vec_rot, Apos_mapped, Bpos_opt, &
                n_ana*1000, rate1, rate2)
 
        enddo
@@ -747,18 +750,19 @@ contains
 
        write(*,*) "Stretched distance:", sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt, tmat, vec))**2,1)))
 
-       write(*,*) "Unstretched distance:", sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt, rot_mat(theta,u), vec))**2,1)))
+       write(*,*) "Unstretched distance:", sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt, rot_mat(theta,u), vec_rot))**2,1)))
 
        call analytical_gd_free(tmat, vec, Apos_mapped, Bpos_opt, n_ana*100, rate1, rate2)
        
        
     enddo
     
+    ! ! Recenter
     ! vec = vec + sum(free_trans(Bpos_opt,rot_mat(theta,u),vec) - Apos_mapped,2) / n_out
     
     Bpos_opt_stretch = free_trans(Bpos_opt,tmat,vec)
 
-    Bpos_opt = free_trans(Bpos_opt,rot_mat(theta,u),vec)
+    Bpos_opt = free_trans(Bpos_opt,rot_mat(theta,u),vec_rot)
     
     Bpos_out(:,1:n_out) = Bpos_opt
     Bpos_out_stretch(:,1:n_out) = Bpos_opt_stretch

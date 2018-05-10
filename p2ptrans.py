@@ -22,6 +22,7 @@ ax.quiver(np.ones(3), np.ones(3), Bcell[0,:], Bcell[1,:])
 ax.quiver(-np.ones(3), -np.ones(3), Acell[0,:], Acell[1,:])
 ax.set_xlim([-5, 5])
 ax.set_ylim([-5, 5])
+fig.savefig('CellVectors.png')
 
 ASC = t.circle(Acell,250)
 BSC = t.circle(Bcell,250)
@@ -35,6 +36,7 @@ minXAxis = np.min([ASC[0,:].min(),ASC[1,:].min()])
 ax.set_xlim([minXAxis-1, maxXAxis+1])
 ax.set_ylim([minXAxis-1, maxXAxis+1])
 ax.set_aspect('equal')
+fig.savefig('Agrid.png')
 
 # Plot gamma points of each B cell
 fig = plt.figure()
@@ -45,6 +47,7 @@ minXAxis = np.min([BSC[0,:].min(),BSC[1,:].min()])
 ax.set_xlim([minXAxis-1, maxXAxis+1])
 ax.set_ylim([minXAxis-1, maxXAxis+1])
 ax.set_aspect('equal')
+fig.savefig('Bgrid.png')
 
 
 if random:
@@ -130,6 +133,7 @@ maxXAxis = np.max([Apos.max(), Bpos.max()]) + 1
 ax.set_xlim([-maxXAxis, maxXAxis])
 ax.set_ylim([-maxXAxis, maxXAxis])
 ax.set_aspect('equal')
+fig.savefig('DispLattice.png')
 
 # Plotting the Apos and Bposst overlayed
 fig = plt.figure()
@@ -153,7 +157,7 @@ maxXAxis = np.max([Apos.max(), Bposst.max()]) + 1
 ax.set_xlim([-maxXAxis, maxXAxis])
 ax.set_ylim([-maxXAxis, maxXAxis])
 ax.set_aspect('equal')
-
+fig.savefig('DispLattice_stretched.png')
 
 print(dmin)
 print(sum(la.norm(disps,axis=0)))
