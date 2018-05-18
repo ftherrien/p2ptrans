@@ -7,7 +7,8 @@ module transform
   public :: &
        trans, &
        center, &
-       fastoptimization
+       fastoptimization, &
+       canonicalize
 
   private :: &
        eye, &
@@ -86,6 +87,34 @@ contains
 
   end function rot_mat
 
+  subroutine canonicalize(can_mat,tmat)
+
+    double precision, dimension(3) :: &
+         u_per     ! Vector perpendicular to the 2 first vectors
+
+    double precision, intent(out), dimension(3,3) :: &
+         can_mat ! Rotated (canonical) matrix
+
+    double precision, intent(in), dimension(3,3) :: &
+         tmat    ! Transformed matrix to rotate
+
+    can_mat(:,1) = norm(tmat(:,1))*(/1,0,0/)
+    
+    u_per = tmat(:,2) -  tmat(:,1)*dot_product(tmat(:,1), tmat(:,2))/norm(tmat(:,1))**2
+    
+    can_mat(:,2) = (/ dot_product(tmat(:,1), tmat(:,2))/norm(tmat(:,1)), &
+         norm(u_per), 0.0d0/)
+    
+    can_mat(:,3) = (/ dot_product(tmat(:,1), tmat(:,3))/norm(tmat(:,1)), &
+         dot_product(u_per, tmat(:,3))/norm(u_per), &
+         det(tmat,3)/(norm(tmat(:,1))*norm(u_per))/)
+
+    ! This is to avoid seeing an inversion in 2D as a rotation in a           
+    ! prohibited axis. This is not necessary in 3D (but not wrong)            
+    can_mat(2,:) = can_mat(3,3)/abs(can_mat(3,3))*can_mat(2,:)
+    can_mat(3,3) = abs(can_mat(3,3))
+    
+  end subroutine canonicalize  
 
   subroutine center(pos,n)
 
