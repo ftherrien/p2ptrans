@@ -18,6 +18,7 @@ module transform
        free_trans, &
        cost_map, &
        analytical_gd_rot, &
+       analytical_gd_free, &
        gradient_descent_explore
 
 contains
@@ -146,12 +147,12 @@ contains
 
   end function free_trans
 
-  function cost_map(Apos,Bpos, n_in) result(cost)
+  function cost_map(Apos,Bpos, n_A, n_B) result(cost)
 
     double precision, intent(in), dimension(:,:) :: &
          Apos, Bpos  ! Rotation axis
-    integer, optional, intent(in) :: &
-         n_in
+    integer, intent(in) :: &
+         n_A, n_B
     double precision, dimension(size(Apos,2),size(Apos,2)) :: &
          cost
     integer :: &
@@ -159,23 +160,19 @@ contains
 
     cost = 0
 
-    n = size(Apos,2)
-
-    if (present(n_in)) n = n_in
-
     do i=1,size(Apos,2)
        do j=1,size(Bpos,2)
-          if (j <= n) then
+          if (j <= n_B) then
              cost(i,j) = norm(Apos(:,i)-Bpos(:,j))
-          elseif (i <= int(n/2)) then !TMP 
-             cost(i,j) = 1000
+          elseif (i <= n_A) then  
+             cost(i,j) = 1000 ! TODO: Should that be a param?
           endif
        enddo
     enddo
 
   end function cost_map
 
-  subroutine mapping(Apos_mapped, Bpos_opt, Apos, Bpos, tBpos, frac, atoms, n_atoms)
+  subroutine mapping(Apos_mapped, Bpos_opt, Apos, Bpos, tBpos, fracA, fracB, atoms, n_atoms)
     
     integer, intent(in) :: &
          n_atoms ! Number of types of atoms
@@ -184,9 +181,9 @@ contains
     integer, intent(in), dimension(n_atoms) :: &
          atoms
     double precision, intent(in) :: &
-         frac
+         fracA, fracB
     double precision, intent(out), &
-         dimension(3,int(frac*size(Apos,2)/sum(atoms))*sum(atoms)) :: &
+         dimension(3,int(fracB*size(Apos,2)/sum(atoms))*sum(atoms)) :: &
          Apos_mapped, Bpos_opt  ! position matrix
     double precision, allocatable, dimension(:,:) :: &
          dmat
@@ -198,7 +195,7 @@ contains
          An_cell, & ! Number of cells
          i,l, &
          id, idx, &
-         n, n_frac
+         n, n_A, n_B
 
     An_cell = size(Apos,2)/sum(atoms)
 
@@ -211,18 +208,19 @@ contains
        id = id + n
 
        n = An_cell*atoms(i+1)
-       n_frac = int(An_cell*frac)*atoms(i+1)
+       n_B = int(An_cell*fracB)*atoms(i+1)
+       n_A = int(An_cell*fracA)*atoms(i+1)
 
        allocate(dmat(n,n), map(n))
 
        dmat = cost_map(Apos( : , id + 1 : id + n ), &
-            tBpos( : , id + 1 : id + n ),n_frac)
+            tBpos( : , id + 1 : id + n ),n_A, n_B)
 
        call munkres(dist_map, map, dmat, n)
        
        map = map + id
 
-       do l=1, int(n*frac)
+       do l=1, int(n*fracB)
           idx = idx + 1 
           Apos_mapped(:,idx) = Apos(:,map(l))
           Bpos_opt(:,idx) = Bpos(:,id+l)
@@ -395,7 +393,7 @@ contains
 
   end subroutine analytical_gd_rot
 
-  subroutine analytical_gd_free(tmat, vec, Apos, Bpos, n_iter, rate1, rate2)
+  subroutine analytical_gd_free(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2)
 
     integer, intent(in) :: &
          n_iter ! Number of atoms
@@ -403,6 +401,9 @@ contains
     double precision, intent(in) :: &
          rate1, & ! Rate for angles
          rate2    ! Rate for disp
+    
+    logical, intent(in) :: &
+         sq ! Square distance mode
 
     double precision, intent(in), dimension(:,:) :: &
          Apos, &
@@ -444,7 +445,9 @@ contains
 
        
        E = Apos - free_trans(Bpos,tmat,vec)
-       E = E / spread(sqrt(sum(E**2,1)),1,3)
+       if (.not. sq) then
+          E = E / spread(sqrt(sum(E**2,1)),1,3)
+       endif
 
        tmat = tmat + rate1*dist*matmul(E,transpose(Bpos))
        vec = vec + rate2*dist*matmul(E,ones)
@@ -454,7 +457,7 @@ contains
   end subroutine analytical_gd_free
   
   subroutine gradient_descent_explore(theta,u, vec, Apos, Bpos, cell, icell, &
-       frac, atoms, n_atoms, n_iter, n_ana, n_conv, rate1, rate2)
+       fracA, fracB, atoms, n_atoms, n_iter, n_ana, n_conv, rate1, rate2)
     ! New Gradient Descent Random
 
     use omp_lib
@@ -467,7 +470,7 @@ contains
     double precision, intent(in) :: &
          rate1, & ! Rate for angles
          rate2, & ! Rate for disp
-         frac ! Fraction of A and B to use in optimisation
+         fracA, fracB ! Fraction of A and B to use in optimisation
 
     double precision :: &
          rand_rate1, & ! Rate for angles
@@ -487,7 +490,7 @@ contains
          postmp, & ! position matrix
          tBpos
 
-    double precision, dimension(3,int(frac*size(Apos,2)/sum(atoms))*sum(atoms)) :: &
+    double precision, dimension(3,int(fracB*size(Apos,2)/sum(atoms))*sum(atoms)) :: &
          Apos_mapped, & ! position matrix
          Bpos_opt
     
@@ -557,7 +560,7 @@ contains
     
     !$omp parallel default(private) shared(dist_min, &
     !$omp theta_min, u_min, vec_min, u, theta, vec) &
-    !$omp firstprivate(n_iter, mul_vec, cell, frac, &
+    !$omp firstprivate(n_iter, mul_vec, cell, fracA, fracB, &
     !$omp icell, n_conv, n_ana, Apos, Bpos, rate1, rate2, atoms, n_atoms)
 
     call init_random_seed()
@@ -605,7 +608,7 @@ contains
           tBpos = free_trans(Bpos,rot_mat(theta_local,u_local),vec_local)
 
           call mapping(Apos_mapped, Bpos_opt, Apos, Bpos, tBpos, &
-               frac, atoms, n_atoms)
+               fracA, fracB, atoms, n_atoms)
 
           call analytical_gd_rot(theta_local, u_local, vec_local, Apos_mapped, Bpos_opt, &
                n_ana, rate1, rate2)
@@ -644,7 +647,7 @@ contains
   subroutine fastoptimization(Apos_out, Bpos_out, Bpos_out_stretch, &
        n_out, tmat, dmin, &
        Apos, na, Bpos, nb, &
-       frac, Acell, iAcell, atoms, n_atoms, &
+       fracA, fracB, Acell, iAcell, atoms, n_atoms, &
        n_iter, n_ana, n_conv, n_adjust, &
        rate1, rate2)
 
@@ -686,7 +689,7 @@ contains
          iAcell
 
     double precision, intent(in) :: &
-         frac ! Fraction of A and B to use in optimisation
+         fracA, fracB ! Fraction of A and B to use in optimisation
 
     double precision, allocatable, dimension(:,:) :: &
          inBpos ! Position of the atoms
@@ -718,7 +721,7 @@ contains
          tmat ! Transformation matrix
 
     double precision, &
-         dimension(3,int(frac*size(Apos,2)/sum(atoms))*sum(atoms)) :: &
+         dimension(3,int(fracB*size(Apos,2)/sum(atoms))*sum(atoms)) :: &
          Apos_mapped, Bpos_opt, &
          tBpos_opt, &
          Bpos_opt_stretch ! position matrix
@@ -731,7 +734,7 @@ contains
     double precision, parameter :: &
          pi = 3.141592653589793d0
 
-    n_out = int(frac*size(Apos,2)/sum(atoms))*sum(atoms)
+    n_out = int(fracB*size(Apos,2)/sum(atoms))*sum(atoms)
     Apos_out = 0
     Bpos_out = 0
 
@@ -740,12 +743,7 @@ contains
     call center(Apos,na)
 
     call gradient_descent_explore(theta, u, vec, Apos, Bpos, Acell, iAcell, &
-         frac, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2)
-    
-    ! u =  (/0.0d0,0.0d0,1.0d0/) ! TMP
-    ! theta =  6.2831852718155048d0  ! TMP
-    ! vec =  (/0.21045421936607500d0,-9.7911915001716089d-4,0.0d0/) ! TMP
-    ! associated distance: 71.791803060241662
+         fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2)
     
     tmat = rot_mat(theta,u)
     
@@ -756,7 +754,7 @@ contains
           tBpos = free_trans(Bpos,tmat,vec)
 
           call mapping(Apos_mapped, Bpos_opt, Apos, Bpos, tBpos, &
-               frac, atoms, n_atoms)
+               fracA, fracB, atoms, n_atoms)
           
           theta = 0
           tBpos_opt = free_trans(Bpos_opt,tmat,(/0.0d0,0.0d0,0.0d0/))
@@ -781,10 +779,12 @@ contains
 
        write(*,*) "Unstretched distance:", sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt, rot_mat(theta,u), vec_rot))**2,1)))
 
-       call analytical_gd_free(tmat, vec, Apos_mapped, Bpos_opt, n_ana*100, rate1, rate2)
+       call analytical_gd_free(tmat, vec, Apos_mapped, Bpos_opt,.false., n_ana*100, rate1, rate2)
        
        
     enddo
+
+    call analytical_gd_free(tmat, vec, Apos_mapped, Bpos_opt,.true., n_ana*100, rate1, rate2)
     
     ! ! Recenter
     ! vec = vec + sum(free_trans(Bpos_opt,rot_mat(theta,u),vec) - Apos_mapped,2) / n_out

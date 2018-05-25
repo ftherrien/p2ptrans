@@ -9,6 +9,7 @@ from p2ptrans import tiling as t
 import pickle
 import time
 from pylada.crystal import Structure, primitive, gruber
+from copy import deepcopy
 
 tol = 1e-5
 
@@ -81,17 +82,53 @@ def classify(disps, tol = 1.e-1):
         
     return class_list, vec_classes
 
+def lcm(x, y):
+   """This function takes two
+   integers and returns the L.C.M."""
+
+   lcm = (x*y)//gcd(x,y)
+   return lcm
+
+def gcd(x, y):
+   """This function implements the Euclidian algorithm
+   to find G.C.D. of two numbers"""
+
+   while(y):
+       x, y = y, x % y
+
+   return x
+
 # \/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
 # Begin Program
 
 random = False
 
-# Setting the unit cells of A and B
-Acell = np.array([[1,0],[0,1]]).T
-#Bcell = np.array([[-1/2*1.1,1/2*1.1],[1,1]]).T
-#Bcell = np.array([[-1/2,1/2],[1,1]]).T 
-Bcell = np.array([[0.7,0],[0.3,0.5]]).T 
+# Eventually this can be from pcread
+A = Structure(np.identity(3))
+A.add_atom(0,0,0,'Si')
+A.add_atom(0.1,0.1,0,'Be')
 
+B = Structure(np.array([[1.1,0,0],[1.1,1.5,0],[0,0,1]]).T)
+B.add_atom(0,0,0,'Si')
+B.add_atom(0.6,0.3,0,'Be')
+
+mul = lcm(len(A),len(B))
+mulA = mul//len(A)
+mulB = mul//len(B)
+
+if mulA*la.det(A.cell) < mulB*la.det(B.cell):
+    tmp = deepcopy(B)
+    tmpmul = mulB
+    B = deepcopy(A)
+    mulB = mulA
+    A = tmp
+    mulA = tmpmul
+
+ncell = 250
+
+# Setting the unit cells of A and B
+Acell = A.cell[:2,:2]
+Bcell = B.cell[:2,:2] 
 
 # Plotting the cell vectors of A and B
 fig = plt.figure()
@@ -102,8 +139,9 @@ ax.set_xlim([-5, 5])
 ax.set_ylim([-5, 5])
 fig.savefig('CellVectors.png')
 
-ASC = t.circle(Acell,250)
-BSC = t.circle(Bcell,250)
+
+ASC = t.circle(Acell, mulA * ncell)
+BSC = t.circle(Bcell, mulB * ncell)
 
 # Plot gamma points of each A cell
 fig = plt.figure()
@@ -151,31 +189,48 @@ if random:
     
 else:
     # Adds atoms to A and B (for cell with different types of atoms)
-    atom_Apos = np.array([[0,0]])
-    atom_Bpos = np.array([[0,0]])
-    atoms = np.array([1]) # One atom
+    Apos = []
+    atom_types = np.array([], np.str)
+    atomsA = np.array([], np.int)
+    for a in A:
+        if any(atom_types == a.type):
+            idx = np.where(atom_types == a.type)[0][0]
+            Apos[idx] = np.concatenate((Apos[idx], ASC + Acell.dot(np.reshape(a.pos[:2],(2,1))).dot(np.ones((1,np.shape(ASC)[1])))), axis = 1) 
+            atomsA[idx] += 1
+        else:
+            Apos.append(ASC + Acell.dot(np.reshape(a.pos[:2],(2,1))).dot(np.ones((1,np.shape(ASC)[1]))))
+            atom_types = np.append(atom_types, a.type)
+            atomsA = np.append(atomsA,1)
 
-    Apos = np.array([[],[]])
-    Bpos = np.array([[],[]])
-    for i in range(np.shape(atom_Apos)[0]):
-        Apos = np.concatenate((Apos, ASC + Acell.dot(atom_Apos[i:i+1,:].T).dot(np.ones((1,np.shape(ASC)[1])))), axis=1)
-    for i in range(np.shape(atom_Bpos)[0]):
-        Bpos = np.concatenate((Bpos, BSC + Bcell.dot(atom_Bpos[i:i+1,:].T).dot(np.ones((1,np.shape(BSC)[1])))), axis=1)
+    Apos = np.concatenate(Apos, axis=1)
 
+    Bpos = [None]*len(atom_types)
+    atomsB = np.zeros(len(atom_types), np.int)
+    for a in B:
+        idx = np.where(atom_types == a.type)[0][0]
+        if atomsB[idx] == 0:
+            Bpos[idx] = BSC + Bcell.dot(np.reshape(a.pos[:2],(2,1))).dot(np.ones((1,np.shape(BSC)[1])))
+        else:
+            Bpos[idx] = np.concatenate((Bpos[idx], BSC + Bcell.dot(np.reshape(a.pos[:2],(2,1))).dot(np.ones((1,np.shape(BSC)[1])))), axis = 1) 
+        atomsB[idx] += 1
+
+    Bpos = np.concatenate(Bpos, axis=1)
         
     Apos = np.concatenate([Apos,np.zeros((1,np.shape(Apos)[1]))]) # TMP Only in 2D Adds the 3rd dim. 
     Bpos = np.concatenate([Bpos,np.zeros((1,np.shape(Bpos)[1]))])
 
+    assert all(mulA*atomsA == mulB*atomsB)
+    atoms = mulA*atomsA
 
-frac = 0.5
-nb = int(np.shape(Bpos)[1]*frac)
+fracB = 0.5
+fracA = 0.25 # fracA < fracB
 Acell_tmp = np.identity(3)
 Acell_tmp[:2,:2] = Acell
 
 Apos = np.asfortranarray(Apos)
 Bpos = np.asfortranarray(Bpos) 
 t_time = time.time()
-# Apos_map, Bpos, Bposst, n_map, tmat, dmin = tr.fastoptimization(Apos, Bpos, frac, Acell_tmp, la.inv(Acell_tmp), atoms, 250, 50, 3, 5, 5e-6, 5e-6) # For dist 6
+Apos_map, Bpos, Bposst, n_map, tmat, dmin = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell_tmp, la.inv(Acell_tmp), atoms, 1000, 100, 4, 6, 5e-7, 5e-7) #TMP
 t_time = time.time() - t_time
 Bpos = np.asanyarray(Bpos)
 Apos = np.asanyarray(Apos)
@@ -183,26 +238,33 @@ Apos = np.asanyarray(Apos)
 print(dmin)
 print("Mapping time:", t_time)
 
-# pickle.dump((Apos_map, Bpos, Bposst, n_map, tmat, dmin), open("fastoptimization.dat","wb"))
+pickle.dump((Apos_map, Bpos, Bposst, n_map, tmat, dmin), open("fastoptimization.dat","wb"))
 
-# TMP for testing only -->
-tr.center(Apos)
-tr.center(Bpos)
-Apos_map, Bpos, Bposst, n_map, tmat, dmin = pickle.load(open("fastoptimization.dat","rb"))
-# <--  
+# # TMP for testing only -->
+# tr.center(Apos)
+# tr.center(Bpos)
+# Apos_map, Bpos, Bposst, n_map, tmat, dmin = pickle.load(open("fastoptimization.dat","rb"))
+# # <--  
 
 Apos = Apos[:2,:]
 Bpos = Bpos[:,:n_map]
 Bposst = Bposst[:,:n_map]
 Apos_map = Apos_map[:,:n_map]
 
+natB = np.shape(Bposst)[1] // np.sum(atoms)
+nat = np.shape(Apos)[1] // np.sum(atoms)
+natA = int(fracA*np.shape(Apos)[1]/np.sum(atoms))
+
+
 # Plotting the Apos and Bpos overlayed
 fig = plt.figure()
 ax = fig.add_subplot(111)
 #ax.scatter(Apos.T[:,0],Apos.T[:,1])
-ax.scatter(Apos[:,:int(frac*125)].T[:,0],Apos[:,:int(frac*125)].T[:,1], c="C0")
-ax.scatter(Apos[:,int(frac*125):].T[:,0],Apos[:,int(frac*125):].T[:,1], alpha=0.2, c="C0")
-ax.scatter(Bpos.T[:,0],Bpos.T[:,1], alpha=0.5, c="C1")
+for i,num in enumerate(atoms):
+    for j in range(num):
+        ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,1], c="C%d"%(2*i))
+        ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,1], c="C%d"%(2*i), alpha = 0.5)
+    ax.scatter(Bpos.T[natB*num*i:natB*num*(i+1),0],Bpos.T[natB*num*i:natB*num*(i+1),1], alpha=0.5, c="C%d"%(2*i+1))
 maxXAxis = np.max([Apos.max(), Bpos.max()]) + 1
 ax.set_xlim([-maxXAxis, maxXAxis])
 ax.set_ylim([-maxXAxis, maxXAxis])
@@ -223,9 +285,12 @@ fig.savefig('DispLattice.png')
 # Plotting the Apos and Bposst overlayed
 fig = plt.figure()
 ax = fig.add_subplot(111)
-ax.scatter(Apos[:,:int(frac*125)].T[:,0],Apos[:,:int(frac*125)].T[:,1], c='C0')
-ax.scatter(Apos[:,int(frac*125):].T[:,0],Apos[:,int(frac*125):].T[:,1], alpha=0.2, c="C0")
-ax.scatter(Bposst.T[:,0],Bposst.T[:,1], alpha=0.5, c="C1")
+#ax.scatter(Apos.T[:,0],Apos.T[:,1])
+for i,num in enumerate(atoms):
+    for j in range(num):
+        ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,1], c="C%d"%(2*i))
+        ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,1], c="C%d"%(2*i), alpha=0.5)
+    ax.scatter(Bposst.T[natB*num*i:natB*num*(i+1),0],Bposst.T[natB*num*i:natB*num*(i+1),1], alpha=0.5, c="C%d"%(2*i+1))
 maxXAxis = np.max([Apos.max(), Bposst.max()]) + 1
 ax.set_xlim([-maxXAxis, maxXAxis])
 ax.set_ylim([-maxXAxis, maxXAxis])
