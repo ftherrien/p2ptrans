@@ -331,61 +331,60 @@ contains
        E = Apos - free_trans(Bpos,M,vec)
        E = E / spread(sqrt(sum(E**2,1)),1,3)
 
-       ! ! ux and uy is for 3D only
-       ! Px = transpose(reshape((/2*u(1,1), &
-       !      u(2,1) , &
-       !      (u(1,1)*(1-u(2,1)**2) - 2*u(1,1)**3)/sqrt(u(1,1)**2*(1-u(2,1)**2)-u(1,1)**4), &
-       !      u(2,1)  , &
-       !      u(2,1)**2, &
-       !      -u(1,1)*u(2,1)**2/sqrt(u(2,1)**2*(1-u(1,1)**2)-u(2,1)**4), &
-       !      (u(1,1)*(1-u(2,1)**2) - 2*u(1,1)**3)/sqrt(u(1,1)**2*(1-u(2,1)**2)-u(1,1)**4) , &
-       !      -u(1,1)*u(2,1)**2/sqrt(u(2,1)**2*(1-u(1,1)**2)-u(2,1)**4), &
-       !      -2*u(1,1)/), &
-       !      (/3,3/)))
-       ! Qx = transpose(reshape((/0.0d0, &
-       !      u(1,1)/sqrt(1-u(1,1)**2-u(2,1)**2), &
-       !      u(2,1), &
-       !      -u(1,1)/sqrt(1-u(1,1)**2-u(2,1)**2), &
-       !      0.0d0, &
-       !      -1.0d0, &
-       !      -u(2,1), &
-       !      1.0d0, &
-       !      0.0d0/), &
-       !      (/3,3/)))
+       Px = transpose(reshape((/2*u(1,1), &
+            u(2,1) , &
+            (u(1,1)*(1-u(2,1)**2) - 2*u(1,1)**3)/sqrt(u(1,1)**2*(1-u(2,1)**2)-u(1,1)**4), &
+            u(2,1)  , &
+            u(2,1)**2, &
+            -u(1,1)*u(2,1)**2/sqrt(u(2,1)**2*(1-u(1,1)**2)-u(2,1)**4), &
+            (u(1,1)*(1-u(2,1)**2) - 2*u(1,1)**3)/sqrt(u(1,1)**2*(1-u(2,1)**2)-u(1,1)**4) , &
+            -u(1,1)*u(2,1)**2/sqrt(u(2,1)**2*(1-u(1,1)**2)-u(2,1)**4), &
+            -2*u(1,1)/), &
+            (/3,3/)))
+       Qx = transpose(reshape((/0.0d0, &
+            u(1,1)/sqrt(1-u(1,1)**2-u(2,1)**2), &
+            u(2,1), &
+            -u(1,1)/sqrt(1-u(1,1)**2-u(2,1)**2), &
+            0.0d0, &
+            -1.0d0, &
+            -u(2,1), &
+            1.0d0, &
+            0.0d0/), &
+            (/3,3/)))
 
-       ! Mx = Px + (eye() - Px)*cos(theta) + Qx*sin(theta)
+       Mx = Px + (eye() - Px)*cos(theta) + Qx*sin(theta)
 
-       ! Py = transpose(reshape((/u(1,1)**2, &
-       !      u(1,1) , &
-       !      -u(2,1)*u(1,1)**2/sqrt(u(1,1)**2*(1-u(2,1)**2)-u(1,1)**4), &
-       !      u(1,1)  , &
-       !      2*u(2,1), &
-       !      (u(2,1)*(1-u(1,1)**2) - 2*u(2,1)**3)/sqrt(u(2,1)**2*(1-u(1,1)**2)-u(2,1)**4), &
-       !      -u(2,1)*u(1,1)**2/sqrt(u(1,1)**2*(1-u(2,1)**2)-u(1,1)**4) , &
-       !      (u(2,1)*(1-u(1,1)**2) - 2*u(2,1)**3)/sqrt(u(2,1)**2*(1-u(1,1)**2)-u(2,1)**4), &
-       !      -2*u(2,1)/), &
-       !      (/3,3/)))
-       ! Qy = transpose(reshape((/0.0d0, &
-       !      u(2,1)/sqrt(1-u(1,1)**2-u(2,1)**2), &
-       !      1.0d0, &
-       !      -u(2,1)/sqrt(1-u(1,1)**2-u(2,1)**2), &
-       !      0.0d0, &
-       !      u(1,1), &
-       !      -1.0d0, &
-       !      u(1,1), &
-       !      0.0d0/), &
-       !      (/3,3/)))
+       Py = transpose(reshape((/u(1,1)**2, &
+            u(1,1) , &
+            -u(2,1)*u(1,1)**2/sqrt(u(1,1)**2*(1-u(2,1)**2)-u(1,1)**4), &
+            u(1,1)  , &
+            2*u(2,1), &
+            (u(2,1)*(1-u(1,1)**2) - 2*u(2,1)**3)/sqrt(u(2,1)**2*(1-u(1,1)**2)-u(2,1)**4), &
+            -u(2,1)*u(1,1)**2/sqrt(u(1,1)**2*(1-u(2,1)**2)-u(1,1)**4) , &
+            (u(2,1)*(1-u(1,1)**2) - 2*u(2,1)**3)/sqrt(u(2,1)**2*(1-u(1,1)**2)-u(2,1)**4), &
+            -2*u(2,1)/), &
+            (/3,3/)))
+       Qy = transpose(reshape((/0.0d0, &
+            u(2,1)/sqrt(1-u(1,1)**2-u(2,1)**2), &
+            1.0d0, &
+            -u(2,1)/sqrt(1-u(1,1)**2-u(2,1)**2), &
+            0.0d0, &
+            u(1,1), &
+            -1.0d0, &
+            u(1,1), &
+            0.0d0/), &
+            (/3,3/)))
 
-       ! My = Py + (eye() - Py)*cos(theta) + Qy*sin(theta)
+       My = Py + (eye() - Py)*cos(theta) + Qy*sin(theta)
 
        Pt = matmul(u,transpose(u))
        Qt = transpose(reshape((/0.0d0,-u(3,1),u(2,1),u(3,1),0.0d0,-u(1,1),-u(2,1),u(1,1),0.0d0/),(/3,3/)))
 
        Mt = Pt - (eye() - Pt)*sin(theta) + Qt*cos(theta)
 
-       ! u(1,1) = u(1,1) + rate1*dist*sum(matmul(E,transpose(Bpos)) * Mx)
-       ! u(2,1) = u(2,1) + rate1*dist*sum(matmul(E,transpose(Bpos)) * My)
-       ! u(3,1) = sqrt(1-u(1,1)**2-u(2,1)**2)
+       u(1,1) = u(1,1) + rate1*dist*sum(matmul(E,transpose(Bpos)) * Mx)
+       u(2,1) = u(2,1) + rate1*dist*sum(matmul(E,transpose(Bpos)) * My)
+       u(3,1) = sqrt(1-u(1,1)**2-u(2,1)**2)
        theta = theta + rate1*dist*sum(matmul(E,transpose(Bpos)) * Mt)
        vec = vec + rate2*dist*matmul(E,ones)
 
@@ -556,7 +555,7 @@ contains
     diag = max(norm(cell(:,1) - cell(:,2) + cell(:,3)),diag)
     diag = max(norm(-cell(:,1) - cell(:,2) + cell(:,3)),diag)
 
-    mul_vec = diag*2/sqrt(2.0d0) !Only in 2D sqrt(3) in 3D
+    mul_vec = diag*2/sqrt(3.0d0)
     
     !$omp parallel default(private) shared(dist_min, &
     !$omp theta_min, u_min, vec_min, u, theta, vec) &
@@ -588,18 +587,14 @@ contains
        theta_local = theta_local*2*pi
 
        vec_local = vec_local - (/0.5d0,0.5d0,0.5d0/)
-       vec_local(3) = 0.0d0 ! 2D only
 
        vec_local = vec_local*mul_vec
        
        vec_local = vec_local - matmul(cell,nint(matmul(icell,vec_local))) 
 
-       ! ! 3D only
-       ! u_local = u_local - (/0.5d0,0.5d0,0.5d0/)
-       ! u_local = u_local / norm(u_local)
-       ! u_local(3) = abs(u_local(3))
-
-       u_local =  (/0.0d0,0.0d0,1.0d0/) ! 2D only
+       u_local = u_local - (/0.5d0,0.5d0,0.5d0/)
+       u_local = u_local / norm(u_local)
+       u_local(3) = abs(u_local(3))
 
        write(*,*) "New initial step", thread, j
        
