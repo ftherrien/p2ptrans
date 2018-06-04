@@ -15,6 +15,7 @@ module transform
        init_random_seed, &
        norm, &
        det, &
+       csqrt, &
        free_trans, &
        cost_map, &
        analytical_gd_rot, &
@@ -163,7 +164,9 @@ contains
     do i=1,size(Apos,2)
        do j=1,size(Bpos,2)
           if (j <= n_B) then
+             !print*, Apos(:,i), Bpos(:,j)
              cost(i,j) = norm(Apos(:,i)-Bpos(:,j))
+             !print*, cost(i,j)
           elseif (i <= n_A) then  
              cost(i,j) = 1000 ! TODO: Should that be a param?
           endif
@@ -215,6 +218,8 @@ contains
 
        dmat = cost_map(Apos( : , id + 1 : id + n ), &
             tBpos( : , id + 1 : id + n ),n_A, n_B)
+
+       write(*,"(10(F5.3,X))") dmat
 
        call munkres(dist_map, map, dmat, n)
        
@@ -272,6 +277,25 @@ contains
        enddo
     endif
   end function det
+
+  function csqrt(n)
+    double precision, intent(in) :: n
+    double precision :: csqrt
+    character*300 :: out
+
+    if (n >= 0) then
+       csqrt = sqrt(n)
+    elseif (n < -2*epsilon(n)) then
+       write(out,*) "Error: Attempting to take the sqrt of a negative number:", &
+            n, "<", -2*epsilon(n), "sqrt(abs(n)) =", sqrt(abs(n)) 
+       !stop out
+       print*, out
+       csqrt = 0.0d0
+    else
+       csqrt = 0.0d0
+    endif
+    
+  end function csqrt
   
   subroutine analytical_gd_rot(theta, u, vec, Apos, Bpos, n_iter, rate1, rate2)
 
@@ -323,6 +347,8 @@ contains
     do while (j < n_iter .and. abs(dist - dist_prev) > tol)
        j=j+1
 
+       print*, norm(u) - 1
+
        M = rot_mat(theta,u)
 
        dist_prev = dist
@@ -333,45 +359,45 @@ contains
 
        Px = transpose(reshape((/2*u(1,1), &
             u(2,1) , &
-            (u(1,1)*(1-u(2,1)**2) - 2*u(1,1)**3)/sqrt(u(1,1)**2*(1-u(2,1)**2)-u(1,1)**4), &
+            (1 - 2*u(1,1)**2 - u(2,1)**2) / u(3,1), &
             u(2,1)  , &
-            u(2,1)**2, &
-            -u(1,1)*u(2,1)**2/sqrt(u(2,1)**2*(1-u(1,1)**2)-u(2,1)**4), &
-            (u(1,1)*(1-u(2,1)**2) - 2*u(1,1)**3)/sqrt(u(1,1)**2*(1-u(2,1)**2)-u(1,1)**4) , &
-            -u(1,1)*u(2,1)**2/sqrt(u(2,1)**2*(1-u(1,1)**2)-u(2,1)**4), &
+            0.0d0, &
+            -u(1,1)*u(2,1) / u(3,1), &
+            (1 - 2*u(1,1)**2 - u(2,1)**2) / u(3,1), &
+            -u(1,1)*u(2,1) / u(3,1), &
             -2*u(1,1)/), &
             (/3,3/)))
        Qx = transpose(reshape((/0.0d0, &
-            u(1,1)/sqrt(1-u(1,1)**2-u(2,1)**2), &
-            u(2,1), &
-            -u(1,1)/sqrt(1-u(1,1)**2-u(2,1)**2), &
+            u(1,1) / u(3,1), &
+            0.0d0, &
+            -u(1,1) / u(3,1), &
             0.0d0, &
             -1.0d0, &
-            -u(2,1), &
+            0.0d0, &
             1.0d0, &
             0.0d0/), &
             (/3,3/)))
 
        Mx = Px + (eye() - Px)*cos(theta) + Qx*sin(theta)
 
-       Py = transpose(reshape((/u(1,1)**2, &
+       Py = transpose(reshape((/0.0d0, &
             u(1,1) , &
-            -u(2,1)*u(1,1)**2/sqrt(u(1,1)**2*(1-u(2,1)**2)-u(1,1)**4), &
+            -u(2,1)*u(1,1) / u(3,1), &
             u(1,1)  , &
             2*u(2,1), &
-            (u(2,1)*(1-u(1,1)**2) - 2*u(2,1)**3)/sqrt(u(2,1)**2*(1-u(1,1)**2)-u(2,1)**4), &
-            -u(2,1)*u(1,1)**2/sqrt(u(1,1)**2*(1-u(2,1)**2)-u(1,1)**4) , &
-            (u(2,1)*(1-u(1,1)**2) - 2*u(2,1)**3)/sqrt(u(2,1)**2*(1-u(1,1)**2)-u(2,1)**4), &
+            (1 - u(1,1)**2 - 2*u(2,1)**2) / u(3,1), &
+            -u(2,1)*u(1,1) / u(3,1) , &
+            (1 - u(1,1)**2 - 2*u(2,1)**2) / u(3,1), &
             -2*u(2,1)/), &
             (/3,3/)))
        Qy = transpose(reshape((/0.0d0, &
-            u(2,1)/sqrt(1-u(1,1)**2-u(2,1)**2), &
+            u(2,1) / u(3,1), &
             1.0d0, &
-            -u(2,1)/sqrt(1-u(1,1)**2-u(2,1)**2), &
+            -u(2,1) / u(3,1), &
             0.0d0, &
-            u(1,1), &
+            0.0d0, &
             -1.0d0, &
-            u(1,1), &
+            0.0d0, &
             0.0d0/), &
             (/3,3/)))
 
@@ -381,12 +407,46 @@ contains
        Qt = transpose(reshape((/0.0d0,-u(3,1),u(2,1),u(3,1),0.0d0,-u(1,1),-u(2,1),u(1,1),0.0d0/),(/3,3/)))
 
        Mt = Pt - (eye() - Pt)*sin(theta) + Qt*cos(theta)
-
+       
+       print*, "U1", u(1,1), rate1*dist*sum(matmul(E,transpose(Bpos)) * Mx)
        u(1,1) = u(1,1) + rate1*dist*sum(matmul(E,transpose(Bpos)) * Mx)
+       print*, "U2", u(2,1), rate1*dist*sum(matmul(E,transpose(Bpos)) * My)
+       print*, "U3", u(3,1)
        u(2,1) = u(2,1) + rate1*dist*sum(matmul(E,transpose(Bpos)) * My)
-       u(3,1) = sqrt(1-u(1,1)**2-u(2,1)**2)
+
+       ! TODO: Il y a un discontinuite dans les derivees quand u(3,1) = 0, je ne vois pas vraiment
+       ! de moyen evident de resoudre ce probleme la. C'est comme faire une descente de gradient
+       ! sur un sphere, a un certain point le gradient est infini et c'est indevitable en
+       ! en coordonnes cartesienne. Alors je vois 2 options:
+       ! 1. Aller en coord. spherique pour le vecteur u avec un norme fixe (donc 2 angles)
+       ! 2. Limiter le gradient a un certaine valeur c.-a-d. mettre u(3,1) a epsilon dans
+       ! le prochain if au lieu de 0
+       if ((1-u(1,1)**2-u(2,1)**2) < 0) then
+          u(1,1) = min(u(1,1), 1.0d0, sqrt(1.d0 - u(2,1)**2))
+          u(2,1) = min(u(2,1), 1.0d0, sqrt(1.d0 - u(1,1)**2))
+          u(3,1) = 0.0d0
+       else
+          u(3,1) = sqrt(1-u(1,1)**2-u(2,1)**2)
+       endif
+
+       if (any(u /= u)) then
+          print*, "oups! 1"
+          print*, u, theta, vec
+          print*, 1-u(1,1)**2-u(2,1)**2
+          stop
+       endif
        theta = theta + rate1*dist*sum(matmul(E,transpose(Bpos)) * Mt)
+       if (theta /= theta) then
+          print*, "oups! 2"
+          print*, u, theta, vec
+          stop
+       endif
        vec = vec + rate2*dist*matmul(E,ones)
+       if (any(vec /= vec)) then
+          print*, "oups! 3"
+          print*, u, theta, vec
+          stop
+       endif
 
     enddo
 
@@ -602,15 +662,19 @@ contains
 
           tBpos = free_trans(Bpos,rot_mat(theta_local,u_local),vec_local)
 
+          print*, "mapping"
           call mapping(Apos_mapped, Bpos_opt, Apos, Bpos, tBpos, &
                fracA, fracB, atoms, n_atoms)
 
+          print*, "gradient"
           call analytical_gd_rot(theta_local, u_local, vec_local, Apos_mapped, Bpos_opt, &
                n_ana, rate1, rate2)
 
        enddo
 
        dist_cur = sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt,rot_mat(theta_local,u_local),vec_local))**2,1)))
+
+       print*, dist_cur
 
        if (dist_cur < dist_min(thread)) then
           dist_min(thread) = dist_cur
@@ -621,9 +685,11 @@ contains
 
     enddo
     !$omp end do
-
     !$omp barrier
     !$omp single
+
+    print*, "ICI alors?"
+
     pos = minloc(dist_min, 1)
     u = u_min(:,pos)
     theta = theta_min(pos)
@@ -739,7 +805,9 @@ contains
 
     call gradient_descent_explore(theta, u, vec, Apos, Bpos, Acell, iAcell, &
          fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2)
-    
+
+    PRINT*, "HERE?"
+
     tmat = rot_mat(theta,u)
     
     do i=1,n_adjust
@@ -748,9 +816,16 @@ contains
        
           tBpos = free_trans(Bpos,tmat,vec)
 
+          print*, "MAP adjust"
+          write(*,"(3(F5.3,X))") tmat
+          write(*,"(10(F5.3,X))") Apos
+          write(*,"(10(F5.3,X))") tBpos
           call mapping(Apos_mapped, Bpos_opt, Apos, Bpos, tBpos, &
                fracA, fracB, atoms, n_atoms)
-          
+
+          print*, "Oh Oh?!"
+          print*, "NORMAND NORME", norm(u)
+
           theta = 0
           tBpos_opt = free_trans(Bpos_opt,tmat,(/0.0d0,0.0d0,0.0d0/))
           

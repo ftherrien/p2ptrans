@@ -1,14 +1,14 @@
 from p2ptrans import transform as tr
 import numpy as np
 import numpy.linalg as la
-# from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.mplot3d import Axes3D
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from p2ptrans import tiling as t
 import pickle
 import time
-from pylada.crystal import Structure, primitive, gruber
+from pylada.crystal import Structure, primitive, gruber, read
 from copy import deepcopy
 
 tol = 1e-5
@@ -42,7 +42,7 @@ def find_cell(class_list, positions, tol = 1e-5, frac_tol = 0.5):
                     if np.allclose(multiple, np.arange(round(multiple[0]), round(multiple[-1])+1), tol) and shell > frac_tol:
                         newcell[:,j] = pos[:,k]
                         j += 1
-                        if j == 2: break #In 2D only TMP TODO
+                        if j == 3: break 
         else:
             raise RuntimeError("Could not find periodic cell for displacement %d"%i)
         if i==0:
@@ -106,11 +106,10 @@ random = False
 # Eventually this can be from pcread
 A = Structure(np.identity(3))
 A.add_atom(0,0,0,'Si')
-A.add_atom(0.1,0.1,0,'Be')
 
 B = Structure(np.array([[1.1,0,0],[1.1,1.5,0],[0,0,1]]).T)
 B.add_atom(0,0,0,'Si')
-B.add_atom(0.6,0.3,0,'Be')
+
 
 mul = lcm(len(A),len(B))
 mulA = mul//len(A)
@@ -124,44 +123,46 @@ if mulA*la.det(A.cell) < mulB*la.det(B.cell):
     A = tmp
     mulA = tmpmul
 
-ncell = 250
+ncell = 10
 
-# Setting the unit cells of A and B
-Acell = A.cell[:2,:2]
-Bcell = B.cell[:2,:2] 
+Acell = A.cell
+Bcell = B.cell
 
 # Plotting the cell vectors of A and B
 fig = plt.figure()
-ax = fig.add_subplot(111)
-ax.quiver(np.ones(3), np.ones(3), Bcell[0,:], Bcell[1,:])
-ax.quiver(-np.ones(3), -np.ones(3), Acell[0,:], Acell[1,:])
+ax = fig.add_subplot(111, projection='3d')
+ax.quiver(np.ones(3), np.ones(3), np.ones(3), Bcell[0,:], Bcell[1,:], Bcell[2,:])
+ax.quiver(-np.ones(3), -np.ones(3), -np.ones(3), Acell[0,:], Acell[1,:], Acell[2,:])
 ax.set_xlim([-5, 5])
 ax.set_ylim([-5, 5])
+ax.set_zlim([-5, 5])
 fig.savefig('CellVectors.png')
 
 
-ASC = t.circle(Acell, mulA * ncell)
-BSC = t.circle(Bcell, mulB * ncell)
+ASC = t.sphere(Acell, mulA * ncell)
+BSC = t.sphere(Bcell, mulB * ncell)
 
 # Plot gamma points of each A cell
 fig = plt.figure()
-ax = fig.add_subplot(111)
-ax.scatter(ASC[0,:], ASC[1,:])
-maxXAxis = np.max([ASC[0,:].max(),ASC[1,:].max()])
-minXAxis = np.min([ASC[0,:].min(),ASC[1,:].min()])
+ax = fig.add_subplot(111, projection='3d')
+ax.scatter(ASC[0,:], ASC[1,:], ASC[2,:])
+maxXAxis = ASC.max() + 1
+minXAxis = BSC.min() - 1
 ax.set_xlim([minXAxis-1, maxXAxis+1])
 ax.set_ylim([minXAxis-1, maxXAxis+1])
+ax.set_zlim([minXAxis-1, maxXAxis+1])
 ax.set_aspect('equal')
 fig.savefig('Agrid.png')
 
 # Plot gamma points of each B cell
 fig = plt.figure()
-ax = fig.add_subplot(111)
-ax.scatter(BSC[0,:], BSC[1,:])
-maxXAxis = np.max([BSC[0,:].max(),BSC[1,:].max()])
-minXAxis = np.min([BSC[0,:].min(),BSC[1,:].min()])
+ax = fig.add_subplot(111, projection='3d')
+ax.scatter(BSC[0,:], BSC[1,:], BSC[2,:])
+maxXAxis = BSC.max() + 1
+minXAxis = BSC.min() - 1
 ax.set_xlim([minXAxis-1, maxXAxis+1])
 ax.set_ylim([minXAxis-1, maxXAxis+1])
+ax.set_zlim([minXAxis-1, maxXAxis+1])
 ax.set_aspect('equal')
 fig.savefig('Bgrid.png')
 
@@ -195,10 +196,10 @@ else:
     for a in A:
         if any(atom_types == a.type):
             idx = np.where(atom_types == a.type)[0][0]
-            Apos[idx] = np.concatenate((Apos[idx], ASC + Acell.dot(np.reshape(a.pos[:2],(2,1))).dot(np.ones((1,np.shape(ASC)[1])))), axis = 1) 
+            Apos[idx] = np.concatenate((Apos[idx], ASC + Acell.dot(np.reshape(a.pos,(3,1))).dot(np.ones((1,np.shape(ASC)[1])))), axis = 1) 
             atomsA[idx] += 1
         else:
-            Apos.append(ASC + Acell.dot(np.reshape(a.pos[:2],(2,1))).dot(np.ones((1,np.shape(ASC)[1]))))
+            Apos.append(ASC + Acell.dot(np.reshape(a.pos,(3,1))).dot(np.ones((1,np.shape(ASC)[1]))))
             atom_types = np.append(atom_types, a.type)
             atomsA = np.append(atomsA,1)
 
@@ -209,28 +210,27 @@ else:
     for a in B:
         idx = np.where(atom_types == a.type)[0][0]
         if atomsB[idx] == 0:
-            Bpos[idx] = BSC + Bcell.dot(np.reshape(a.pos[:2],(2,1))).dot(np.ones((1,np.shape(BSC)[1])))
+            Bpos[idx] = BSC + Bcell.dot(np.reshape(a.pos,(3,1))).dot(np.ones((1,np.shape(BSC)[1])))
         else:
-            Bpos[idx] = np.concatenate((Bpos[idx], BSC + Bcell.dot(np.reshape(a.pos[:2],(2,1))).dot(np.ones((1,np.shape(BSC)[1])))), axis = 1) 
+            Bpos[idx] = np.concatenate((Bpos[idx], BSC + Bcell.dot(np.reshape(a.pos,(3,1))).dot(np.ones((1,np.shape(BSC)[1])))), axis = 1) 
         atomsB[idx] += 1
 
     Bpos = np.concatenate(Bpos, axis=1)
         
-    Apos = np.concatenate([Apos,np.zeros((1,np.shape(Apos)[1]))]) # TMP Only in 2D Adds the 3rd dim. 
-    Bpos = np.concatenate([Bpos,np.zeros((1,np.shape(Bpos)[1]))])
-
     assert all(mulA*atomsA == mulB*atomsB)
     atoms = mulA*atomsA
 
 fracB = 0.5
 fracA = 0.25 # fracA < fracB
-Acell_tmp = np.identity(3)
-Acell_tmp[:2,:2] = Acell
 
 Apos = np.asfortranarray(Apos)
 Bpos = np.asfortranarray(Bpos) 
 t_time = time.time()
-Apos_map, Bpos, Bposst, n_map, tmat, dmin = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell_tmp, la.inv(Acell_tmp), atoms, 1000, 100, 4, 6, 5e-7, 5e-7) #TMP
+
+print(Apos)
+print(Bpos)
+
+Apos_map, Bpos, Bposst, n_map, tmat, dmin = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell, la.inv(Acell), atoms, 50, 100, 4, 6, 5e-7, 5e-7)
 t_time = time.time() - t_time
 Bpos = np.asanyarray(Bpos)
 Apos = np.asanyarray(Apos)
@@ -246,7 +246,6 @@ pickle.dump((Apos_map, Bpos, Bposst, n_map, tmat, dmin), open("fastoptimization.
 # Apos_map, Bpos, Bposst, n_map, tmat, dmin = pickle.load(open("fastoptimization.dat","rb"))
 # # <--  
 
-Apos = Apos[:2,:]
 Bpos = Bpos[:,:n_map]
 Bposst = Bposst[:,:n_map]
 Apos_map = Apos_map[:,:n_map]
@@ -258,24 +257,25 @@ natA = int(fracA*np.shape(Apos)[1]/np.sum(atoms))
 
 # Plotting the Apos and Bpos overlayed
 fig = plt.figure()
-ax = fig.add_subplot(111)
+ax = fig.add_subplot(111, projection='3d')
 #ax.scatter(Apos.T[:,0],Apos.T[:,1])
 for i,num in enumerate(atoms):
     for j in range(num):
-        ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,1], c="C%d"%(2*i))
-        ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,1], c="C%d"%(2*i), alpha = 0.5)
-    ax.scatter(Bpos.T[natB*num*i:natB*num*(i+1),0],Bpos.T[natB*num*i:natB*num*(i+1),1], alpha=0.5, c="C%d"%(2*i+1))
+        ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,1],Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,2], c="C%d"%(2*i))
+        ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,1], Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,2], c="C%d"%(2*i), alpha = 0.5)
+    ax.scatter(Bpos.T[natB*num*i:natB*num*(i+1),0],Bpos.T[natB*num*i:natB*num*(i+1),1], Bpos.T[natB*num*i:natB*num*(i+1),2], alpha=0.5, c="C%d"%(2*i+1))
 maxXAxis = np.max([Apos.max(), Bpos.max()]) + 1
 ax.set_xlim([-maxXAxis, maxXAxis])
 ax.set_ylim([-maxXAxis, maxXAxis])
 ax.set_aspect('equal')
 
+
 # Displacements without stretching (for plotting)
 disps = Apos_map - Bpos
 
 #fig = plt.figure()
-#ax = fig.add_subplot(111)
-ax.quiver(Bpos.T[:,0], Bpos.T[:,1], disps.T[:,0], disps.T[:,1], scale_units='xy', scale=1)
+#ax = fig.add_subplot(111, projection='3d')
+ax.quiver(Bpos.T[:,0], Bpos.T[:,1], Bpos.T[:,2], disps.T[:,0], disps.T[:,1], disps.T[:,2])
 maxXAxis = np.max([Apos.max(), Bpos.max()]) + 1
 ax.set_xlim([-maxXAxis, maxXAxis])
 ax.set_ylim([-maxXAxis, maxXAxis])
@@ -284,13 +284,13 @@ fig.savefig('DispLattice.png')
 
 # Plotting the Apos and Bposst overlayed
 fig = plt.figure()
-ax = fig.add_subplot(111)
+ax = fig.add_subplot(111, projection='3d')
 #ax.scatter(Apos.T[:,0],Apos.T[:,1])
 for i,num in enumerate(atoms):
     for j in range(num):
-        ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,1], c="C%d"%(2*i))
-        ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,1], c="C%d"%(2*i), alpha=0.5)
-    ax.scatter(Bposst.T[natB*num*i:natB*num*(i+1),0],Bposst.T[natB*num*i:natB*num*(i+1),1], alpha=0.5, c="C%d"%(2*i+1))
+        ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,1],Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,2], c="C%d"%(2*i))
+        ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,1],Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,2], c="C%d"%(2*i), alpha=0.5)
+    ax.scatter(Bposst.T[natB*num*i:natB*num*(i+1),0],Bposst.T[natB*num*i:natB*num*(i+1),1], Bposst.T[natB*num*i:natB*num*(i+1),2], alpha=0.5, c="C%d"%(2*i+1))
 maxXAxis = np.max([Apos.max(), Bposst.max()]) + 1
 ax.set_xlim([-maxXAxis, maxXAxis])
 ax.set_ylim([-maxXAxis, maxXAxis])
@@ -300,22 +300,13 @@ ax.set_aspect('equal')
 disps = Apos_map - Bposst
 
 #fig = plt.figure()
-#ax = fig.add_subplot(111)
-ax.quiver(Bposst.T[:,0], Bposst.T[:,1],disps.T[:,0], disps.T[:,1], scale_units='xy', scale=1)
+#ax = fig.add_subplot(111, projection='3d')
+ax.quiver(Bposst.T[:,0], Bposst.T[:,1], Bposst.T[:,2], disps.T[:,0], disps.T[:,1], disps.T[:,2])
 maxXAxis = np.max([Apos.max(), Bposst.max()]) + 1
 ax.set_xlim([-maxXAxis, maxXAxis])
 ax.set_ylim([-maxXAxis, maxXAxis])
 ax.set_aspect('equal')
 fig.savefig('DispLattice_stretched.png')
-
-# Stretching Matrix
-Acell3d = np.identity(3) # TMP only for 2D
-Acell3d[:2,:2] = Acell
-Acell = Acell3d
-
-Bcell3d = np.identity(3) # TMP only for 2D
-Bcell3d[:2,:2] = Bcell
-Bcell = Bcell3d
 
 # Stretching Matrix
 stMat = la.inv(tr.canonicalize(Bcell)).dot(tr.canonicalize(tmat.dot(Bcell)))
@@ -335,10 +326,10 @@ class_list, vec_classes = classify(disps)
 # Display the diffrent classes of displacement 
 for i in range(len(vec_classes)):
     fig = plt.figure()
-    ax = fig.add_subplot(111)
+    ax = fig.add_subplot(111, projection='3d')
     disps_class = disps[:,class_list==i]
     Bposst_class = Bposst[:,class_list==i]
-    ax.quiver(Bposst_class.T[:,0], Bposst_class.T[:,1], disps_class.T[:,0], disps_class.T[:,1], scale_units='xy', scale=1)
+    ax.quiver(Bposst_class.T[:,0], Bposst_class.T[:,1], Bposst_class.T[:,2], disps_class.T[:,0], disps_class.T[:,1], disps_class.T[:,2])
     maxXAxis = np.max([Apos.max(), Bposst.max()]) + 1
     ax.set_xlim([-maxXAxis, maxXAxis])
     ax.set_ylim([-maxXAxis, maxXAxis])
@@ -352,7 +343,6 @@ cell = find_cell(class_list, Bposst)
 
 # Finds a squarer cell
 cell = gruber(cell)
-cell = cell[:,np.argsort(cell[2,:])] # Only in 2D so that the z component is last 
 
 # Make a pylada structure
 cell_coord = la.inv(cell).dot(pos_in_struc)
@@ -381,9 +371,9 @@ print("Total displacement stretched cell:", Total_disp)
 
 # Displays displacement with the disp cell overlayed
 fig = plt.figure()
-ax = fig.add_subplot(111)
-ax.quiver(pos_in_struc.T[:,0], pos_in_struc.T[:,1],disps.T[:,0], disps.T[:,1], scale_units='xy', scale=1)
-ax.quiver(np.zeros(2), np.zeros(2), cell[0,:2], cell[1,:2], scale_units='xy', scale=1)
+ax = fig.add_subplot(111, projection='3d')
+ax.quiver(pos_in_struc.T[:,0], pos_in_struc.T[:,1], pos_in_struc.T[:,2], disps.T[:,0], disps.T[:,1], disps.T[:,2])
+ax.quiver(np.zeros(2), np.zeros(2), np.zeros(2), cell[0,:], cell[1,:], cell[2,:])
 maxXAxis = pos_in_struc.max() + 1
 ax.set_xlim([-maxXAxis, maxXAxis])
 ax.set_ylim([-maxXAxis, maxXAxis])
@@ -392,10 +382,10 @@ fig.savefig('DispLattice_stretched_cell_primittive.png')
 
 # Displays only the cell and the displacements in it
 fig = plt.figure()
-ax = fig.add_subplot(111)
+ax = fig.add_subplot(111, projection='3d')
 for disp in Struc:
-    ax.quiver(disp.pos[0],disp.pos[1], vec_classes[int(disp.type)][0],vec_classes[int(disp.type)][1], scale_units='xy', scale=1)
-ax.quiver(np.zeros(2), np.zeros(2), cell[0,:2], cell[1,:2], scale_units='xy', scale=1, color = "blue", alpha = 0.3)
+    ax.quiver(disp.pos[0], disp.pos[1], disp.pos[2], vec_classes[int(disp.type)][0],vec_classes[int(disp.type)][1], vec_classes[int(disp.type)][2])
+ax.quiver(np.zeros(2), np.zeros(2), np.zeros(2), cell[0,:], cell[1,:], cell[2,:], color = "blue", alpha = 0.3)
 maxXAxis = cell.max() + 1
 ax.set_xlim([-maxXAxis, maxXAxis])
 ax.set_ylim([-maxXAxis, maxXAxis])

@@ -57,7 +57,7 @@ module tiling
          dists
     
     integer :: &
-         i,j,k,l,nnx,nny,nnz, &
+         i,j,k,l,m,nnx,nny,nnz, &
          pos
 
     double precision :: &
@@ -85,20 +85,25 @@ module tiling
     print*, 'Square cell dimensions:',nnx, nny, nnz
 
     l = 0
-    dists = 0
+    dists = -1
     do i=-nnx,nnx
        do j=-nny,nny
           do k=-nnz,nnz
              dist = norm(matmul(Acell,(/i+0.5d0,j+0.5d0,k+0.5d0/)))
              if (dist <= rad) then
-                l=l+1
-                if (l<=ncell) then
-                   dists(l) = dist
-                   ASC(:,l) = matmul(Acell,(/i,j,k/))
-                elseif (maxval(dists) > dist) then
-                   pos = maxloc(dists,1)
-                   dists(pos) = dist
-                   ASC(:,pos) = matmul(Acell,(/i,j,k/))
+                print*, dist
+                if (l < ncell) l=l+1
+                if (l == 1) then
+                   dists(1) = dist
+                else if (dist < dists(l) .or. dists(l) == -1) then
+                   m=0
+                   do while (dist < dists(l-1-m))
+                      m=m+1
+                   enddo
+                   dists(l-m+1:ncell) = dists(l-m:ncell-1)
+                   dists(l-m) = dist
+                   ASC(:,l-m+1:ncell) = ASC(:,l-m:ncell-1)
+                   ASC(:,l-m) = matmul(Acell,(/i,j,k/))
                 endif
              endif
           enddo
