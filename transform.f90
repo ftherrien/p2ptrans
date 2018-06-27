@@ -15,7 +15,6 @@ module transform
        init_random_seed, &
        norm, &
        det, &
-       csqrt, &
        free_trans, &
        cost_map, &
        analytical_gd_rot, &
@@ -26,6 +25,9 @@ contains
 
   subroutine init_random_seed()
     ! Copied form the GCC docs: https://gcc.gnu.org/onlinedocs/gcc-4.6.4/gfortran/RANDOM_005fSEED.html#RANDOM_005fSEED
+
+    use omp_lib
+
     INTEGER :: i, n, clock
     INTEGER, DIMENSION(:), ALLOCATABLE :: seed
 
@@ -34,14 +36,15 @@ contains
 
     CALL SYSTEM_CLOCK(COUNT=clock)
 
-    seed = clock + 37 * (/ (i - 1, i = 1, n) /)
+    seed = clock + OMP_get_thread_num() * 37 * (/ (i - 1, i = 1, n) /)
+
     CALL RANDOM_SEED(PUT = seed)
 
     DEALLOCATE(seed)
 
   end subroutine init_random_seed
 
-  subroutine trans(pos,n,theta,u,vec)
+  subroutine trans(pos,n,angles,vec)
 
     integer, intent(in) :: &
          n ! Number of atoms
@@ -50,30 +53,29 @@ contains
          pos  ! position matrix
 
     double precision, intent(in), dimension(3,1) :: &
-         u, &    ! Rotation axis (unitary vector)
          vec     ! Translation vector
 
     double precision, dimension(3) :: &
          tvec    ! displacement from origin
 
-    double precision, intent(in) :: &
-         theta    ! angle of rotation
+    double precision, intent(in), dimension(3) :: &
+         angles    ! angle of rotation
 
     tvec = vec(:,1) + sum(pos,2) / size(pos,2)
 
     call center(pos,n)
 
-    pos = free_trans(pos, rot_mat(theta, u), tvec)
+    pos = free_trans(pos, rot_mat(angles), tvec)
 
   end subroutine trans
 
-  function rot_mat(theta,u) result(R)
+  function rot_mat(angles) result(R)
 
-    double precision, intent(in), dimension(3,1) :: &
+    double precision, intent(in), dimension(3) :: &
+         angles     ! Rotation axis (unitary vector)
+
+    double precision, dimension(3,1) :: &
          u     ! Rotation axis (unitary vector)
-
-    double precision, intent(in) :: &
-         theta    ! angle of rotation
 
     double precision, dimension(3,3) :: &
          Q, & ! cross product matrix
@@ -82,10 +84,14 @@ contains
     double precision, dimension(3,3) :: &
          R    ! Transformation matrix
 
+    u(1,1) = sin(angles(2)) * cos(angles(3))
+    u(2,1) = sin(angles(2)) * sin(angles(3))
+    u(3,1) = cos(angles(2))
+
     P = matmul(u,transpose(u))
     Q = transpose(reshape((/0.0d0,-u(3,1),u(2,1),u(3,1),0.0d0,-u(1,1),-u(2,1),u(1,1),0.0d0/),(/3,3/)))
 
-    R = P + (eye() - P)*cos(theta) + Q*sin(theta)
+    R = P + (eye() - P)*cos(angles(1)) + Q*sin(angles(1))
 
   end function rot_mat
 
@@ -164,9 +170,7 @@ contains
     do i=1,size(Apos,2)
        do j=1,size(Bpos,2)
           if (j <= n_B) then
-             !print*, Apos(:,i), Bpos(:,j)
              cost(i,j) = norm(Apos(:,i)-Bpos(:,j))
-             !print*, cost(i,j)
           elseif (i <= n_A) then  
              cost(i,j) = 1000 ! TODO: Should that be a param?
           endif
@@ -218,8 +222,6 @@ contains
 
        dmat = cost_map(Apos( : , id + 1 : id + n ), &
             tBpos( : , id + 1 : id + n ),n_A, n_B)
-
-       write(*,"(10(F5.3,X))") dmat
 
        call munkres(dist_map, map, dmat, n)
        
@@ -277,27 +279,8 @@ contains
        enddo
     endif
   end function det
-
-  function csqrt(n)
-    double precision, intent(in) :: n
-    double precision :: csqrt
-    character*300 :: out
-
-    if (n >= 0) then
-       csqrt = sqrt(n)
-    elseif (n < -2*epsilon(n)) then
-       write(out,*) "Error: Attempting to take the sqrt of a negative number:", &
-            n, "<", -2*epsilon(n), "sqrt(abs(n)) =", sqrt(abs(n)) 
-       !stop out
-       print*, out
-       csqrt = 0.0d0
-    else
-       csqrt = 0.0d0
-    endif
-    
-  end function csqrt
   
-  subroutine analytical_gd_rot(theta, u, vec, Apos, Bpos, n_iter, rate1, rate2)
+  subroutine analytical_gd_rot(angles, vec, Apos, Bpos, n_iter, rate1, rate2)
 
     integer, intent(in) :: &
          n_iter ! Number of atoms
@@ -314,26 +297,31 @@ contains
          E ! position matrix
 
     double precision, intent(inout), dimension(3,1) :: &         
-         vec, &     ! Translation vector
-         u
+         vec       ! Translation vector
 
-    double precision, intent(inout) :: &
-         theta    ! Transformation matrix
+    double precision, dimension(3,1) :: &         
+         u         ! Axis of rotation
+
+    double precision, intent(inout), dimension(3) :: &
+         angles    ! 3 vectors of the rotation: 1. angle of rotation 2&3. Spherical angles of the axis of rotation
 
     double precision, dimension(3,3) :: &
-         Px, Py, Pt, & ! Temporary transformation matrix
-         Qx, Qy, Qt, &
-         Mx, My, Mt, M
+         P1, P2, P3, & ! Temporary transformation matrix
+         Q1, Q2, Q3, &
+         M1, M2, M3, M
 
     double precision, dimension(size(Bpos,2),1) :: &
          ones
 
     double precision :: &
          dist, &
-         dist_prev
+         dist_prev, &
+         dist_2prev, &
+         s2, s3, & ! Sine of angle 1 and 2
+         c2, c3    ! Cosine of angle 1 and 2
 
     integer :: &
-         i,j ! Iterator
+         i, j ! Iterator
 
     double precision, parameter :: &
          tol = 1d-10
@@ -342,113 +330,88 @@ contains
 
     dist = 0
     dist_prev = tol+1
+    dist_2prev = dist_prev
 
     j=0
     do while (j < n_iter .and. abs(dist - dist_prev) > tol)
        j=j+1
 
-       print*, norm(u) - 1
+       M = rot_mat(angles)
 
-       M = rot_mat(theta,u)
-
+       dist_2prev = dist_prev
        dist_prev = dist
        dist = sum(sqrt(sum((Apos - free_trans(Bpos,M,vec))**2,1)))
 
        E = Apos - free_trans(Bpos,M,vec)
        E = E / spread(sqrt(sum(E**2,1)),1,3)
 
-       Px = transpose(reshape((/2*u(1,1), &
-            u(2,1) , &
-            (1 - 2*u(1,1)**2 - u(2,1)**2) / u(3,1), &
-            u(2,1)  , &
-            0.0d0, &
-            -u(1,1)*u(2,1) / u(3,1), &
-            (1 - 2*u(1,1)**2 - u(2,1)**2) / u(3,1), &
-            -u(1,1)*u(2,1) / u(3,1), &
-            -2*u(1,1)/), &
+       s2 = sin(angles(2))
+       s3 = sin(angles(3))
+       c2 = cos(angles(2))
+       c3 = cos(angles(3))
+
+       P2 = transpose(reshape((/2*s2*c2*c3**2, &
+            2*s2*c2*s3*c3, &
+            (1 - 2*s2**2) * c3, &
+            2*s2*c2*s3*c3, &
+            2*s2*c2*s3**2, &
+            (1 - 2*s2**2) * s3, &
+            (1 - 2*s2**2) * c3, &
+            (1 - 2*s2**2) * s3, &
+            -2*c2*s2/), &
             (/3,3/)))
-       Qx = transpose(reshape((/0.0d0, &
-            u(1,1) / u(3,1), &
+       Q2 = transpose(reshape((/0.0d0, &
+            s2, &
+            c2 * s3, &
+            -s2, &
             0.0d0, &
-            -u(1,1) / u(3,1), &
-            0.0d0, &
-            -1.0d0, &
-            0.0d0, &
-            1.0d0, &
+            -c2*c3, &
+            -c2*s3, &
+            c2*c3, &
             0.0d0/), &
             (/3,3/)))
 
-       Mx = Px + (eye() - Px)*cos(theta) + Qx*sin(theta)
+       M2 = P2 - P2*cos(angles(1)) + Q2*sin(angles(1))
 
-       Py = transpose(reshape((/0.0d0, &
-            u(1,1) , &
-            -u(2,1)*u(1,1) / u(3,1), &
-            u(1,1)  , &
-            2*u(2,1), &
-            (1 - u(1,1)**2 - 2*u(2,1)**2) / u(3,1), &
-            -u(2,1)*u(1,1) / u(3,1) , &
-            (1 - u(1,1)**2 - 2*u(2,1)**2) / u(3,1), &
-            -2*u(2,1)/), &
+       P3 = transpose(reshape((/-2*s2**2*c3*s3, &
+            (1 - 2*s3**2) * s2**2, &
+            -s2*c2*s3, &
+            (1 - 2*s3**2) * s2**2, &
+            2*s2**2*s3*c3, &
+            s2*c2*c3, &
+            -s2*c2*s3, &
+            s2*c2*c3, &
+            0.0d0/), &
             (/3,3/)))
-       Qy = transpose(reshape((/0.0d0, &
-            u(2,1) / u(3,1), &
-            1.0d0, &
-            -u(2,1) / u(3,1), &
+       Q3 = transpose(reshape((/0.0d0, &
+            0.0d0, &
+            s2*c3, &
             0.0d0, &
             0.0d0, &
-            -1.0d0, &
-            0.0d0, &
+            s2*s3, &
+            -s2*c3, &
+            -s2*s3, &
             0.0d0/), &
             (/3,3/)))
 
-       My = Py + (eye() - Py)*cos(theta) + Qy*sin(theta)
+       M3 = P3 - P3*cos(angles(1)) + Q3*sin(angles(1))
 
-       Pt = matmul(u,transpose(u))
-       Qt = transpose(reshape((/0.0d0,-u(3,1),u(2,1),u(3,1),0.0d0,-u(1,1),-u(2,1),u(1,1),0.0d0/),(/3,3/)))
+       u(1,1) = sin(angles(2)) * cos(angles(3))
+       u(2,1) = sin(angles(2)) * sin(angles(3))
+       u(3,1) = cos(angles(2))
 
-       Mt = Pt - (eye() - Pt)*sin(theta) + Qt*cos(theta)
-       
-       print*, "U1", u(1,1), rate1*dist*sum(matmul(E,transpose(Bpos)) * Mx)
-       u(1,1) = u(1,1) + rate1*dist*sum(matmul(E,transpose(Bpos)) * Mx)
-       print*, "U2", u(2,1), rate1*dist*sum(matmul(E,transpose(Bpos)) * My)
-       print*, "U3", u(3,1)
-       u(2,1) = u(2,1) + rate1*dist*sum(matmul(E,transpose(Bpos)) * My)
+       P1 = matmul(u,transpose(u))
+       Q1 = transpose(reshape((/0.0d0,-u(3,1),u(2,1),u(3,1),0.0d0,-u(1,1),-u(2,1),u(1,1),0.0d0/),(/3,3/)))
 
-       ! TODO: Il y a un discontinuite dans les derivees quand u(3,1) = 0, je ne vois pas vraiment
-       ! de moyen evident de resoudre ce probleme la. C'est comme faire une descente de gradient
-       ! sur un sphere, a un certain point le gradient est infini et c'est indevitable en
-       ! en coordonnes cartesienne. Alors je vois 2 options:
-       ! 1. Aller en coord. spherique pour le vecteur u avec un norme fixe (donc 2 angles)
-       ! 2. Limiter le gradient a un certaine valeur c.-a-d. mettre u(3,1) a epsilon dans
-       ! le prochain if au lieu de 0
-       if ((1-u(1,1)**2-u(2,1)**2) < 0) then
-          u(1,1) = min(u(1,1), 1.0d0, sqrt(1.d0 - u(2,1)**2))
-          u(2,1) = min(u(2,1), 1.0d0, sqrt(1.d0 - u(1,1)**2))
-          u(3,1) = 0.0d0
-       else
-          u(3,1) = sqrt(1-u(1,1)**2-u(2,1)**2)
-       endif
-
-       if (any(u /= u)) then
-          print*, "oups! 1"
-          print*, u, theta, vec
-          print*, 1-u(1,1)**2-u(2,1)**2
-          stop
-       endif
-       theta = theta + rate1*dist*sum(matmul(E,transpose(Bpos)) * Mt)
-       if (theta /= theta) then
-          print*, "oups! 2"
-          print*, u, theta, vec
-          stop
-       endif
-       vec = vec + rate2*dist*matmul(E,ones)
-       if (any(vec /= vec)) then
-          print*, "oups! 3"
-          print*, u, theta, vec
-          stop
-       endif
-
+       M1 = P1 - (eye() - P1)*sin(angles(1)) + Q1*cos(angles(1))
+              
+       Angles(1) = angles(1) + rate1 * dist * sum(matmul(E,transpose(Bpos)) * M1)
+       angles(2) = angles(2) + rate1 * dist * sum(matmul(E,transpose(Bpos)) * M2)
+       angles(3) = angles(3) + rate1 * dist * sum(matmul(E,transpose(Bpos)) * M3)
+       vec = vec + rate2 * dist * matmul(E,ones)
+              
     enddo
+
 
   end subroutine analytical_gd_rot
 
@@ -504,6 +467,7 @@ contains
 
        
        E = Apos - free_trans(Bpos,tmat,vec)
+
        if (.not. sq) then
           E = E / spread(sqrt(sum(E**2,1)),1,3)
        endif
@@ -515,7 +479,7 @@ contains
 
   end subroutine analytical_gd_free
   
-  subroutine gradient_descent_explore(theta,u, vec, Apos, Bpos, cell, icell, &
+  subroutine gradient_descent_explore(angles, vec, Apos, Bpos, cell, icell, &
        fracA, fracB, atoms, n_atoms, n_iter, n_ana, n_conv, rate1, rate2)
     ! New Gradient Descent Random
 
@@ -551,18 +515,16 @@ contains
 
     double precision, dimension(3,int(fracB*size(Apos,2)/sum(atoms))*sum(atoms)) :: &
          Apos_mapped, & ! position matrix
+         Apos_mapped_prev, &
          Bpos_opt
     
     double precision, intent(out), dimension(3) :: &
          vec, &     ! Translation vector
-         u
+         angles     ! Angles of rotation
 
     double precision, dimension(3) :: &
          vec_local, &     ! Translation vector
-         u_local
-    
-    double precision, intent(out) :: &
-         theta
+         angles_local
 
     double precision, dimension(3,3) :: &
          mat    ! Transformation matrix
@@ -587,15 +549,13 @@ contains
          dist_map, &
          dist_stretch, &
          mul_vec, &
-         diag, &
-         theta_local
+         diag
 
     double precision, allocatable, dimension(:) :: &
-         dist_min, &
-         theta_min
+         dist_min
 
     double precision, allocatable, dimension(:,:) :: &
-         u_min, &
+         angles_min, &
          vec_min
     
     integer :: &
@@ -618,7 +578,7 @@ contains
     mul_vec = diag*2/sqrt(3.0d0)
     
     !$omp parallel default(private) shared(dist_min, &
-    !$omp theta_min, u_min, vec_min, u, theta, vec) &
+    !$omp angles_min, vec_min, angles, vec) &
     !$omp firstprivate(n_iter, mul_vec, cell, fracA, fracB, &
     !$omp icell, n_conv, n_ana, Apos, Bpos, rate1, rate2, atoms, n_atoms)
 
@@ -628,8 +588,7 @@ contains
 
     !$omp single
     allocate(dist_min(n_threads), &
-         theta_min(n_threads), &
-         u_min(3,n_threads),&
+         angles_min(3,n_threads), &
          vec_min(3,n_threads))
     !$omp end single
 
@@ -640,11 +599,10 @@ contains
     !$omp do
     do j=1, n_iter
        
-       call random_number(theta_local)
-       call random_number(u_local)
+       call random_number(angles_local)
        call random_number(vec_local)
 
-       theta_local = theta_local*2*pi
+       angles_local = angles_local*2*pi
 
        vec_local = vec_local - (/0.5d0,0.5d0,0.5d0/)
 
@@ -652,34 +610,34 @@ contains
        
        vec_local = vec_local - matmul(cell,nint(matmul(icell,vec_local))) 
 
-       u_local = u_local - (/0.5d0,0.5d0,0.5d0/)
-       u_local = u_local / norm(u_local)
-       u_local(3) = abs(u_local(3))
-
-       write(*,*) "New initial step", thread, j
+       write(*,*) "New initial step", thread, j, "Angles", angles_local
        
-       do k=1, n_conv
+       Apos_mapped = 1.0d0
+       Apos_mapped_prev = 0.0d0
+       k=1
 
-          tBpos = free_trans(Bpos,rot_mat(theta_local,u_local),vec_local)
+       do while ( k <= n_conv .and. any(Apos_mapped /= Apos_mapped_prev))
+          k=k+1
 
-          print*, "mapping"
+          Apos_mapped_prev = Apos_mapped
+          
+          tBpos = free_trans(Bpos,rot_mat(angles_local),vec_local)
+
           call mapping(Apos_mapped, Bpos_opt, Apos, Bpos, tBpos, &
                fracA, fracB, atoms, n_atoms)
 
-          print*, "gradient"
-          call analytical_gd_rot(theta_local, u_local, vec_local, Apos_mapped, Bpos_opt, &
+          call analytical_gd_rot(angles_local, vec_local, Apos_mapped, Bpos_opt, &
                n_ana, rate1, rate2)
 
        enddo
 
-       dist_cur = sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt,rot_mat(theta_local,u_local),vec_local))**2,1)))
+       dist_cur = sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt,rot_mat(angles_local),vec_local))**2,1)))
 
-       print*, dist_cur
+       print*, "Opt dist", dist_cur
 
        if (dist_cur < dist_min(thread)) then
           dist_min(thread) = dist_cur
-          theta_min(thread) = theta_local
-          u_min(:,thread) = u_local
+          angles_min(:,thread) = angles_local
           vec_min(:,thread) = vec_local
        endif
 
@@ -688,16 +646,14 @@ contains
     !$omp barrier
     !$omp single
 
-    print*, "ICI alors?"
-
     pos = minloc(dist_min, 1)
-    u = u_min(:,pos)
-    theta = theta_min(pos)
+    print*, "Shortest dist", dist_min(pos)
+    
+    angles = angles_min(:,pos)
     vec = vec_min(:,pos)
 
     deallocate(dist_min, &
-         theta_min, &
-         u_min,&
+         angles_min,&
          vec_min)
     !$omp end single 
     
@@ -764,10 +720,9 @@ contains
     double precision, dimension(3) :: &
          vec, & ! Translation vecto
          vec_rot, & ! Translation vector for the rotated unstretched matrix
-         u      ! Rotation axis
+         angles      ! Rotation angles
 
     double precision :: &
-         theta, & ! Rotation angle
          d, &
          dist_map, &
          dist_stretch
@@ -803,12 +758,16 @@ contains
     call center(Bpos,nb)
     call center(Apos,na)
 
-    call gradient_descent_explore(theta, u, vec, Apos, Bpos, Acell, iAcell, &
-         fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2)
+    ! call gradient_descent_explore(angles, vec, Apos, Bpos, Acell, iAcell, &
+    !      fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2)
 
-    PRINT*, "HERE?"
+    angles = (/ 0.0d0, 0.0d0, 0.0d0 /)
 
-    tmat = rot_mat(theta,u)
+    ! TODO: DESLANTING?
+
+    vec = (/ 0.25d0, 0.25d0, 0.0d0 /)
+
+    tmat = rot_mat(angles)
     
     do i=1,n_adjust
 
@@ -816,52 +775,44 @@ contains
        
           tBpos = free_trans(Bpos,tmat,vec)
 
-          print*, "MAP adjust"
-          write(*,"(3(F5.3,X))") tmat
-          write(*,"(10(F5.3,X))") Apos
-          write(*,"(10(F5.3,X))") tBpos
           call mapping(Apos_mapped, Bpos_opt, Apos, Bpos, tBpos, &
                fracA, fracB, atoms, n_atoms)
 
-          print*, "Oh Oh?!"
-          print*, "NORMAND NORME", norm(u)
-
-          theta = 0
+          angles = 0
           tBpos_opt = free_trans(Bpos_opt,tmat,(/0.0d0,0.0d0,0.0d0/))
           
-          call analytical_gd_rot(theta, u, vec, Apos_mapped, tBpos_opt, &
+          call analytical_gd_rot(angles, vec, Apos_mapped, tBpos_opt, &
                n_ana*100, rate1, rate2)
           
-          tmat = matmul(rot_mat(theta,u),tmat)
-
-          
-          theta = 0
-          vec_rot = vec
-          
-          call analytical_gd_rot(theta, u, vec_rot, Apos_mapped, Bpos_opt, &
-               n_ana*1000, rate1, rate2)
+          tmat = matmul(rot_mat(angles),tmat)
 
        enddo
+
+       vec_rot = vec
+       
+       ! This step is just to get the "unstretched distance"
+       call analytical_gd_rot(angles, vec_rot, Apos_mapped, Bpos_opt, &
+               n_ana*1000, rate1, rate2)
 
        write(*,*) "--------------> Adjustment step:", i
 
        write(*,*) "Stretched distance:", sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt, tmat, vec))**2,1)))
 
-       write(*,*) "Unstretched distance:", sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt, rot_mat(theta,u), vec_rot))**2,1)))
+       write(*,*) "Unstretched distance:", sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt, rot_mat(angles), vec_rot))**2,1)))
 
-       call analytical_gd_free(tmat, vec, Apos_mapped, Bpos_opt,.false., n_ana*100, rate1, rate2)
+       call analytical_gd_free(tmat, vec, Apos_mapped, Bpos_opt,.true., n_ana*100, rate1, rate2)
        
        
     enddo
 
-    call analytical_gd_free(tmat, vec, Apos_mapped, Bpos_opt,.true., n_ana*100, rate1, rate2)
+    ! call analytical_gd_free(tmat, vec, Apos_mapped, Bpos_opt,.true., n_ana*100, rate1, rate2)
     
     ! ! Recenter
-    ! vec = vec + sum(free_trans(Bpos_opt,rot_mat(theta,u),vec) - Apos_mapped,2) / n_out
+    ! vec = vec + sum(free_trans(Bpos_opt,rot_mat(angles),vec) - Apos_mapped,2) / n_out
     
     Bpos_opt_stretch = free_trans(Bpos_opt,tmat,vec)
 
-    Bpos_opt = free_trans(Bpos_opt,rot_mat(theta,u),vec_rot)
+    Bpos_opt = free_trans(Bpos_opt,rot_mat(angles),vec_rot)
     
     Bpos_out(:,1:n_out) = Bpos_opt
     Bpos_out_stretch(:,1:n_out) = Bpos_opt_stretch

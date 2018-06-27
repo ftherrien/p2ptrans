@@ -2,9 +2,10 @@ from p2ptrans import transform as tr
 import numpy as np
 import numpy.linalg as la
 from mpl_toolkits.mplot3d import Axes3D
-import matplotlib
-matplotlib.use('Agg')
+# import matplotlib
+# matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib import animation
 from p2ptrans import tiling as t
 import pickle
 import time
@@ -18,7 +19,10 @@ def find_cell(class_list, positions, tol = 1e-5, frac_tol = 0.5):
     for i in range(len(np.unique(class_list))):
         newcell = np.identity(3)
         pos = positions[:, class_list == i]
-        pos = pos[:,1:] - pos[:,0:1].dot(np.ones((1,np.shape(pos)[1]-1))) # centered
+        center = np.argmin(la.norm(pos, axis = 0))
+        list_in = list(range(np.shape(pos)[1]))
+        list_in.remove(center)
+        pos = pos[:,list_in] - pos[:,center:center+1].dot(np.ones((1,np.shape(pos)[1]-1))) # centered
         norms = la.norm(pos, axis = 0)
         idx = np.argsort(norms)
         j = 0;
@@ -35,8 +39,9 @@ def find_cell(class_list, positions, tol = 1e-5, frac_tol = 0.5):
                     multiple.append(p.dot(pos[:,k])/la.norm(pos[:,k])**2)
             if multiple != []:
                 multiple.sort()
-                shell = np.sum(norms < abs(multiple[0])*la.norm(pos[:,k]))/float(len(norms))
-                shell = min(shell, np.sum(norms < multiple[-1]*la.norm(pos[:,k]))/float(len(norms)))
+                norms = la.norm(pos - 1 / 2.0 * (multiple[0]+multiple[-1]) *
+                                pos[:,k:k+1].dot(np.ones((1,np.shape(pos)[1]))), axis = 0)
+                shell = np.sum(norms < 1 / 2.0 * (multiple[-1]-multiple[0])*la.norm(pos[:,k])) / float(len(norms))
                 if len(multiple) == len(np.arange(round(multiple[0]), round(multiple[-1])\
     +1)):
                     if np.allclose(multiple, np.arange(round(multiple[0]), round(multiple[-1])+1), tol) and shell > frac_tol:
@@ -58,7 +63,7 @@ def find_cell(class_list, positions, tol = 1e-5, frac_tol = 0.5):
                 raise RuntimeError("The periodicity of the different classes of displacement is different")
     return cell
 
-def classify(disps, tol = 1.e-1):
+def classify(disps, tol = 1.e-3):
     vec_classes = [disps[:,0:1]]
     class_list = np.zeros(np.shape(disps)[1], np.int)
     for i in range(np.shape(disps)[1]):
@@ -68,8 +73,6 @@ def classify(disps, tol = 1.e-1):
             if (abs(la.norm(vec_mean) - vec_mean.T.dot(disps[:,i])/la.norm(vec_mean)) < tol and 
                 la.norm(np.cross(vec_mean, disps[:,i]))/la.norm(vec_mean) < tol):
                 vec_classes[j] = np.concatenate((vec_class,disps[:,i:i+1]),axis=1)
-                if j == 3:
-                    print(vec_mean, disps[:,i])
                 class_list[i] = j
                 classified = True
                 break
@@ -98,6 +101,17 @@ def gcd(x, y):
 
    return x
 
+def animate(i):
+    if i<180:
+        ax.view_init(30,i)
+    elif i<240:
+        ax.view_init(30,360-i)
+    elif i<300:
+        ax.view_init(i-210,120)
+    else:
+        ax.view_init(390-i,120)
+    return fig,
+
 # \/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
 # Begin Program
 
@@ -107,7 +121,7 @@ random = False
 A = Structure(np.identity(3))
 A.add_atom(0,0,0,'Si')
 
-B = Structure(np.array([[1.1,0,0],[1.1,1.5,0],[0,0,1]]).T)
+B = Structure(np.array([[1,1,0],[-0.5,0.5,0],[0,0,1]]).T)
 B.add_atom(0,0,0,'Si')
 
 
@@ -123,7 +137,7 @@ if mulA*la.det(A.cell) < mulB*la.det(B.cell):
     A = tmp
     mulA = tmpmul
 
-ncell = 10
+ncell = 300
 
 Acell = A.cell
 Bcell = B.cell
@@ -170,19 +184,22 @@ fig.savefig('Bgrid.png')
 if random:
     # Create a random Apos and B with random small displacement
     atoms = np.array([1]) # One atom
-    n = 30
-    Apos = np.concatenate([np.random.random((2,n))*3, np.zeros((1,n))]) 
+    n = 10
+    Apos = np.random.random((3,n))*3
     
     # Transform Apos to get Bpos
-    tetha = 2*np.pi*np.random.random()
-    vec = np.random.random((3,1))-0.5
-    vec[2] = 0
-    u = np.array([0,0,1])
-    Bpos = np.asfortranarray(np.array(Apos))
+    angles = 2*np.pi*np.random.random(3)
+    vec = np.random.random(3)
+    
+    print("ANGLES:", angles)
+    print("VEC:", vec)
 
-    tr.trans(Bpos,tetha,u,vec)
+    ttmat = np.array([[1,0,0],[0,2,0],[0,0,1]])
+    Bpos = np.asfortranarray((np.array(Apos).T.dot(ttmat)).T)
 
-    randDisp = np.concatenate([np.random.random((2,n)), np.zeros((1,np.shape(Apos)[1]))])
+    tr.trans(Bpos,angles,vec)
+
+    randDisp = np.random.random((3,n))
     
     Bpos = Bpos + randDisp*0
 
@@ -220,22 +237,56 @@ else:
     assert all(mulA*atomsA == mulB*atomsB)
     atoms = mulA*atomsA
 
-fracB = 0.5
-fracA = 0.25 # fracA < fracB
+fracB = 0.4
+fracA = 0.15 # fracA < fracB
+
+# TMP %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
+# Slanting
+tt = 30/360.*2*np.pi
+ph = 90/360.*2*np.pi
+sg = 90/360.*2*np.pi
+
+v2 = np.array([np.cos(ph + np.pi/2)*np.cos(tt), np.cos(ph + np.pi/2)*np.sin(tt), np.sin(ph + np.pi/2)])
+v3 = np.array([np.cos(tt + np.pi/2),np.sin(tt + np.pi/2),0])
+vM = np.array([[np.cos(ph)*np.cos(tt), np.cos(ph)*np.sin(tt), np.sin(ph)], 
+               np.cos(sg)*v2 + np.sin(sg)*v3,
+               np.cos(sg + np.pi/2)*v2 + np.sin(sg + np.pi/2)*v3])
+k = 1.5
+tM = np.array([[1, k, 0], [0,1,0], [0,0,1]])
+
+Aslant = la.inv(vM).dot(tM).dot(vM).dot(Apos)
+
+fig = plt.figure(31)
+ax = fig.add_subplot(111, projection='3d')
+ax.scatter(Aslant[0,:], Aslant[1,:], Aslant[2,:])
+ax.quiver([0],[0],[0],vM[0], vM[1], vM[2])
+maxXAxis = np.max(Aslant.max()) + 1
+ax.set_xlim([-maxXAxis, maxXAxis])
+ax.set_ylim([-maxXAxis, maxXAxis])
+ax.set_zlim([-maxXAxis, maxXAxis])
+ax.set_aspect('equal')
+ax.view_init(-90,0)
+
+fig = plt.figure(32)
+ax = fig.add_subplot(111, projection='3d')
+ax.scatter(Apos[0,:], Apos[1,:], Apos[2,:])
+ax.view_init(-90,0)
+
+plt.show()
+raise
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
 
 Apos = np.asfortranarray(Apos)
 Bpos = np.asfortranarray(Bpos) 
 t_time = time.time()
-
-print(Apos)
-print(Bpos)
-
-Apos_map, Bpos, Bposst, n_map, tmat, dmin = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell, la.inv(Acell), atoms, 50, 100, 4, 6, 5e-7, 5e-7)
+# Apos_map, Bpos, Bposst, n_map, tmat, dmin = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell, la.inv(Acell), atoms, 1, 300, 5, 5, 1e-6, 1e-6)
 t_time = time.time() - t_time
 Bpos = np.asanyarray(Bpos)
 Apos = np.asanyarray(Apos)
 
-print(dmin)
 print("Mapping time:", t_time)
 
 pickle.dump((Apos_map, Bpos, Bposst, n_map, tmat, dmin), open("fastoptimization.dat","wb"))
@@ -245,6 +296,8 @@ pickle.dump((Apos_map, Bpos, Bposst, n_map, tmat, dmin), open("fastoptimization.
 # tr.center(Bpos)
 # Apos_map, Bpos, Bposst, n_map, tmat, dmin = pickle.load(open("fastoptimization.dat","rb"))
 # # <--  
+
+print("Total distance between structures:", dmin)
 
 Bpos = Bpos[:,:n_map]
 Bposst = Bposst[:,:n_map]
@@ -256,7 +309,7 @@ natA = int(fracA*np.shape(Apos)[1]/np.sum(atoms))
 
 
 # Plotting the Apos and Bpos overlayed
-fig = plt.figure()
+fig = plt.figure(22)
 ax = fig.add_subplot(111, projection='3d')
 #ax.scatter(Apos.T[:,0],Apos.T[:,1])
 for i,num in enumerate(atoms):
@@ -267,6 +320,7 @@ for i,num in enumerate(atoms):
 maxXAxis = np.max([Apos.max(), Bpos.max()]) + 1
 ax.set_xlim([-maxXAxis, maxXAxis])
 ax.set_ylim([-maxXAxis, maxXAxis])
+ax.set_zlim([-maxXAxis, maxXAxis])
 ax.set_aspect('equal')
 
 
@@ -279,34 +333,41 @@ ax.quiver(Bpos.T[:,0], Bpos.T[:,1], Bpos.T[:,2], disps.T[:,0], disps.T[:,1], dis
 maxXAxis = np.max([Apos.max(), Bpos.max()]) + 1
 ax.set_xlim([-maxXAxis, maxXAxis])
 ax.set_ylim([-maxXAxis, maxXAxis])
+ax.set_zlim([-maxXAxis, maxXAxis])
 ax.set_aspect('equal')
 fig.savefig('DispLattice.png')
-
-# Plotting the Apos and Bposst overlayed
-fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
-#ax.scatter(Apos.T[:,0],Apos.T[:,1])
-for i,num in enumerate(atoms):
-    for j in range(num):
-        ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,1],Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,2], c="C%d"%(2*i))
-        ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,1],Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,2], c="C%d"%(2*i), alpha=0.5)
-    ax.scatter(Bposst.T[natB*num*i:natB*num*(i+1),0],Bposst.T[natB*num*i:natB*num*(i+1),1], Bposst.T[natB*num*i:natB*num*(i+1),2], alpha=0.5, c="C%d"%(2*i+1))
-maxXAxis = np.max([Apos.max(), Bposst.max()]) + 1
-ax.set_xlim([-maxXAxis, maxXAxis])
-ax.set_ylim([-maxXAxis, maxXAxis])
-ax.set_aspect('equal')
 
 # Displacement with stretching
 disps = Apos_map - Bposst
 
-#fig = plt.figure()
-#ax = fig.add_subplot(111, projection='3d')
-ax.quiver(Bposst.T[:,0], Bposst.T[:,1], Bposst.T[:,2], disps.T[:,0], disps.T[:,1], disps.T[:,2])
+fig = plt.figure()
+ax = Axes3D(fig)
 maxXAxis = np.max([Apos.max(), Bposst.max()]) + 1
 ax.set_xlim([-maxXAxis, maxXAxis])
 ax.set_ylim([-maxXAxis, maxXAxis])
+ax.set_zlim([-maxXAxis, maxXAxis])
 ax.set_aspect('equal')
-fig.savefig('DispLattice_stretched.png')
+
+# Plotting the Apos and Bposst overlayed
+def init_disps():
+    #ax.scatter(Apos.T[:,0],Apos.T[:,1])
+    for i,num in enumerate(atoms):
+        for j in range(num):
+            ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,1],Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,2], c="C%d"%(2*i))
+            ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,1],Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,2], c="C%d"%(2*i), alpha=0.5)
+        ax.scatter(Bposst.T[natB*num*i:natB*num*(i+1),0],Bposst.T[natB*num*i:natB*num*(i+1),1], Bposst.T[natB*num*i:natB*num*(i+1),2], alpha=0.5, c="C%d"%(2*i+1))
+    
+    ax.quiver(Bposst.T[:,0], Bposst.T[:,1], Bposst.T[:,2], disps.T[:,0], disps.T[:,1], disps.T[:,2])
+    fig.savefig('DispLattice_stretched.png')
+    return fig,
+
+init_disps()
+
+# anim = animation.FuncAnimation(fig, animate, init_func=init_disps,
+#                                frames=490, interval=30)
+
+# anim.save('Crystal+Disps.gif', fps=30, codec='gif')
+
 
 # Stretching Matrix
 stMat = la.inv(tr.canonicalize(Bcell)).dot(tr.canonicalize(tmat.dot(Bcell)))
@@ -320,24 +381,29 @@ print(stMat)
 print("Rotation Matrix:")
 print(rtMat)
 
-
 class_list, vec_classes = classify(disps)
 
-# Display the diffrent classes of displacement 
-for i in range(len(vec_classes)):
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    disps_class = disps[:,class_list==i]
-    Bposst_class = Bposst[:,class_list==i]
-    ax.quiver(Bposst_class.T[:,0], Bposst_class.T[:,1], Bposst_class.T[:,2], disps_class.T[:,0], disps_class.T[:,1], disps_class.T[:,2])
-    maxXAxis = np.max([Apos.max(), Bposst.max()]) + 1
-    ax.set_xlim([-maxXAxis, maxXAxis])
-    ax.set_ylim([-maxXAxis, maxXAxis])
-    ax.set_aspect('equal')
-    fig.savefig('DispLattice_stretched_%d.png'%i)
+# # Display the diffrent classes of displacement 
+# for i in range(len(vec_classes)):
+#     fig = plt.figure()
+#     ax = fig.add_subplot(111, projection='3d')
+#     disps_class = disps[:,class_list==i]
+#     Bposst_class = Bposst[:,class_list==i]
+#     ax.quiver(Bposst_class.T[:,0], Bposst_class.T[:,1], Bposst_class.T[:,2], disps_class.T[:,0], disps_class.T[:,1], disps_class.T[:,2], color="C0")
+#     ax.scatter(Bposst_class.T[:,0], Bposst_class.T[:,1], Bposst_class.T[:,2], alpha = 0.5, s=10, color="C0")
+#     maxXAxis = Bposst.max() + 1
+#     ax.set_xlim([-maxXAxis, maxXAxis])
+#     ax.set_ylim([-maxXAxis, maxXAxis])
+#     ax.set_zlim([-maxXAxis, maxXAxis])
+#     ax.set_aspect('equal')
+#     fig.savefig('DispLattice_stretched_%d.png'%i)
 
 # Centers the position on the first atom
 pos_in_struc = Bposst- Bposst[:,0:1].dot(np.ones((1,np.shape(Bposst)[1])))
+
+print("Showing")
+
+plt.show()
 
 cell = find_cell(class_list, Bposst)
 
@@ -372,27 +438,39 @@ print("Total displacement stretched cell:", Total_disp)
 # Displays displacement with the disp cell overlayed
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
-ax.quiver(pos_in_struc.T[:,0], pos_in_struc.T[:,1], pos_in_struc.T[:,2], disps.T[:,0], disps.T[:,1], disps.T[:,2])
-ax.quiver(np.zeros(2), np.zeros(2), np.zeros(2), cell[0,:], cell[1,:], cell[2,:])
+ax.quiver(pos_in_struc.T[:,0], pos_in_struc.T[:,1], pos_in_struc.T[:,2], disps.T[:,0], disps.T[:,1], disps.T[:,2], color = "C0")
+ax.scatter(pos_in_struc.T[:,0], pos_in_struc.T[:,1], pos_in_struc.T[:,2], s=10, color = "C0")
+ax.quiver(np.zeros(3), np.zeros(3), np.zeros(3), cell[0,:], cell[1,:], cell[2,:], color = "red")
 maxXAxis = pos_in_struc.max() + 1
 ax.set_xlim([-maxXAxis, maxXAxis])
 ax.set_ylim([-maxXAxis, maxXAxis])
+ax.set_zlim([-maxXAxis, maxXAxis])
 ax.set_aspect('equal')
 fig.savefig('DispLattice_stretched_cell_primittive.png')
 
 # Displays only the cell and the displacements in it
 fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
-for disp in Struc:
-    ax.quiver(disp.pos[0], disp.pos[1], disp.pos[2], vec_classes[int(disp.type)][0],vec_classes[int(disp.type)][1], vec_classes[int(disp.type)][2])
-ax.quiver(np.zeros(2), np.zeros(2), np.zeros(2), cell[0,:], cell[1,:], cell[2,:], color = "blue", alpha = 0.3)
-maxXAxis = cell.max() + 1
-ax.set_xlim([-maxXAxis, maxXAxis])
-ax.set_ylim([-maxXAxis, maxXAxis])
-ax.set_aspect('equal')
-fig.savefig('Displacement_structure.png')
+ax = Axes3D(fig)
+#ax = fig.add_subplot(111, projection='3d')
+
+def init_struc():
+    for i,disp in enumerate(Struc):
+        ax.quiver(disp.pos[0], disp.pos[1], disp.pos[2], vec_classes[int(disp.type)][0],vec_classes[int(disp.type)][1], vec_classes[int(disp.type)][2], color="C%d"%i)
+        ax.scatter(disp.pos[0], disp.pos[1], disp.pos[2], alpha = 0.5, s=10, color="C%d"%i)
+    ax.quiver(np.zeros(3), np.zeros(3), np.zeros(3), cell[0,:], cell[1,:], cell[2,:], color = "red", alpha = 0.3)
+    maxXAxis = cell.max() + 1
+    ax.set_xlim([-maxXAxis, maxXAxis])
+    ax.set_ylim([-maxXAxis, maxXAxis])
+    ax.set_zlim([-maxXAxis, maxXAxis])
+    ax.set_aspect('equal')
+    fig.savefig('Displacement_structure.png')
+    return fig,
+
+anim = animation.FuncAnimation(fig, animate, init_func=init_struc,
+                               frames=490, interval=30)
+
+anim.save('DispStruc.gif', fps=30, codec='gif')
+    
+plt.show()
 
 plt.close('All')
-    
-
-

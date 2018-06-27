@@ -91,7 +91,6 @@ module tiling
           do k=-nnz,nnz
              dist = norm(matmul(Acell,(/i+0.5d0,j+0.5d0,k+0.5d0/)))
              if (dist <= rad) then
-                print*, dist
                 if (l < ncell) l=l+1
                 if (l == 1) then
                    dists(1) = dist
