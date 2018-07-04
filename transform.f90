@@ -435,7 +435,13 @@ contains
          E ! position matrix
 
     double precision, intent(inout), dimension(3,3) :: &         
-         tmat     ! Translation vector
+         tmat     ! Transformation matrix
+
+    double precision, dimension(3,3) :: &         
+         ddet ! Determinant matrix (cofactor matrix)
+    
+    double precision, dimension(2,2) :: &         
+         ttmat ! Determinant matrix (similar to cofactor matrix)
 
     double precision, intent(inout), dimension(3,1) :: &         
          vec     ! Translation vector
@@ -448,7 +454,7 @@ contains
          dist_prev
 
     integer :: &
-         j ! Iterator
+         j, k, l ! Iterator
 
     double precision, parameter :: &
          tol = 1d-8
@@ -464,15 +470,38 @@ contains
 
        dist_prev = dist
        dist = sum(sqrt(sum((Apos - free_trans(Bpos,tmat,vec))**2,1)))
-
        
        E = Apos - free_trans(Bpos,tmat,vec)
+
+       print*, "ratio:", dist/det(tmat,3), dist, det(tmat,3)
 
        if (.not. sq) then
           E = E / spread(sqrt(sum(E**2,1)),1,3)
        endif
 
-       tmat = tmat + rate1*dist*matmul(E,transpose(Bpos))
+       do k=1,3
+          do l=1,3
+             ttmat(:k-1,:l-1) = tmat(:k-1,:l-1)
+             ttmat(:k-1,l:) = tmat(:k-1,l+1:)
+             ttmat(k:,:l-1) = tmat(k+1:,:l-1)
+             ttmat(k:,l:) = tmat(k+1:,l+1:)
+             !print*, "ttmat", k,l
+             !write(*,"(2(F5.3,X))") ttmat
+             ddet(k,l) = (1-modulo(K+l,2))*det(ttmat,2)
+          enddo
+       enddo
+       
+       !print*, "tmat"
+       !write(*,"(3(F5.3,X))") tmat
+
+       !print*, "ddet"
+       !write(*,"(3(F5.3,X))") ddet
+
+       ! tmat = tmat + rate1*dist*matmul(E,transpose(Bpos)) ! old
+       ! tmat = tmat + rate1*dist*( matmul(E,transpose(Bpos))/det(tmat,3)**(1.0d0/3.0d0) &
+       !     + 1.0d0/3.0d0*dist/det(tmat,3)**(4.0d0/3.0d0)*ddet) ! tmp cubic root version
+       tmat = tmat + rate1*dist*( matmul(E,transpose(Bpos))/det(tmat,3) &
+            + dist/det(tmat,3)**2*ddet) ! tmp 
        vec = vec + rate2*dist*matmul(E,ones)
 
     enddo
@@ -800,7 +829,7 @@ contains
 
        write(*,*) "Unstretched distance:", sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt, rot_mat(angles), vec_rot))**2,1)))
 
-       call analytical_gd_free(tmat, vec, Apos_mapped, Bpos_opt,.true., n_ana*100, rate1, rate2)
+       call analytical_gd_free(tmat, vec, Apos_mapped, Bpos_opt,.false., n_ana*100, rate1, rate2)
        
        
     enddo

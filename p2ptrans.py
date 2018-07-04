@@ -240,49 +240,56 @@ else:
 fracB = 0.4
 fracA = 0.15 # fracA < fracB
 
-# TMP %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
-# Slanting
-tt = 30/360.*2*np.pi
-ph = 90/360.*2*np.pi
-sg = 90/360.*2*np.pi
+# # TMP %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
+# # Slanting
+# tt = 20/360.*2*np.pi
+# ph = 90/360.*2*np.pi
+# sg = 90/360.*2*np.pi
 
-v2 = np.array([np.cos(ph + np.pi/2)*np.cos(tt), np.cos(ph + np.pi/2)*np.sin(tt), np.sin(ph + np.pi/2)])
-v3 = np.array([np.cos(tt + np.pi/2),np.sin(tt + np.pi/2),0])
-vM = np.array([[np.cos(ph)*np.cos(tt), np.cos(ph)*np.sin(tt), np.sin(ph)], 
-               np.cos(sg)*v2 + np.sin(sg)*v3,
-               np.cos(sg + np.pi/2)*v2 + np.sin(sg + np.pi/2)*v3])
-k = 1.5
-tM = np.array([[1, k, 0], [0,1,0], [0,0,1]])
+# v2 = np.array([np.sin(ph + np.pi/2)*np.cos(tt), np.sin(ph + np.pi/2)*np.sin(tt), np.cos(ph + np.pi/2)])
+# v3 = np.array([np.cos(tt + np.pi/2),np.sin(tt + np.pi/2),0])
+# vM = np.array([[np.sin(ph)*np.cos(tt), np.sin(ph)*np.sin(tt), np.cos(ph)], 
+#                np.cos(sg)*v2 + np.sin(sg)*v3,
+#                np.cos(sg + np.pi/2)*v2 + np.sin(sg + np.pi/2)*v3]).T
 
-Aslant = la.inv(vM).dot(tM).dot(vM).dot(Apos)
+# vM = 10.*vM
+# for i in range(20):
+#     k = i/20 * 6. - 3.
+#     tM = np.array([[1, k, 0], [0,1,0], [0,0,1]])
 
-fig = plt.figure(31)
-ax = fig.add_subplot(111, projection='3d')
-ax.scatter(Aslant[0,:], Aslant[1,:], Aslant[2,:])
-ax.quiver([0],[0],[0],vM[0], vM[1], vM[2])
-maxXAxis = np.max(Aslant.max()) + 1
-ax.set_xlim([-maxXAxis, maxXAxis])
-ax.set_ylim([-maxXAxis, maxXAxis])
-ax.set_zlim([-maxXAxis, maxXAxis])
-ax.set_aspect('equal')
-ax.view_init(-90,0)
+#     Aslant = vM.dot(tM).dot(la.inv(vM)).dot(Apos)
 
-fig = plt.figure(32)
-ax = fig.add_subplot(111, projection='3d')
-ax.scatter(Apos[0,:], Apos[1,:], Apos[2,:])
-ax.view_init(-90,0)
+#     fig = plt.figure(31)
+#     ax = fig.add_subplot(111, projection='3d')
+#     ax.scatter(Aslant[0,:], Aslant[1,:], Aslant[2,:])
+#     ax.quiver([0],[0],[0],vM[0,0], vM[1,0], vM[2,0])
+#     ax.quiver([0],[0],[0],vM[0,1], vM[1,1], vM[2,1], color="r")
+#     ax.quiver([0],[0],[0],vM[0,2], vM[1,2], vM[2,2], color="g")
+#     maxXAxis = np.max(Aslant.max()) + 1
+#     maxXAxis = 15.0
+#     ax.set_xlim([-maxXAxis, maxXAxis])
+#     ax.set_ylim([-maxXAxis, maxXAxis])
+#     ax.set_zlim([-maxXAxis, maxXAxis])
+#     ax.set_aspect('equal')
+#     ax.view_init(-90,0)
+#     fig.savefig("slanting_%d.png"%i)
 
-plt.show()
-raise
+#     fig = plt.figure(32)
+#     ax = fig.add_subplot(111, projection='3d')
+#     ax.scatter(Apos[0,:], Apos[1,:], Apos[2,:])
+#     ax.view_init(-90,0)
 
-# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# plt.show()
+# raise
+
+# # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
 
 Apos = np.asfortranarray(Apos)
 Bpos = np.asfortranarray(Bpos) 
 t_time = time.time()
-# Apos_map, Bpos, Bposst, n_map, tmat, dmin = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell, la.inv(Acell), atoms, 1, 300, 5, 5, 1e-6, 1e-6)
+Apos_map, Bpos, Bposst, n_map, tmat, dmin = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell, la.inv(Acell), atoms, 1, 300, 5, 1, 1e-6, 1e-6)
 t_time = time.time() - t_time
 Bpos = np.asanyarray(Bpos)
 Apos = np.asanyarray(Apos)
