@@ -104,13 +104,30 @@ def gcd(x, y):
 random = False
 
 # Eventually this can be from pcread
+
+# Multiple atoms example
+# A = Structure(np.identity(3))
+# A.add_atom(0,0,0,'Si')
+# A.add_atom(0.1,0.1,0,'Be')
+
+# B = Structure(np.array([[1.1,0,0],[1.1,1.5,0],[0,0,1]]).T)
+# B.add_atom(0,0,0,'Si')
+# B.add_atom(0.6,0.3,0,'Be')
+
+# The calssic
+# A = Structure(np.identity(3))
+# A.add_atom(0,0,0,'Si')
+
+# B = Structure(np.array([[-1.0,1.0,0],[0.5,0.5,0],[0,0,1]]).T)
+# B.add_atom(0,0,0,'Si')
+
+# Classification classic
 A = Structure(np.identity(3))
 A.add_atom(0,0,0,'Si')
-A.add_atom(0.1,0.1,0,'Be')
 
-B = Structure(np.array([[1.1,0,0],[1.1,1.5,0],[0,0,1]]).T)
+B = Structure(np.array([[0.7,0,0],[0.3,0.5,0],[0,0,1]]).T)
 B.add_atom(0,0,0,'Si')
-B.add_atom(0.6,0.3,0,'Be')
+
 
 mul = lcm(len(A),len(B))
 mulA = mul//len(A)
@@ -124,7 +141,7 @@ if mulA*la.det(A.cell) < mulB*la.det(B.cell):
     A = tmp
     mulA = tmpmul
 
-ncell = 250
+ncell = 200
 
 # Setting the unit cells of A and B
 Acell = A.cell[:2,:2]
@@ -137,7 +154,7 @@ ax.quiver(np.ones(3), np.ones(3), Bcell[0,:], Bcell[1,:])
 ax.quiver(-np.ones(3), -np.ones(3), Acell[0,:], Acell[1,:])
 ax.set_xlim([-5, 5])
 ax.set_ylim([-5, 5])
-fig.savefig('CellVectors.png')
+fig.savefig('CellVectors.svg')
 
 
 ASC = t.circle(Acell, mulA * ncell)
@@ -146,24 +163,24 @@ BSC = t.circle(Bcell, mulB * ncell)
 # Plot gamma points of each A cell
 fig = plt.figure()
 ax = fig.add_subplot(111)
-ax.scatter(ASC[0,:], ASC[1,:])
+ax.scatter(ASC[0,:], ASC[1,:], c='k')
 maxXAxis = np.max([ASC[0,:].max(),ASC[1,:].max()])
 minXAxis = np.min([ASC[0,:].min(),ASC[1,:].min()])
 ax.set_xlim([minXAxis-1, maxXAxis+1])
 ax.set_ylim([minXAxis-1, maxXAxis+1])
 ax.set_aspect('equal')
-fig.savefig('Agrid.png')
+fig.savefig('Agrid.svg')
 
 # Plot gamma points of each B cell
 fig = plt.figure()
 ax = fig.add_subplot(111)
-ax.scatter(BSC[0,:], BSC[1,:])
+ax.scatter(BSC[0,:], BSC[1,:], facecolor='w', edgecolor='k')
 maxXAxis = np.max([BSC[0,:].max(),BSC[1,:].max()])
 minXAxis = np.min([BSC[0,:].min(),BSC[1,:].min()])
 ax.set_xlim([minXAxis-1, maxXAxis+1])
 ax.set_ylim([minXAxis-1, maxXAxis+1])
 ax.set_aspect('equal')
-fig.savefig('Bgrid.png')
+fig.savefig('Bgrid.svg')
 
 # For testing purposes
 if random:
@@ -229,22 +246,22 @@ Acell_tmp[:2,:2] = Acell
 
 Apos = np.asfortranarray(Apos)
 Bpos = np.asfortranarray(Bpos) 
-t_time = time.time()
-Apos_map, Bpos, Bposst, n_map, tmat, dmin = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell_tmp, la.inv(Acell_tmp), atoms, 1000, 100, 4, 6, 5e-7, 5e-7) #TMP
-t_time = time.time() - t_time
-Bpos = np.asanyarray(Bpos)
-Apos = np.asanyarray(Apos)
+# t_time = time.time()
+# Apos_map, Bpos, Bposst, n_map, tmat, dmin = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell_tmp, la.inv(Acell_tmp), atoms, 1000, 100, 4, 6, 5e-7, 5e-7) #TMP
+# t_time = time.time() - t_time
+# Bpos = np.asanyarray(Bpos)
+# Apos = np.asanyarray(Apos)
 
-print(dmin)
-print("Mapping time:", t_time)
+# print(dmin)
+# print("Mapping time:", t_time)
 
-pickle.dump((Apos_map, Bpos, Bposst, n_map, tmat, dmin), open("fastoptimization.dat","wb"))
+# pickle.dump((Apos_map, Bpos, Bposst, n_map, tmat, dmin), open("fastoptimization.dat","wb"))
 
-# # TMP for testing only -->
-# tr.center(Apos)
-# tr.center(Bpos)
-# Apos_map, Bpos, Bposst, n_map, tmat, dmin = pickle.load(open("fastoptimization.dat","rb"))
-# # <--  
+# TMP for testing only -->
+tr.center(Apos)
+tr.center(Bpos)
+Apos_map, Bpos, Bposst, n_map, tmat, dmin = pickle.load(open("fastoptimization.dat","rb"))
+# <--  
 
 Apos = Apos[:2,:]
 Bpos = Bpos[:,:n_map]
@@ -280,7 +297,7 @@ maxXAxis = np.max([Apos.max(), Bpos.max()]) + 1
 ax.set_xlim([-maxXAxis, maxXAxis])
 ax.set_ylim([-maxXAxis, maxXAxis])
 ax.set_aspect('equal')
-fig.savefig('DispLattice.png')
+fig.savefig('DispLattice.svg')
 
 # Plotting the Apos and Bposst overlayed
 fig = plt.figure()
@@ -306,7 +323,7 @@ maxXAxis = np.max([Apos.max(), Bposst.max()]) + 1
 ax.set_xlim([-maxXAxis, maxXAxis])
 ax.set_ylim([-maxXAxis, maxXAxis])
 ax.set_aspect('equal')
-fig.savefig('DispLattice_stretched.png')
+fig.savefig('DispLattice_stretched.svg')
 
 # Stretching Matrix
 Acell3d = np.identity(3) # TMP only for 2D
@@ -343,7 +360,7 @@ for i in range(len(vec_classes)):
     ax.set_xlim([-maxXAxis, maxXAxis])
     ax.set_ylim([-maxXAxis, maxXAxis])
     ax.set_aspect('equal')
-    fig.savefig('DispLattice_stretched_%d.png'%i)
+    fig.savefig('DispLattice_stretched_%d.svg'%i)
 
 # Centers the position on the first atom
 pos_in_struc = Bposst- Bposst[:,0:1].dot(np.ones((1,np.shape(Bposst)[1])))
@@ -373,6 +390,7 @@ Total_disp = Total_disp / la.det(Struc.cell)
 
 cell = Struc.cell
 
+
 print("Displacement Lattice")
 print(cell)
 
@@ -388,7 +406,7 @@ maxXAxis = pos_in_struc.max() + 1
 ax.set_xlim([-maxXAxis, maxXAxis])
 ax.set_ylim([-maxXAxis, maxXAxis])
 ax.set_aspect('equal')
-fig.savefig('DispLattice_stretched_cell_primittive.png')
+fig.savefig('DispLattice_stretched_cell_primittive.svg')
 
 # Displays only the cell and the displacements in it
 fig = plt.figure()
@@ -396,11 +414,11 @@ ax = fig.add_subplot(111)
 for disp in Struc:
     ax.quiver(disp.pos[0],disp.pos[1], vec_classes[int(disp.type)][0],vec_classes[int(disp.type)][1], scale_units='xy', scale=1)
 ax.quiver(np.zeros(2), np.zeros(2), cell[0,:2], cell[1,:2], scale_units='xy', scale=1, color = "blue", alpha = 0.3)
-maxXAxis = cell.max() + 1
+maxXAxis = abs(cell).max() + 1
 ax.set_xlim([-maxXAxis, maxXAxis])
 ax.set_ylim([-maxXAxis, maxXAxis])
 ax.set_aspect('equal')
-fig.savefig('Displacement_structure.png')
+fig.savefig('Displacement_structure.svg')
 
 plt.close('All')
     
