@@ -19,7 +19,11 @@ module transform
        cost_map, &
        analytical_gd_rot, &
        analytical_gd_free, &
+       analytical_gd_slant, &
        gradient_descent_explore
+
+  double precision, parameter :: &
+       pi = 3.141592653589793d0
 
 contains
 
@@ -279,7 +283,130 @@ contains
        enddo
     endif
   end function det
-  
+
+  subroutine analytical_gd_slant(slant, vec, Apos, Bpos, n_iter, rate1, rate2)
+
+    integer, intent(in) :: &
+         n_iter ! Number of atoms
+
+    double precision, intent(in) :: &
+         rate1, & ! Rate for angles
+         rate2    ! Rate for disp
+
+    double precision, intent(in), dimension(:,:) :: &
+         Apos, &
+         Bpos ! Bpos ordered according to the mapping
+
+    double precision, intent(out), dimension(3,3) :: &         
+         slant     ! Transformation matrix
+
+    double precision, intent(inout), dimension(3,1) :: &         
+         vec       ! Translation vector
+
+    double precision, dimension(3,size(Bpos,2)) :: &
+         E ! position matrix
+
+    double precision, dimension(3,1) :: &         
+         v1, v2, & ! Vectors of the plane of slanting
+         dv1d1, &  ! Derivative of the plane vector
+         dv1d2, &
+         dv2d1, &
+         dv2d2, &
+         dv2d3
+
+    double precision, dimension(3) :: &
+         angles    ! 3 vectors of the rotation: 1. angle of rotation 2&3. Spherical angles of the axis of rotation
+
+    double precision, dimension(3,3) :: &
+         M1, M2, M3, Mk
+
+    double precision, dimension(size(Bpos,2),1) :: &
+         ones
+
+    double precision :: &
+         dist, &
+         dist_prev, &
+         s1, s2, s3, & ! Sine of angles
+         c1, c2, c3, & ! Cosine of angles
+         k ! Slanting factor
+
+    integer :: &
+         i, j ! Iterator
+
+    double precision, parameter :: &
+         tol = 1d-10
+
+    ones = 1.0d0
+
+    call init_random_seed()
+
+    ! call random_number(angles)
+
+    ! angles = (/0.0d0, pi/2.0d0, pi/2.0d0/) 
+
+    angles = 0.0d0
+
+    k = 1.0d0
+
+    slant = eye()
+    dist = 0
+    dist_prev = tol+1
+
+    j=0
+    do while (j < n_iter .and. abs(dist - dist_prev) > tol)
+       j=j+1
+
+       s1 = sin(angles(1))
+       s2 = sin(angles(2))
+       s3 = sin(angles(3))
+       c1 = cos(angles(1))
+       c2 = cos(angles(2))
+       c3 = cos(angles(3))
+
+       v1 = reshape((/s2*c1, s2*s1, c2/),(/3,1/))
+
+       v2 = reshape((/s3*c2*c1-c3*s1, &
+            s3*c2*s1+c3*c1, &
+            -s3*s2/),(/3,1/))       
+
+       dv1d1 = reshape((/-s2*s1, s2*c1, 0.0d0/),(/3,1/))
+       dv1d2 = reshape((/c2*c1, c2*s1, -s2/),(/3,1/))
+
+       dv2d1 = reshape((/-s3*c2*s1 - c3*c1, &
+               s3*c2*c1 - c3*s1, &
+               0.0d0/),(/3,1/))
+       dv2d2 = reshape((/-s3*s2*c1, &
+               -s3*s2*s1, &
+               -s3*c2/),(/3,1/))
+       dv2d3 = reshape((/c3*c2*c1 + s3*s1, &
+               c3*c2*s1 - s3*c1, &
+               -c3*s2/),(/3,1/))
+
+       slant = k*matmul(v1,transpose(v2)) + eye()
+
+       dist_prev = dist
+       dist = sum(sqrt(sum((Apos - free_trans(Bpos,slant,vec))**2,1)))
+
+       E = Apos - free_trans(Bpos,slant,vec)
+       E = E / spread(sqrt(sum(E**2,1)),1,3)
+
+       M1 = k * (matmul(dv1d1,transpose(v2)) + matmul(v1, transpose(dv2d1))) 
+       M2 = k * (matmul(dv1d2,transpose(v2)) + matmul(v1, transpose(dv2d2)))
+       M3 = k * (matmul(v1, transpose(dv2d3)))
+       Mk = matmul(v1,transpose(v2))
+
+       angles(1) = angles(1) + rate1 * dist * sum(matmul(E,transpose(Bpos)) * M1)
+       angles(2) = angles(2) + rate1 * dist * sum(matmul(E,transpose(Bpos)) * M2)
+       angles(3) = angles(3) + rate1 * dist * sum(matmul(E,transpose(Bpos)) * M3)
+       k = k + rate1 * 0.01 * dist * sum(matmul(E,transpose(Bpos)) * Mk)
+       vec = vec + rate2 * dist * matmul(E,ones)
+       
+    enddo
+
+    print*, dist
+
+  end subroutine analytical_gd_slant  
+
   subroutine analytical_gd_rot(angles, vec, Apos, Bpos, n_iter, rate1, rate2)
 
     integer, intent(in) :: &
@@ -405,7 +532,7 @@ contains
 
        M1 = P1 - (eye() - P1)*sin(angles(1)) + Q1*cos(angles(1))
               
-       Angles(1) = angles(1) + rate1 * dist * sum(matmul(E,transpose(Bpos)) * M1)
+       angles(1) = angles(1) + rate1 * dist * sum(matmul(E,transpose(Bpos)) * M1)
        angles(2) = angles(2) + rate1 * dist * sum(matmul(E,transpose(Bpos)) * M2)
        angles(3) = angles(3) + rate1 * dist * sum(matmul(E,transpose(Bpos)) * M3)
        vec = vec + rate2 * dist * matmul(E,ones)
@@ -473,23 +600,21 @@ contains
        
        E = Apos - free_trans(Bpos,tmat,vec)
 
-       print*, "ratio:", dist/det(tmat,3), dist, det(tmat,3)
-
        if (.not. sq) then
           E = E / spread(sqrt(sum(E**2,1)),1,3)
        endif
 
-       do k=1,3
-          do l=1,3
-             ttmat(:k-1,:l-1) = tmat(:k-1,:l-1)
-             ttmat(:k-1,l:) = tmat(:k-1,l+1:)
-             ttmat(k:,:l-1) = tmat(k+1:,:l-1)
-             ttmat(k:,l:) = tmat(k+1:,l+1:)
-             !print*, "ttmat", k,l
-             !write(*,"(2(F5.3,X))") ttmat
-             ddet(k,l) = (1-modulo(K+l,2))*det(ttmat,2)
-          enddo
-       enddo
+       ! do k=1,3
+       !    do l=1,3
+       !       ttmat(:k-1,:l-1) = tmat(:k-1,:l-1)
+       !       ttmat(:k-1,l:) = tmat(:k-1,l+1:)
+       !       ttmat(k:,:l-1) = tmat(k+1:,:l-1)
+       !       ttmat(k:,l:) = tmat(k+1:,l+1:)
+       !       !print*, "ttmat", k,l
+       !       !write(*,"(2(F5.3,X))") ttmat
+       !       ddet(k,l) = (1-modulo(K+l,2))*det(ttmat,2)
+       !    enddo
+       ! enddo
        
        !print*, "tmat"
        !write(*,"(3(F5.3,X))") tmat
@@ -497,11 +622,11 @@ contains
        !print*, "ddet"
        !write(*,"(3(F5.3,X))") ddet
 
-       ! tmat = tmat + rate1*dist*matmul(E,transpose(Bpos)) ! old
+       tmat = tmat + rate1*dist*matmul(E,transpose(Bpos)) ! old
        ! tmat = tmat + rate1*dist*( matmul(E,transpose(Bpos))/det(tmat,3)**(1.0d0/3.0d0) &
        !     + 1.0d0/3.0d0*dist/det(tmat,3)**(4.0d0/3.0d0)*ddet) ! tmp cubic root version
-       tmat = tmat + rate1*dist*( matmul(E,transpose(Bpos))/det(tmat,3) &
-            + dist/det(tmat,3)**2*ddet) ! tmp 
+       ! tmat = tmat + rate1*dist*( matmul(E,transpose(Bpos))/det(tmat,3) &
+       !      + dist/det(tmat,3)**2*ddet) ! tmp 
        vec = vec + rate2*dist*matmul(E,ones)
 
     enddo
@@ -765,10 +890,15 @@ contains
     double precision, intent(out), dimension(3,3) :: &
          tmat ! Transformation matrix
 
+    double precision, dimension(3,3) :: &
+         slant, & ! Transformation matrix
+         testmat
+
     double precision, &
          dimension(3,int(fracB*size(Apos,2)/sum(atoms))*sum(atoms)) :: &
          Apos_mapped, Bpos_opt, &
          tBpos_opt, &
+         rBpos_opt, &
          Bpos_opt_stretch ! position matrix
 
     integer :: &
@@ -791,8 +921,6 @@ contains
     !      fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2)
 
     angles = (/ 0.0d0, 0.0d0, 0.0d0 /)
-
-    ! TODO: DESLANTING?
 
     vec = (/ 0.25d0, 0.25d0, 0.0d0 /)
 
@@ -834,15 +962,47 @@ contains
        
     enddo
 
-    ! call analytical_gd_free(tmat, vec, Apos_mapped, Bpos_opt,.true., n_ana*100, rate1, rate2)
-    
+    ! ! Testing TMP
+    ! testmat = reshape((/ 1.0d0, 1/sqrt(50.0d0), 0.0d0, &
+    !      0.0d0, 1.0d0, 0.0d0, &
+    !      0.0d0, 0.0d0, 1.0d0/), (/3,3/))
+
+    ! testmat = matmul(matmul(rot_mat((/ -pi/4.0d0 , 0.0d0, 0.0d0 /)), testmat), &
+    !      transpose(rot_mat((/ -pi/4.0d0 , 0.0d0, 0.0d0 /))))
+
+    ! tmat = testmat
+
+    rBpos_opt = free_trans(Bpos_opt, rot_mat(angles), vec_rot)
+
+    do i=1, n_adjust
+
+       tBpos_opt = free_trans(Bpos_opt, tmat, (/0.0d0,0.0d0,0.0d0/))
+
+       angles = 0.0d0
+
+       call analytical_gd_rot(angles, vec_rot, rBpos_opt, tBpos_opt, &
+            n_ana*1000, rate1, rate2)
+
+       tBpos_opt = free_trans(tBpos_opt, rot_mat(angles), (/0.0d0,0.0d0,0.0d0/))
+
+       tmat = matmul(rot_mat(angles), tmat)
+
+       call analytical_gd_slant(slant, vec, rBpos_opt, tBpos_opt, n_ana*1000, rate1, rate2)
+       
+       tmat = matmul(slant, tmat)
+       
+    enddo
+
+    write(*,*) "Final tmat"
+    write(*,"(3(F7.3,X))") tmat
+
     ! ! Recenter
     ! vec = vec + sum(free_trans(Bpos_opt,rot_mat(angles),vec) - Apos_mapped,2) / n_out
     
-    Bpos_opt_stretch = free_trans(Bpos_opt,tmat,vec)
+    Bpos_opt_stretch = free_trans(tBpos_opt,slant,vec)
 
-    Bpos_opt = free_trans(Bpos_opt,rot_mat(angles),vec_rot)
-    
+    Bpos_opt = rBpos_opt
+
     Bpos_out(:,1:n_out) = Bpos_opt
     Bpos_out_stretch(:,1:n_out) = Bpos_opt_stretch
     Apos_out(:,1:n_out) = Apos_mapped

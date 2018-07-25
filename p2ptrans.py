@@ -318,6 +318,7 @@ natA = int(fracA*np.shape(Apos)[1]/np.sum(atoms))
 # Plotting the Apos and Bpos overlayed
 fig = plt.figure(22)
 ax = fig.add_subplot(111, projection='3d')
+ax.view_init(90,0) # TMP
 #ax.scatter(Apos.T[:,0],Apos.T[:,1])
 for i,num in enumerate(atoms):
     for j in range(num):
@@ -349,6 +350,7 @@ disps = Apos_map - Bposst
 
 fig = plt.figure()
 ax = Axes3D(fig)
+ax.view_init(90,0) # TMP
 maxXAxis = np.max([Apos.max(), Bposst.max()]) + 1
 ax.set_xlim([-maxXAxis, maxXAxis])
 ax.set_ylim([-maxXAxis, maxXAxis])
