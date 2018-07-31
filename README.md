@@ -3,7 +3,7 @@
 
 p2ptrans returns (1) the transformation lattice between the 2 structures (from the smallest volume to the largest) and (2) the transformation matrix applied to the smallest lattice  
 
-Installation:
+To install:
 
     git clone https://github.com/ftherrien/p2ptrans.git
     cd p2ptrans
@@ -11,7 +11,7 @@ Installation:
 
 To execute:
 
-   python p2ptrans.py -I POSCAR_A -F POSCAR_B
+    python p2ptrans.py -I POSCAR_A -F POSCAR_B
 
 Other options:
 
