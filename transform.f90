@@ -1240,8 +1240,8 @@ contains
     call center(Bpos,nb)
     call center(Apos,na)
 
-    ! call gradient_descent_explore(angles, vec, Apos, Bpos, Acell, iAcell, &
-    !      fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2)
+    call gradient_descent_explore(angles, vec, Apos, Bpos, Acell, iAcell, &
+         fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2)
 
     angles = (/ 0.0d0, 0.0d0, 0.0d0 /)
 
