@@ -15,15 +15,25 @@ To execute:
 
 Other options:
 
-optional arguments:
-`-`h, --help                  Show a help message and exit
-`-`I A, --initial A           Initial Structure
-`-`F B, --final B             Final Structure
-`-`n NCELL, --ncell NCELL     Number of cells to tile
-`-`a FRACA, --fracA FRACA     Fraction of the biggest structure to force to use in mapping (fracA < fracB)
-`-`b FRACB, --fracB FRACB     Fraction of the smallest structure to force to use in mapping
-`-`r NITER, --niter NITER     Number of (r)andom starts
-`-`g NANA, --nana NANA        Number of iteration in (g)radient descent
-`-`m REMAP, --remap REMAP     Number of re-(m)apping
-`-`s ADJUST, --adjust ADJUST  Number of (s)cale adjusting steps
-`-`d, --display               Unable interactive display
+
+`-h`, `--help`    Show a help message and exit
+
+`-I`, `--initial` Initial Structure
+
+`-F`, `--final`   Final Structure
+
+`-n`, `--ncell`   Number of cells to tile
+
+`-a`, `--fracA`   Fraction of the biggest structure to force to use in mapping (fracA < fracB)
+
+`-b`, `--fracB`   Fraction of the smallest structure to force to use in mapping
+
+`-r`, `--niter`   Number of (r)andom starts
+
+`-g`, `--nana`    Number of iteration in (g)radient descent
+
+`-m`, `--remap`   Number of re-(m)apping
+
+`-s`, `--adjust`  Number of (s)cale adjusting steps
+
+`-d`, `--display` Unable interactive display
