@@ -20,7 +20,10 @@ module transform
        analytical_gd_rot, &
        analytical_gd_free, &
        analytical_gd_slant, &
-       gradient_descent_explore
+       gradient_descent_explore, &
+       classify, &
+       ! minimize_classes, &
+       pi
 
   double precision, parameter :: &
        pi = 3.141592653589793d0
@@ -98,6 +101,63 @@ contains
     R = P + (eye() - P)*cos(angles(1)) + Q*sin(angles(1))
 
   end function rot_mat
+
+  subroutine classify(n, n_classes, classes_list, disps, tol)
+
+    double precision, intent(in), dimension(:,:) :: &
+         disps
+
+    double precision, dimension(size(disps,1),size(disps,2)) :: &
+         classes
+
+    integer, intent(out), dimension(size(disps,2)) :: &
+         classes_list
+
+    double precision, intent(in) :: &
+         tol
+         
+    integer, intent(out), dimension(size(disps,2)) :: &
+         n_classes
+    
+    integer, intent(out) :: &
+         n
+
+    logical :: &
+         classified
+
+    integer :: &
+         i,j
+
+    classes(:,1) = disps(:,1)
+    n_classes = 1
+    n = 1
+    classes_list = 1
+    do i=2,size(disps,2)
+       classified = .false.
+       do j=1,n
+          ! if (abs(norm(classes(:,j)) - &
+          !      dot_product(classes(:,j), disps(:,i)) / norm(classes(:,j))) < tol & 
+          !      .and. norm(classes(:,j))**2*norm(disps(:,i))**2 - &
+          !      dot_product(classes(:,j), disps(:,i))/norm(classes(:,j)) < tol) then
+
+          if (norm(classes(:,j) - disps(:,i)) < tol) then
+
+             classes(:,j) = (n_classes(j)*classes(:,j) + disps(:,i)) / (n_classes(j) + 1)
+             n_classes(j) = n_classes(j) + 1
+             classes_list(i) = j
+             classified = .true.
+             exit
+          endif
+       enddo
+
+       if (.not. classified) then
+        n = n + 1    
+        classes(:,n) = disps(:,i)
+        classes_list(i) = n
+       endif
+  enddo
+
+  end subroutine classify
 
   subroutine canonicalize(can_mat,tmat)
 
@@ -283,6 +343,141 @@ contains
        enddo
     endif
   end function det
+
+  ! subroutine minimize_classes(tmat, vec, Apos, Bpos, n_iter, rate1, rate2)
+  !   integer, intent(in) :: &
+  !        n_iter ! Number of atoms
+
+  !   double precision, intent(in) :: &
+  !        rate1, & ! Rate for angles
+  !        rate2    ! Rate for disp
+
+  !   double precision, intent(in), dimension(:,:) :: &
+  !        Apos, &
+  !        Bpos ! Bpos ordered according to the mapping
+
+  !   double precision, intent(inout), dimension(3,3) :: &         
+  !        tmat     ! Transformation matrix
+
+  !   double precision, dimension(3,3) :: &         
+  !        tmat_tmp, &
+  !        tmat_grad
+
+  !   double precision, intent(inout), dimension(3) :: &         
+  !        vec       ! Translation vector
+    
+  !       double precision, dimension(3) :: &         
+  !        vec_tmp, &
+  !        vec_grad
+
+  !   integer :: &
+  !        i, j, k, l, & ! Iterator
+  !        n_class, &
+  !        n_class_cur
+
+  !   double precision, parameter :: &
+  !        tol = 1d-3, &
+  !        dt = 1d-5, &
+  !        n_ex = 100
+
+  !   call init_random_seed()
+
+  !   do i=1,n_iter
+  !      do j=1,3
+  !         do k = 1,3
+  !            tmat_tmp = tmat
+  !            l = 0
+  !            do while (n_class_cur >= n_class .and. l < n_ex)  
+  !               l=l+1             
+  !               tmat_tmp(j,k) = tmat_tmp(j,k) + dt 
+  !               n_class_cur = classify(Apos - free_trans(Bpos,tmat_tmp,vec), tol)
+  !               print*, l, n_class_cur - n_class
+  !            enddo
+  !            if (n_class_cur < n_class) then
+  !               tmat = tmat_tmp
+  !               n_class = n_class_cur
+  !            else
+  !               tmat_tmp = tmat
+  !               l = 0
+  !               do while (n_class_cur >= n_class .and. l < n_ex)  
+  !                  l=l+1             
+  !                  tmat_tmp(j,k) = tmat_tmp(j,k) - dt 
+  !                  n_class_cur = classify(Apos - free_trans(Bpos,tmat_tmp,vec), tol)
+  !                  print*, -l, n_class_cur - n_class
+  !               enddo
+  !               if (n_class_cur < n_class) then
+  !                  tmat = tmat_tmp
+  !                  n_class = n_class_cur
+  !               endif
+  !            endif
+  !         enddo
+  !      enddo
+
+  !      ! do k = 1,3
+  !      !    vec_tmp = vec 
+  !      !    vec_tmp(k) = vec(k) + dt 
+  !      !    vec_grad(k) = (classify(Apos - free_trans(Bpos,tmat,vec_tmp),tol) &
+  !      !         - classify(Apos - free_trans(Bpos,tmat,vec),tol)) / dt
+  !      ! enddo
+
+  !      ! tmat = tmat - rate1 * tmat_grad
+  !      ! vec = vec - rate2 * vec_grad
+
+  !      print*, classify(Apos - free_trans(Bpos,tmat,vec_tmp),tol)
+
+
+  !      ! do j=1,3
+  !      !    do k = 1,3
+  !      !       tmat_tmp = tmat 
+  !      !       tmat_tmp(j,k) = tmat(j,k) + dt 
+  !      !       tmat_grad(j,k) = (classify(Apos - free_trans(Bpos,tmat_tmp,vec), tol) &
+  !      !            - classify(Apos - free_trans(Bpos,tmat,vec),tol)) / dt
+  !      !    enddo
+  !      ! enddo
+
+  !      ! do k = 1,3
+  !      !    vec_tmp = vec 
+  !      !    vec_tmp(k) = vec(k) + dt 
+  !      !    vec_grad(k) = (classify(Apos - free_trans(Bpos,tmat,vec_tmp),tol) &
+  !      !         - classify(Apos - free_trans(Bpos,tmat,vec),tol)) / dt
+  !      ! enddo
+
+  !      ! print*, "TMAT GRAD"
+  !      ! write(*,"(3(F10.5,X))") rate1 * tmat_grad
+  !      ! print*, "VEC GRAD"
+  !      ! write(*,"(3(F10.5,X))") rate2 * vec_grad
+
+  !      ! tmat = tmat - rate1 * tmat_grad
+  !      ! vec = vec - rate2 * vec_grad
+
+  !      ! print*, classify(Apos - free_trans(Bpos,tmat,vec_tmp),tol)
+
+  !   !    call random_number(tmat_grad)
+  !   !    tmat_grad = 0.1 * rate1 * tmat_grad
+
+  !   !    write(*,"(3(E10.5,X))") tmat_grad
+  !   !    print*, classify(Apos - free_trans(Bpos,tmat+tmat_grad,vec),tol)
+
+  !   !    if (classify(Apos - free_trans(Bpos,tmat+tmat_grad,vec),tol) < &
+  !   !         classify(Apos - free_trans(Bpos,tmat,vec),tol)) then
+  !   !       tmat = tmat + tmat_grad
+  !   !    endif
+
+  !   !    call random_number(vec_grad)
+  !   !    vec_grad = rate2 * vec_grad
+
+  !   !    if (classify(Apos - free_trans(Bpos,tmat,vec + vec_grad),tol) < &
+  !   !         classify(Apos - free_trans(Bpos,tmat,vec),tol)) then
+  !   !       vec = vec + vec_grad
+  !   !    endif
+
+  !   !    print*, classify(Apos - free_trans(Bpos,tmat,vec),tol)
+
+  !   enddo
+
+    
+
+  ! end subroutine minimize_classes
 
   subroutine analytical_gd_slant(slant, vec, Apos, Bpos, n_iter, rate1, rate2)
 
@@ -633,6 +828,111 @@ contains
 
   end subroutine analytical_gd_free
   
+  subroutine analytical_gd_std(std, tmat, vec, Apos, Bpos, n_classes, classes, n_iter, rate1, rate2)
+
+    integer, intent(in) :: &
+         n_iter ! Number of atoms
+
+    double precision, intent(in) :: &
+         rate1, & ! Rate for angles
+         rate2    ! Rate for disp
+
+    double precision, intent(in), dimension(:,:) :: &
+         Apos, &
+         Bpos ! Bpos ordered according to the mapping
+
+    double precision, allocatable, dimension(:,:) :: &
+         E ! position matrix
+
+    integer, intent(in), dimension(:) :: &
+         n_classes
+    
+    integer, intent(in), dimension(:) :: &
+         classes
+
+    double precision, intent(inout), dimension(3,3) :: &         
+         tmat     ! Transformation matrix
+
+    double precision, dimension(3,3) :: &         
+         ddet ! Determinant matrix (cofactor matrix)
+    
+    double precision, dimension(2,2) :: &         
+         ttmat ! Determinant matrix (similar to cofactor matrix)
+
+    double precision, intent(inout), dimension(3,1) :: &         
+         vec     ! Translation vector
+    
+    double precision, allocatable, dimension(:,:) :: &
+         Apos_class, &
+         Bpos_class
+
+    double precision, dimension(3,3) :: &         
+         tmat_grad     ! Transformation matrix
+
+    double precision, dimension(3,1) :: &         
+         vec_grad      ! Translation vector
+
+    double precision, allocatable, dimension(:,:) :: &
+         ones
+
+    double precision :: &
+         std, &
+         std_prev
+
+    integer :: &
+         j, k, l, i ! Iterator
+
+    double precision, parameter :: &
+         tol = 1d-10
+
+    print*, n_classes
+
+    std = 1.0d0
+    std_prev = 2.0d0+tol
+
+    j=0
+    do while (j < n_iter .and. abs(std - std_prev) > tol)
+       j=j+1
+
+       std_prev = std
+
+       tmat_grad = 0.0d0
+       vec_grad = 0.0d0
+       std = 0.0d0
+       do i=1,size(n_classes)
+          allocate(Apos_class(3,n_classes(i)), Bpos_class(3,n_classes(i)), &
+               ones(1,n_classes(i)), E(3,n_classes(i)))
+          
+          ones = 1.0d0
+
+          l=0
+          do k=1,size(classes)
+             if (classes(k) == i) then
+                l=l+1
+                Apos_class(:,l) = Apos(:,k)
+                Bpos_class(:,l) = Bpos(:,k)
+             endif
+          enddo
+          
+          std = std + sum((Apos_class - free_trans(Bpos_class,tmat,vec))**2) - &
+               norm(sum(Apos_class - free_trans(Bpos_class,tmat,vec),2))**2/size(Apos_class,2)
+
+          E = Apos_class - free_trans(Bpos_class,tmat,vec)
+          E = E - matmul(reshape(sum(E,2),(/3,1/))/size(E,2), ones)
+
+          tmat_grad = tmat_grad + rate1*std_prev*matmul(E,transpose(Bpos_class))
+          vec_grad = vec_grad + rate2*std_prev*matmul(E,transpose(ones))
+
+          deallocate(Apos_class, Bpos_class, ones, E)
+       enddo
+       
+       tmat = tmat + tmat_grad
+       vec = vec + vec_grad
+
+    enddo
+
+  end subroutine analytical_gd_std
+  
   subroutine gradient_descent_explore(angles, vec, Apos, Bpos, cell, icell, &
        fracA, fracB, atoms, n_atoms, n_iter, n_ana, n_conv, rate1, rate2)
     ! New Gradient Descent Random
@@ -815,8 +1115,9 @@ contains
 
   end subroutine gradient_descent_explore
 
-  subroutine fastoptimization(Apos_out, Bpos_out, Bpos_out_stretch, &
-       n_out, tmat, dmin, &
+  subroutine fastoptimization(Apos_out, Bpos_out, Bpos_out_stretch, & ! Output
+       n_out, classes_list_out, & ! Output
+       tmat, dmin, & ! Output
        Apos, na, Bpos, nb, &
        fracA, fracB, Acell, iAcell, atoms, n_atoms, &
        n_iter, n_ana, n_conv, n_adjust, &
@@ -872,14 +1173,17 @@ contains
          dmin
 
     double precision, dimension(3) :: &
-         vec, & ! Translation vecto
+         vec, &     ! Translation vecto
          vec_rot, & ! Translation vector for the rotated unstretched matrix
-         angles      ! Rotation angles
+         angles, &  ! Rotation angles
+         center_vec ! Readjustment vector
 
     double precision :: &
          d, &
          dist_map, &
-         dist_stretch
+         dist_stretch, &
+         std, std_prev, &
+         tol_adjust
 
     double precision, allocatable, dimension(:,:) :: &
          dmat
@@ -899,15 +1203,34 @@ contains
          Apos_mapped, Bpos_opt, &
          tBpos_opt, &
          rBpos_opt, &
-         Bpos_opt_stretch ! position matrix
+         Bpos_opt_stretch  ! position matrix
+
+    integer, intent(out), dimension(size(Apos,2)) :: &         
+         classes_list_out
+
+    integer, &
+         dimension(int(fracB*size(Apos,2)/sum(atoms))*sum(atoms)) :: &
+         classes_list, &
+         classes_list_prev
+    
+    integer, &
+         dimension(int(fracB*size(Apos,2)/sum(atoms))*sum(atoms)) :: &
+         n_classes_trail
+
+    integer :: &
+         n
+    
+    integer, allocatable, dimension(:) :: &
+         n_classes
 
     integer :: &
          i, j, &
-         n, id, &
+         id, &
          An_cell, Bn_cell
 
     double precision, parameter :: &
-         pi = 3.141592653589793d0
+         pi = 3.141592653589793d0, &
+         tol = 1.0d-5
 
     n_out = int(fracB*size(Apos,2)/sum(atoms))*sum(atoms)
     Apos_out = 0
@@ -925,6 +1248,8 @@ contains
     vec = (/ 0.25d0, 0.25d0, 0.0d0 /)
 
     tmat = rot_mat(angles)
+
+    write(*,*) "/======== Stretching Adjustment ========\\"
     
     do i=1,n_adjust
 
@@ -951,7 +1276,7 @@ contains
        call analytical_gd_rot(angles, vec_rot, Apos_mapped, Bpos_opt, &
                n_ana*1000, rate1, rate2)
 
-       write(*,*) "--------------> Adjustment step:", i
+       write(*,*) "-->", i
 
        write(*,*) "Stretched distance:", sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt, tmat, vec))**2,1)))
 
@@ -962,19 +1287,15 @@ contains
        
     enddo
 
-    ! ! Testing TMP
-    ! testmat = reshape((/ 1.0d0, 1/sqrt(50.0d0), 0.0d0, &
-    !      0.0d0, 1.0d0, 0.0d0, &
-    !      0.0d0, 0.0d0, 1.0d0/), (/3,3/))
-
-    ! testmat = matmul(matmul(rot_mat((/ -pi/4.0d0 , 0.0d0, 0.0d0 /)), testmat), &
-    !      transpose(rot_mat((/ -pi/4.0d0 , 0.0d0, 0.0d0 /))))
-
-    ! tmat = testmat
+    ! call minimize_classes(tmat, vec, Apos_mapped, Bpos_opt, 100000, 1d-2, 1d-2)
 
     rBpos_opt = free_trans(Bpos_opt, rot_mat(angles), vec_rot)
 
+    write(*,*) "/======== Deslanting ========\\"
+
     do i=1, n_adjust
+
+       write(*,*) "-->", i
 
        tBpos_opt = free_trans(Bpos_opt, tmat, (/0.0d0,0.0d0,0.0d0/))
 
@@ -993,15 +1314,57 @@ contains
        
     enddo
 
+    write(*,*) "/======== Classification ========\\"
+
+    tol_adjust = 1.0d0
+    std = 1.0d0
+    classes_list = 0
+    classes_list_prev = 1
+    j=0
+    do while ( std > tol .or. any(classes_list /= classes_list_prev))
+       j = j + 1
+       
+       write(*,*) "-->", j
+
+       classes_list_prev = classes_list
+       std_prev = std
+
+       n = size(Apos_mapped,2)
+       do while (n == size(Apos_mapped,2))
+          tol_adjust = tol_adjust / 2.0d0
+          call classify(n, n_classes_trail, classes_list, Apos_mapped-free_trans(Bpos_opt,tmat,vec), tol_adjust)
+       enddo
+
+       allocate(n_classes(n))
+
+       do i=1,n
+          n_classes(i) = n_classes_trail(i)
+       enddo
+
+       call analytical_gd_std(std, tmat, vec, Apos_mapped, Bpos_opt, &
+            n_classes, classes_list, n_ana*1000, rate1, rate2)
+
+       deallocate(n_classes)
+
+       write(*,*) "Tolerance for classification:", tol_adjust
+       write(*,*) "Final standard deviation:", std
+
+       tol_adjust = 3*sqrt(abs(std)) !3 sigma 99%
+
+    enddo
+
+    classes_list_out = 0
+    classes_list_out(1:n_out) = classes_list
+
     write(*,*) "Final tmat"
     write(*,"(3(F7.3,X))") tmat
 
-    ! ! Recenter
-    ! vec = vec + sum(free_trans(Bpos_opt,rot_mat(angles),vec) - Apos_mapped,2) / n_out
+    ! Recenter
+    center_vec = sum(free_trans(Bpos_opt,rot_mat(angles),vec) - Apos_mapped,2) / n_out
     
-    Bpos_opt_stretch = free_trans(tBpos_opt,slant,vec)
+    Bpos_opt_stretch = free_trans(Bpos_opt,tmat,vec + center_vec)
 
-    Bpos_opt = rBpos_opt
+    Bpos_opt = free_trans(rBpos_opt, eye(), center_vec)
 
     Bpos_out(:,1:n_out) = Bpos_opt
     Bpos_out_stretch(:,1:n_out) = Bpos_opt_stretch
@@ -1011,8 +1374,7 @@ contains
 
     ! ! Print the cost matrix
     ! mat = cost(Apos,Bpos,n)   
-    ! write(*,"(10(F5.3,X))") mat   
-    ! call munkres(dmin,map,cost(Apos,Bpos,n),n)
+    ! write(*,"(10(F5.3,X))") mat
 
   end subroutine fastoptimization
 

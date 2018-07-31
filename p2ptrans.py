@@ -16,7 +16,7 @@ tol = 1e-5
 
 def find_cell(class_list, positions, tol = 1e-5, frac_tol = 0.5):
     cell = np.zeros((3,3))
-    for i in range(len(np.unique(class_list))):
+    for i in np.unique(class_list):
         newcell = np.identity(3)
         pos = positions[:, class_list == i]
         center = np.argmin(la.norm(pos, axis = 0))
@@ -28,31 +28,41 @@ def find_cell(class_list, positions, tol = 1e-5, frac_tol = 0.5):
         j = 0;
         for k in idx:
             multiple = [0]
-            if j == 1:
+            #If there is already one cell vector (j=1) skips the candidate if it's parallel
+            if j == 1: 
                 if la.norm(np.cross(pos[:,k], newcell[:,0])) < tol:
                     continue
+            # If there is already two cell vectors (j=2) skips the candidate if it's parallel
+            # to one of the vectors
             elif j == 2:
                 if abs(la.det(np.concatenate((newcell[:,:2],pos[:,k:k+1]), axis=1))) < tol:
                     continue
+            # Goes through the displacements and finds the one that are parallel
             for p in pos.T:
-                if la.norm(np.cross(p,pos[:,k])) < tol:
+                if la.norm(np.cross(p,pos[:,k]))/(la.norm(p) * la.norm(pos[:,k])) < tol:
                     multiple.append(p.dot(pos[:,k])/la.norm(pos[:,k])**2)
+
+            # Find the norms of all vectors with respect to the center of the interval
+            # finds all the displacements inside the 'shell' of the interval
             if multiple != []:
                 multiple.sort()
                 norms = la.norm(pos - 1 / 2.0 * (multiple[0]+multiple[-1]) *
                                 pos[:,k:k+1].dot(np.ones((1,np.shape(pos)[1]))), axis = 0)
-                shell = np.sum(norms < 1 / 2.0 * (multiple[-1]-multiple[0])*la.norm(pos[:,k])) / float(len(norms))
+                shell = np.sum(norms < 1 / 2.0 * (multiple[-1]-multiple[0])*la.norm(pos[:,k]) + tol) / float(len(norms))
+                # If it is the right size (to check next condition)
                 if len(multiple) == len(np.arange(round(multiple[0]), round(multiple[-1])\
     +1)):
-                    if np.allclose(multiple, np.arange(round(multiple[0]), round(multiple[-1])+1), tol) and shell > frac_tol:
+                    # If all the multiples are present and the interval cover more than a certain 
+                    # fraction of displacements the displacement is added as a cell vector
+                    if np.allclose(multiple, np.arange(round(multiple[0]), round(multiple[-1])+1), tol) and shell > frac_tol**3:
                         newcell[:,j] = pos[:,k]
                         j += 1
-                        if j == 3: break 
+                        if j == 3: break
         else:
             raise RuntimeError("Could not find periodic cell for displacement %d"%i)
         if i==0:
             cell = newcell
-        elif la.det(cell) < la.det(newcell):
+        elif abs(la.det(cell)) < abs(la.det(newcell)):
             if np.allclose(la.inv(cell).dot(newcell), np.round(la.inv(cell).dot(newcell)), tol):
                 cell = newcell
             else:
@@ -61,29 +71,11 @@ def find_cell(class_list, positions, tol = 1e-5, frac_tol = 0.5):
             if not np.allclose(la.inv(newcell).dot(cell), np.round(la.inv(newcell).dot(cell)),\
      tol):
                 raise RuntimeError("The periodicity of the different classes of displacement is different")
-    return cell
 
-def classify(disps, tol = 1.e-3):
-    vec_classes = [disps[:,0:1]]
-    class_list = np.zeros(np.shape(disps)[1], np.int)
-    for i in range(np.shape(disps)[1]):
-        classified = False
-        for j, vec_class in enumerate(vec_classes):
-            vec_mean = np.mean(vec_class, axis=1)
-            if (abs(la.norm(vec_mean) - vec_mean.T.dot(disps[:,i])/la.norm(vec_mean)) < tol and 
-                la.norm(np.cross(vec_mean, disps[:,i]))/la.norm(vec_mean) < tol):
-                vec_classes[j] = np.concatenate((vec_class,disps[:,i:i+1]),axis=1)
-                class_list[i] = j
-                classified = True
-                break
-        if not classified:
-            vec_classes.append(disps[:,i:i+1])
-            class_list[i] = len(vec_classes) - 1
-            
-    for i, elem in enumerate(vec_classes):
-        vec_classes[i] = np.mean(elem, axis=1)
-        
-    return class_list, vec_classes
+    if la.det(cell) < 0:
+        cell[:,2] = -cell[:,2]
+
+    return cell
 
 def lcm(x, y):
    """This function takes two
@@ -289,22 +281,24 @@ fracA = 0.15 # fracA < fracB
 Apos = np.asfortranarray(Apos)
 Bpos = np.asfortranarray(Bpos) 
 t_time = time.time()
-Apos_map, Bpos, Bposst, n_map, tmat, dmin = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell, la.inv(Acell), atoms, 1, 300, 5, 1, 1e-6, 1e-6)
+Apos_map, Bpos, Bposst, n_map, class_list, tmat, dmin = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell, la.inv(Acell), atoms, 1, 300, 5, 1, 1e-6, 1e-6)
 t_time = time.time() - t_time
 Bpos = np.asanyarray(Bpos)
 Apos = np.asanyarray(Apos)
 
 print("Mapping time:", t_time)
 
-pickle.dump((Apos_map, Bpos, Bposst, n_map, tmat, dmin), open("fastoptimization.dat","wb"))
+pickle.dump((Apos_map, Bpos, Bposst, n_map, class_list, tmat, dmin), open("fastoptimization.dat","wb"))
 
 # # TMP for testing only -->
 # tr.center(Apos)
 # tr.center(Bpos)
-# Apos_map, Bpos, Bposst, n_map, tmat, dmin = pickle.load(open("fastoptimization.dat","rb"))
+# Apos_map, Bpos, Bposst, n_map, class_list, tmat, dmin = pickle.load(open("fastoptimization.dat","rb"))
 # # <--  
 
 print("Total distance between structures:", dmin)
+
+class_list = class_list[:n_map]-1
 
 Bpos = Bpos[:,:n_map]
 Bposst = Bposst[:,:n_map]
@@ -347,6 +341,7 @@ fig.savefig('DispLattice.png')
 
 # Displacement with stretching
 disps = Apos_map - Bposst
+vec_classes = np.array([np.mean(disps[:,class_list==d_type], axis=1) for d_type in np.unique(class_list)])
 
 fig = plt.figure()
 ax = Axes3D(fig)
@@ -372,10 +367,10 @@ def init_disps():
 
 init_disps()
 
-# anim = animation.FuncAnimation(fig, animate, init_func=init_disps,
-#                                frames=490, interval=30)
+anim = animation.FuncAnimation(fig, animate, init_func=init_disps,
+                               frames=490, interval=30)
 
-# anim.save('Crystal+Disps.gif', fps=30, codec='gif')
+anim.save('Crystal+Disps.gif', fps=30, codec='gif')
 
 
 # Stretching Matrix
@@ -389,8 +384,6 @@ print(stMat)
 
 print("Rotation Matrix:")
 print(rtMat)
-
-class_list, vec_classes = classify(disps)
 
 # # Display the diffrent classes of displacement 
 # for i in range(len(vec_classes)):
