@@ -1,4 +1,7 @@
 # P2PTRANS
+
+![alt text](https://github.com/ftherrien/p2ptrans/blob/master/WelcomeImage.gif)
+
 ## A Lattice Independant Structure Mapping Algorithm
 
 p2ptrans returns (1) the transformation lattice between the 2 structures (from the smallest volume to the largest) and (2) the transformation matrix applied to the smallest lattice  
