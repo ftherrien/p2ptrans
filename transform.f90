@@ -1243,10 +1243,6 @@ contains
     call gradient_descent_explore(angles, vec, Apos, Bpos, Acell, iAcell, &
          fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2)
 
-    angles = (/ 0.0d0, 0.0d0, 0.0d0 /)
-
-    vec = (/ 0.25d0, 0.25d0, 0.0d0 /)
-
     tmat = rot_mat(angles)
 
     write(*,*) "/======== Stretching Adjustment ========\\"
