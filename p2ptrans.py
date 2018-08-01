@@ -10,6 +10,7 @@ import time
 from pylada.crystal import Structure, primitive, gruber, read
 from copy import deepcopy
 import argparse
+import os
 
 # Tolerence for structure identification
 tol = 1e-5
@@ -27,6 +28,7 @@ def readOptions():
     parser.add_argument("-m","--remap",dest="remap",type=int, default=5, help="Number of re-(m)apping")
     parser.add_argument("-s","--adjust",dest="adjust",type=int, default=5, help="Number of (s)cale adjusting steps")
     parser.add_argument("-d","--display",dest="disp",action="store_true", default=False, help="Unable interactive display")
+    parser.add_argument("-o","--outdir",dest="outdir",type=str, default='.', help="Output directory")
 
     options = parser.parse_args()
     
@@ -40,8 +42,9 @@ def readOptions():
     remap = options.remap
     adjust = options.adjust
     disp = options.disp
+    outdir = options.outdir
     
-    return fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp
+    return fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp, outdir
     
 
 def find_cell(class_list, positions, tol = 1e-5, frac_tol = 0.5):
@@ -123,12 +126,15 @@ def gcd(x, y):
 
    return x
 
-def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp):
+def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp, outdir):
 
     if not disp:
         matplotlib.use('Agg')
 
     import matplotlib.pyplot as plt
+
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
 
     random = False
     
@@ -158,7 +164,7 @@ def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp
     ax.set_xlim([-5, 5])
     ax.set_ylim([-5, 5])
     ax.set_zlim([-5, 5])
-    fig.savefig('CellVectors.png')
+    fig.savefig(outdir+'/CellVectors.svg')
     
     
     ASC = t.sphere(Acell, mulA * ncell)
@@ -174,7 +180,7 @@ def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp
     ax.set_ylim([minXAxis-1, maxXAxis+1])
     ax.set_zlim([minXAxis-1, maxXAxis+1])
     ax.set_aspect('equal')
-    fig.savefig('Agrid.png')
+    fig.savefig(outdir+'/Agrid.svg')
     
     # Plot gamma points of each B cell
     fig = plt.figure()
@@ -186,7 +192,7 @@ def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp
     ax.set_ylim([minXAxis-1, maxXAxis+1])
     ax.set_zlim([minXAxis-1, maxXAxis+1])
     ax.set_aspect('equal')
-    fig.savefig('Bgrid.png')
+    fig.savefig(outdir+'/Bgrid.svg')
     
     # For testing purposes
     if random:
@@ -255,13 +261,14 @@ def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp
     
     print("Mapping time:", t_time)
     
-    pickle.dump((Apos_map, Bpos, Bposst, n_map, class_list, tmat, dmin), open("fastoptimization.dat","wb"))
+    pickle.dump((Apos_map, Bpos, Bposst, n_map, class_list, tmat, dmin), open(outdir+"/fastoptimization.dat","wb"))
     
     # # TMP for testing only -->
     # tr.center(Apos)
     # tr.center(Bpos)
     # Apos_map, Bpos, Bposst, n_map, class_list, tmat, dmin = pickle.load(open("fastoptimization.dat","rb"))
-    # # <--  
+    # # <--
+    
     
     print("Total distance between structures:", dmin)
     
@@ -304,7 +311,7 @@ def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp
     ax.set_ylim([-maxXAxis, maxXAxis])
     ax.set_zlim([-maxXAxis, maxXAxis])
     ax.set_aspect('equal')
-    fig.savefig('DispLattice.png')
+    fig.savefig(outdir+'/DispLattice.svg')
     
     # Displacement with stretching
     disps = Apos_map - Bposst
@@ -340,7 +347,7 @@ def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp
             ax.scatter(Bposst.T[natB*num*i:natB*num*(i+1),0],Bposst.T[natB*num*i:natB*num*(i+1),1], Bposst.T[natB*num*i:natB*num*(i+1),2], alpha=0.5, c="C%d"%(2*i+1))
         
         ax.quiver(Bposst.T[:,0], Bposst.T[:,1], Bposst.T[:,2], disps.T[:,0], disps.T[:,1], disps.T[:,2])
-        fig.savefig('DispLattice_stretched.png')
+        fig.savefig(outdir+'/DispLattice_stretched.svg')
         return fig,
     
     init_disps()
@@ -348,7 +355,7 @@ def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp
     anim = animation.FuncAnimation(fig, animate, init_func=init_disps,
                                    frames=490, interval=30)
     
-    anim.save('Crystal+Disps.gif', fps=30, codec='gif')
+    anim.save(outdir+'/Crystal+Disps.gif', fps=30, codec='gif')
     
     
     # Stretching Matrix
@@ -376,7 +383,7 @@ def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp
     #     ax.set_ylim([-maxXAxis, maxXAxis])
     #     ax.set_zlim([-maxXAxis, maxXAxis])
     #     ax.set_aspect('equal')
-    #     fig.savefig('DispLattice_stretched_%d.png'%i)
+    #     fig.savefig(outdir+'/DispLattice_stretched_%d.svg'%i)
     
     # Centers the position on the first atom
     pos_in_struc = Bposst- Bposst[:,0:1].dot(np.ones((1,np.shape(Bposst)[1])))
@@ -426,7 +433,7 @@ def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp
     ax.set_ylim([-maxXAxis, maxXAxis])
     ax.set_zlim([-maxXAxis, maxXAxis])
     ax.set_aspect('equal')
-    fig.savefig('DispLattice_stretched_cell_primittive.png')
+    fig.savefig(outdir+'/DispLattice_stretched_cell_primittive.svg')
     
     # Displays only the cell and the displacements in it
     fig = plt.figure()
@@ -443,13 +450,13 @@ def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp
         ax.set_ylim([-maxXAxis, maxXAxis])
         ax.set_zlim([-maxXAxis, maxXAxis])
         ax.set_aspect('equal')
-        fig.savefig('Displacement_structure.png')
+        fig.savefig(outdir+'/Displacement_structure.svg')
         return fig,
     
     anim = animation.FuncAnimation(fig, animate, init_func=init_struc,
                                    frames=490, interval=30)
     
-    anim.save('DispStruc.gif', fps=30, codec='gif')
+    anim.save(outdir+'/DispStruc.gif', fps=30, codec='gif')
         
     plt.show()
     
