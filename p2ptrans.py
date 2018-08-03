@@ -11,6 +11,7 @@ from pylada.crystal import Structure, primitive, gruber, read
 from copy import deepcopy
 import argparse
 import os
+import warnings
 
 # Tolerence for structure identification
 tol = 1e-5
@@ -48,7 +49,7 @@ def readOptions():
     
 
 def find_cell(class_list, positions, tol = 1e-5, frac_tol = 0.5):
-    cell = np.zeros((3,3))
+    cell_list = []
     for i in np.unique(class_list):
         newcell = np.identity(3)
         pos = positions[:, class_list == i]
@@ -90,23 +91,29 @@ def find_cell(class_list, positions, tol = 1e-5, frac_tol = 0.5):
                     if np.allclose(multiple, np.arange(round(multiple[0]), round(multiple[-1])+1), tol) and shell > frac_tol**3:
                         newcell[:,j] = pos[:,k]
                         j += 1
-                        if j == 3: break
-        else:
-            raise RuntimeError("Could not find periodic cell for displacement %d"%i)
-        if i==0:
-            cell = newcell
-        elif abs(la.det(cell)) < abs(la.det(newcell)):
-            if np.allclose(la.inv(cell).dot(newcell), np.round(la.inv(cell).dot(newcell)), tol):
-                cell = newcell
-            else:
-                raise RuntimeError("The periodicity of the different classes of displacement is different")
-        else:
-            if not np.allclose(la.inv(newcell).dot(cell), np.round(la.inv(newcell).dot(cell)),\
+                        if j == 3:
+                            for cell in cell_list:
+                                if abs(la.det(cell)) < abs(la.det(newcell)):
+                                    if not np.allclose(la.inv(cell).dot(newcell), np.round(la.inv(cell).dot(newcell)), tol):
+                                        raise RuntimeError("The periodicity of the different classes of displacement is different")
+                                else:
+                                    if not np.allclose(la.inv(newcell).dot(cell), np.round(la.inv(newcell).dot(cell)),\
      tol):
-                raise RuntimeError("The periodicity of the different classes of displacement is different")
+                                        raise RuntimeError("The periodicity of the different classes of displacement is different")
 
-    if la.det(cell) < 0:
-        cell[:,2] = -cell[:,2]
+                            if la.det(newcell) < 0:
+                                newcell[:,2] = -newcell[:,2]
+
+                            cell_list.append(newcell)
+                            break
+        else:
+            warnings.warn("Could not find periodic cell for displacement %d. Increase sample size or use results with care."%i, RuntimeWarning)
+            
+    if len(cell_list) == 0:
+        raise RuntimeError("Could not find periodic cell for any displacement. Increase sampl\
+e size.")
+
+    cell = cell_list[np.argmax([la.det(cell) for cell in cell_list])]
 
     return cell
 
@@ -254,20 +261,20 @@ def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp
     Apos = np.asfortranarray(Apos)
     Bpos = np.asfortranarray(Bpos) 
     t_time = time.time()
-    Apos_map, Bpos, Bposst, n_map, class_list, tmat, dmin = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell, la.inv(Acell), atoms, niter, nana, remap, adjust, 1e-6, 1e-6)
+#    Apos_map, Bpos, Bposst, n_map, class_list, tmat, dmin = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell, la.inv(Acell), atoms, niter, nana, remap, adjust, 1e-6, 1e-6)
     t_time = time.time() - t_time
     Bpos = np.asanyarray(Bpos)
     Apos = np.asanyarray(Apos)
     
     print("Mapping time:", t_time)
     
-    pickle.dump((Apos_map, Bpos, Bposst, n_map, class_list, tmat, dmin), open(outdir+"/fastoptimization.dat","wb"))
+#    pickle.dump((Apos_map, Bpos, Bposst, n_map, class_list, tmat, dmin), open(outdir+"/fastoptimization.dat","wb"))
     
-    # # TMP for testing only -->
-    # tr.center(Apos)
-    # tr.center(Bpos)
-    # Apos_map, Bpos, Bposst, n_map, class_list, tmat, dmin = pickle.load(open("fastoptimization.dat","rb"))
-    # # <--
+    # TMP for testing only -->
+    tr.center(Apos)
+    tr.center(Bpos)
+    Apos_map, Bpos, Bposst, n_map, class_list, tmat, dmin = pickle.load(open(outdir+"/fastoptimization.dat","rb"))
+    # <--
     
     
     print("Total distance between structures:", dmin)
@@ -352,10 +359,10 @@ def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp
     
     init_disps()
     
-    anim = animation.FuncAnimation(fig, animate, init_func=init_disps,
-                                   frames=490, interval=30)
+    # anim = animation.FuncAnimation(fig, animate, init_func=init_disps,
+    #                                frames=490, interval=30)
     
-    anim.save(outdir+'/Crystal+Disps.gif', fps=30, codec='gif')
+    # anim.save(outdir+'/Crystal+Disps.gif', fps=30, codec='gif')
     
     
     # Stretching Matrix
@@ -369,7 +376,19 @@ def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp
     
     print("Rotation Matrix:")
     print(rtMat)
-    
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    maxXAxis = disps.max()
+    ax.set_xlim([-maxXAxis, maxXAxis])
+    ax.set_ylim([-maxXAxis, maxXAxis])
+    ax.set_zlim([-maxXAxis, maxXAxis])
+    ax.set_aspect('equal')
+    for i in range(len(vec_classes)):
+        disps_class = disps[:,class_list==i]
+        ndisps = np.shape(disps_class)[1]
+        ax.quiver(np.zeros((1,ndisps)), np.zeros((1,ndisps)), np.zeros((1,ndisps)), disps_class.T[:,0], disps_class.T[:,1], disps_class.T[:,2], color="C%d"%i)
+
     # # Display the diffrent classes of displacement 
     # for i in range(len(vec_classes)):
     #     fig = plt.figure()
@@ -394,8 +413,10 @@ def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp
     
     cell = find_cell(class_list, Bposst)
     
+    print(cell)
+
     # Finds a squarer cell
-    cell = gruber(cell)
+    # cell = gruber(cell)
     
     # Make a pylada structure
     cell_coord = la.inv(cell).dot(pos_in_struc)

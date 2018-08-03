@@ -1060,7 +1060,7 @@ contains
 
        vec_local = vec_local - (/0.5d0,0.5d0,0.5d0/)
 
-       vec_local = vec_local*mul_vec
+       vec_local = vec_local * mul_vec
        
        vec_local = vec_local - matmul(cell,nint(matmul(icell,vec_local))) 
 
@@ -1240,8 +1240,12 @@ contains
     call center(Bpos,nb)
     call center(Apos,na)
 
-    call gradient_descent_explore(angles, vec, Apos, Bpos, Acell, iAcell, &
-         fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2)
+   ! call gradient_descent_explore(angles, vec, Apos, Bpos, Acell, iAcell, &
+   !       fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2)
+
+    open (10,file='savebest.dat',form='unformatted')
+    read(10) angles,vec
+    close(10)
 
     tmat = rot_mat(angles)
 
@@ -1283,8 +1287,6 @@ contains
        
     enddo
 
-    ! call minimize_classes(tmat, vec, Apos_mapped, Bpos_opt, 100000, 1d-2, 1d-2)
-
     rBpos_opt = free_trans(Bpos_opt, rot_mat(angles), vec_rot)
 
     write(*,*) "/======== Deslanting ========\\"
@@ -1297,12 +1299,12 @@ contains
 
        angles = 0.0d0
 
-       call analytical_gd_rot(angles, vec_rot, rBpos_opt, tBpos_opt, &
+       call analytical_gd_rot(angles, vec, rBpos_opt, tBpos_opt, &
             n_ana*1000, rate1, rate2)
 
        tBpos_opt = free_trans(tBpos_opt, rot_mat(angles), (/0.0d0,0.0d0,0.0d0/))
 
-       tmat = matmul(rot_mat(angles), tmat)
+       tmat = matmul(rot_mat(angles), tmat) 
 
        call analytical_gd_slant(slant, vec, rBpos_opt, tBpos_opt, n_ana*1000, rate1, rate2)
        
@@ -1317,7 +1319,7 @@ contains
     classes_list = 0
     classes_list_prev = 1
     j=0
-    do while ( std > tol .or. any(classes_list /= classes_list_prev))
+    do while ( std > tol .and. any(classes_list /= classes_list_prev) .and. j < 10)
        j = j + 1
        
        write(*,*) "-->", j
@@ -1325,9 +1327,10 @@ contains
        classes_list_prev = classes_list
        std_prev = std
 
-       n = size(Apos_mapped,2)
+       call classify(n, n_classes_trail, classes_list, Apos_mapped-free_trans(Bpos_opt,tmat,vec), tol_adjust)
+
        do while (n == size(Apos_mapped,2))
-          tol_adjust = tol_adjust / 2.0d0
+          tol_adjust = tol_adjust * 2.0d0
           call classify(n, n_classes_trail, classes_list, Apos_mapped-free_trans(Bpos_opt,tmat,vec), tol_adjust)
        enddo
 
@@ -1343,9 +1346,9 @@ contains
        deallocate(n_classes)
 
        write(*,*) "Tolerance for classification:", tol_adjust
-       write(*,*) "Final standard deviation:", std
+       write(*,*) "Final standard deviation:", sqrt(std/dble(size(Apos_mapped,2)-1))
 
-       tol_adjust = 3*sqrt(abs(std)) !3 sigma 99%
+       tol_adjust = min(3.0d0*sqrt(std/dble(size(Apos_mapped,2)-1)), tol_adjust/2.0d0) !3 sigma 99%
 
     enddo
 
@@ -1355,14 +1358,12 @@ contains
     write(*,*) "Final tmat"
     write(*,"(3(F7.3,X))") tmat
 
-    ! Recenter
-    center_vec = sum(free_trans(Bpos_opt,rot_mat(angles),vec) - Apos_mapped,2) / n_out
+    ! Reshift after classification
+    center_vec = sum(free_trans(Bpos_opt,tmat,vec) - Apos_mapped,2) / n_out
     
     Bpos_opt_stretch = free_trans(Bpos_opt,tmat,vec + center_vec)
 
-    Bpos_opt = free_trans(rBpos_opt, eye(), center_vec)
-
-    Bpos_out(:,1:n_out) = Bpos_opt
+    Bpos_out(:,1:n_out) = rBpos_opt
     Bpos_out_stretch(:,1:n_out) = Bpos_opt_stretch
     Apos_out(:,1:n_out) = Apos_mapped
 
