@@ -475,8 +475,6 @@ contains
 
   !   enddo
 
-    
-
   ! end subroutine minimize_classes
 
   subroutine analytical_gd_slant(slant, vec, Apos, Bpos, n_iter, rate1, rate2)
@@ -523,13 +521,16 @@ contains
          dist_prev, &
          s1, s2, s3, & ! Sine of angles
          c1, c2, c3, & ! Cosine of angles
-         k ! Slanting factor
+         k, & ! Slanting factor
+         nat
 
     integer :: &
          i, j ! Iterator
 
     double precision, parameter :: &
-         tol = 1d-10
+         tol = 1d-8
+
+    nat = dble(size(Apos,2))
 
     ones = 1.0d0
 
@@ -582,6 +583,8 @@ contains
        dist_prev = dist
        dist = sum(sqrt(sum((Apos - free_trans(Bpos,slant,vec))**2,1)))
 
+       ! print*, dist, dist_prev - dist, "SLANT"
+
        E = Apos - free_trans(Bpos,slant,vec)
        E = E / spread(sqrt(sum(E**2,1)),1,3)
 
@@ -590,11 +593,11 @@ contains
        M3 = k * (matmul(v1, transpose(dv2d3)))
        Mk = matmul(v1,transpose(v2))
 
-       angles(1) = angles(1) + rate1 * dist * sum(matmul(E,transpose(Bpos)) * M1)
-       angles(2) = angles(2) + rate1 * dist * sum(matmul(E,transpose(Bpos)) * M2)
-       angles(3) = angles(3) + rate1 * dist * sum(matmul(E,transpose(Bpos)) * M3)
-       k = k + rate1 * 0.01 * dist * sum(matmul(E,transpose(Bpos)) * Mk)
-       vec = vec + rate2 * dist * matmul(E,ones)
+       angles(1) = angles(1) + rate1 * dist / nat * sum(matmul(E,transpose(Bpos)) * M1)
+       angles(2) = angles(2) + rate1 * dist / nat * sum(matmul(E,transpose(Bpos)) * M2)
+       angles(3) = angles(3) + rate1 * dist / nat * sum(matmul(E,transpose(Bpos)) * M3)
+       k = k + rate1 * 0.01 * dist / nat  * sum(matmul(E,transpose(Bpos)) * Mk)
+       vec = vec + rate2 * dist / nat  * matmul(E,ones)
        
     enddo
 
@@ -640,13 +643,16 @@ contains
          dist_prev, &
          dist_2prev, &
          s2, s3, & ! Sine of angle 1 and 2
-         c2, c3    ! Cosine of angle 1 and 2
+         c2, c3, & ! Cosine of angle 1 and 2
+         nat
 
     integer :: &
-         i, j ! Iterator
+         i, j      ! Iterator
 
     double precision, parameter :: &
-         tol = 1d-10
+         tol = 1d-8
+
+    nat = dble(size(Apos,2))
 
     ones = 1.0d0
 
@@ -654,13 +660,15 @@ contains
     dist_prev = tol+1
     dist_2prev = dist_prev
 
+    M = rot_mat(angles)
+
     j=0
     do while (j < n_iter .and. abs(dist - dist_prev) > tol)
        j=j+1
 
        M = rot_mat(angles)
 
-       dist_2prev = dist_prev
+       ! dist_2prev = dist_prev
        dist_prev = dist
        dist = sum(sqrt(sum((Apos - free_trans(Bpos,M,vec))**2,1)))
 
@@ -718,19 +726,21 @@ contains
 
        M3 = P3 - P3*cos(angles(1)) + Q3*sin(angles(1))
 
-       u(1,1) = sin(angles(2)) * cos(angles(3))
-       u(2,1) = sin(angles(2)) * sin(angles(3))
-       u(3,1) = cos(angles(2))
+       u(1,1) = s2 * c3
+       u(2,1) = s2 * s3
+       u(3,1) = c2
 
        P1 = matmul(u,transpose(u))
        Q1 = transpose(reshape((/0.0d0,-u(3,1),u(2,1),u(3,1),0.0d0,-u(1,1),-u(2,1),u(1,1),0.0d0/),(/3,3/)))
 
-       M1 = P1 - (eye() - P1)*sin(angles(1)) + Q1*cos(angles(1))
+       M1 = - (eye() - P1)*sin(angles(1)) + Q1*cos(angles(1))
               
-       angles(1) = angles(1) + rate1 * dist * sum(matmul(E,transpose(Bpos)) * M1)
-       angles(2) = angles(2) + rate1 * dist * sum(matmul(E,transpose(Bpos)) * M2)
-       angles(3) = angles(3) + rate1 * dist * sum(matmul(E,transpose(Bpos)) * M3)
-       vec = vec + rate2 * dist * matmul(E,ones)
+       ! print*, dist, dist_prev - dist, "ROT"
+
+       angles(1) = angles(1) + rate1 * dist / nat * sum(matmul(E,transpose(Bpos)) * M1)
+       angles(2) = angles(2) + rate1 * dist / nat * sum(matmul(E,transpose(Bpos)) * M2)
+       angles(3) = angles(3) + rate1 * dist / nat * sum(matmul(E,transpose(Bpos)) * M3)
+       vec       = vec       + rate2 * dist / nat * matmul(E,ones)
               
     enddo
 
@@ -773,13 +783,16 @@ contains
 
     double precision :: &
          dist, &
-         dist_prev
+         dist_prev, &
+         nat
 
     integer :: &
          j, k, l ! Iterator
 
     double precision, parameter :: &
          tol = 1d-8
+
+    nat = dble(size(Apos,2))
 
     ones = 1.0d0
 
@@ -793,6 +806,8 @@ contains
        dist_prev = dist
        dist = sum(sqrt(sum((Apos - free_trans(Bpos,tmat,vec))**2,1)))
        
+       ! print*, dist, dist_prev - dist, "FREE"
+
        E = Apos - free_trans(Bpos,tmat,vec)
 
        if (.not. sq) then
@@ -817,12 +832,12 @@ contains
        !print*, "ddet"
        !write(*,"(3(F5.3,X))") ddet
 
-       tmat = tmat + rate1*dist*matmul(E,transpose(Bpos)) ! old
+       tmat = tmat + rate1 * dist / nat * matmul(E,transpose(Bpos)) ! old
        ! tmat = tmat + rate1*dist*( matmul(E,transpose(Bpos))/det(tmat,3)**(1.0d0/3.0d0) &
        !     + 1.0d0/3.0d0*dist/det(tmat,3)**(4.0d0/3.0d0)*ddet) ! tmp cubic root version
        ! tmat = tmat + rate1*dist*( matmul(E,transpose(Bpos))/det(tmat,3) &
        !      + dist/det(tmat,3)**2*ddet) ! tmp 
-       vec = vec + rate2*dist*matmul(E,ones)
+       vec = vec   + rate2 * dist / nat * matmul(E,ones)
 
     enddo
 
@@ -877,13 +892,16 @@ contains
 
     double precision :: &
          std, &
-         std_prev
+         std_prev, &
+         nat
 
     integer :: &
          j, k, l, i ! Iterator
 
     double precision, parameter :: &
-         tol = 1d-10
+         tol = 1d-8
+
+    nat = dble(size(Apos,2))
 
     print*, n_classes
 
@@ -920,12 +938,14 @@ contains
           E = Apos_class - free_trans(Bpos_class,tmat,vec)
           E = E - matmul(reshape(sum(E,2),(/3,1/))/size(E,2), ones)
 
-          tmat_grad = tmat_grad + rate1*std_prev*matmul(E,transpose(Bpos_class))
-          vec_grad = vec_grad + rate2*std_prev*matmul(E,transpose(ones))
+          tmat_grad = tmat_grad + rate1 * std_prev / nat * matmul(E,transpose(Bpos_class))
+          vec_grad = vec_grad + rate2 * std_prev / nat * matmul(E,transpose(ones))
 
           deallocate(Apos_class, Bpos_class, ones, E)
        enddo
        
+       ! print*, std, std_prev - std, "STD"
+
        tmat = tmat + tmat_grad
        vec = vec + vec_grad
 
@@ -1240,15 +1260,15 @@ contains
     call center(Bpos,nb)
     call center(Apos,na)
 
-   ! call gradient_descent_explore(angles, vec, Apos, Bpos, Acell, iAcell, &
-   !       fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2)
+    call gradient_descent_explore(angles, vec, Apos, Bpos, Acell, iAcell, &
+         fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2)
 
-    open (10,file='savebest.dat',form='unformatted')
-    read(10) angles,vec
-    close(10)
-
+    ! open (10,file='savebest.dat',form='unformatted')
+    ! read(10) angles,vec
+    ! close(10)
+    
     tmat = rot_mat(angles)
-
+    
     write(*,*) "/======== Stretching Adjustment ========\\"
     
     do i=1,n_adjust
@@ -1283,7 +1303,6 @@ contains
        write(*,*) "Unstretched distance:", sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt, rot_mat(angles), vec_rot))**2,1)))
 
        call analytical_gd_free(tmat, vec, Apos_mapped, Bpos_opt,.false., n_ana*100, rate1, rate2)
-       
        
     enddo
 

@@ -30,6 +30,8 @@ def readOptions():
     parser.add_argument("-s","--adjust",dest="adjust",type=int, default=5, help="Number of (s)cale adjusting steps")
     parser.add_argument("-d","--display",dest="disp",action="store_true", default=False, help="Unable interactive display")
     parser.add_argument("-o","--outdir",dest="outdir",type=str, default='.', help="Output directory")
+    parser.add_argument("-u","--use",dest="use",action="store_true", default=False, help="Use previously calculated data")
+
 
     options = parser.parse_args()
     
@@ -44,8 +46,9 @@ def readOptions():
     adjust = options.adjust
     disp = options.disp
     outdir = options.outdir
+    use = options.use
     
-    return fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp, outdir
+    return fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp, outdir, use
     
 
 def find_cell(class_list, positions, tol = 1e-5, frac_tol = 0.5):
@@ -133,7 +136,7 @@ def gcd(x, y):
 
    return x
 
-def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp, outdir):
+def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp, outdir, use):
 
     if not disp:
         matplotlib.use('Agg')
@@ -148,6 +151,10 @@ def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp
     A = read.poscar(fileA)
     B = read.poscar(fileB)
     
+    print("POSCARS")
+    print(A)
+    print(B)
+
     mul = lcm(len(A),len(B))
     mulA = mul//len(A)
     mulB = mul//len(B)
@@ -257,24 +264,29 @@ def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp
             
         assert all(mulA*atomsA == mulB*atomsB)
         atoms = mulA*atomsA
-        
-    Apos = np.asfortranarray(Apos)
-    Bpos = np.asfortranarray(Bpos) 
-    t_time = time.time()
-#    Apos_map, Bpos, Bposst, n_map, class_list, tmat, dmin = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell, la.inv(Acell), atoms, niter, nana, remap, adjust, 1e-6, 1e-6)
-    t_time = time.time() - t_time
-    Bpos = np.asanyarray(Bpos)
-    Apos = np.asanyarray(Apos)
+
+    if not use:
+        Apos = np.asfortranarray(Apos)
+        Bpos = np.asfortranarray(Bpos) 
+        t_time = time.time()
+        Apos_map, Bpos, Bposst, n_map, class_list, tmat, dmin = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell, la.inv(Acell), atoms, niter, nana, remap, adjust, 1e-3, 1e-3)
+        t_time = time.time() - t_time
+        Bpos = np.asanyarray(Bpos)
+        Apos = np.asanyarray(Apos)
     
-    print("Mapping time:", t_time)
+        print("Mapping time:", t_time)
     
-#    pickle.dump((Apos_map, Bpos, Bposst, n_map, class_list, tmat, dmin), open(outdir+"/fastoptimization.dat","wb"))
+        pickle.dump((Apos_map, Bpos, Bposst, n_map, class_list, tmat, dmin), open(outdir+"/fastoptimization.dat","wb"))
     
-    # TMP for testing only -->
-    tr.center(Apos)
-    tr.center(Bpos)
-    Apos_map, Bpos, Bposst, n_map, class_list, tmat, dmin = pickle.load(open(outdir+"/fastoptimization.dat","rb"))
-    # <--
+    else:
+        print("Using data from "+outdir+"/fastoptimization.dat")
+        Apos = np.asfortranarray(Apos)
+        Bpos = np.asfortranarray(Bpos) 
+        tr.center(Apos)
+        tr.center(Bpos)
+        Apos_map, Bpos, Bposst, n_map, class_list, tmat, dmin = pickle.load(open(outdir+"/fastoptimization.dat","rb"))
+        Bpos = np.asanyarray(Bpos)
+        Apos = np.asanyarray(Apos)
     
     
     print("Total distance between structures:", dmin)
