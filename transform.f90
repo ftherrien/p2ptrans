@@ -381,7 +381,7 @@ contains
        Pt = matmul(u,transpose(u))
        Qt = transpose(reshape((/0.0d0,-u(3,1),u(2,1),u(3,1),0.0d0,-u(1,1),-u(2,1),u(1,1),0.0d0/),(/3,3/)))
 
-       Mt = Pt - (eye() - Pt)*sin(theta) + Qt*cos(theta)
+       Mt = - (eye() - Pt)*sin(theta) + Qt*cos(theta)
 
        ! u(1,1) = u(1,1) + rate1*dist*sum(matmul(E,transpose(Bpos)) * Mx)
        ! u(2,1) = u(2,1) + rate1*dist*sum(matmul(E,transpose(Bpos)) * My)
