@@ -136,6 +136,20 @@ def gcd(x, y):
 
    return x
 
+def uniqueclose(closest, tol):
+    unique = []
+    idx = []
+    for i,line in enumerate(closest.T):
+        there = False
+        for check in unique:
+            if np.allclose(check, line, atol=tol):
+                there = True
+                break
+        if not there:
+            unique.append(line)
+            idx.append(i)
+    return (np.array(idx), np.array(unique))
+
 def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp, outdir, use):
 
     if not disp:
@@ -158,17 +172,20 @@ def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp
     mul = lcm(len(A),len(B))
     mulA = mul//len(A)
     mulB = mul//len(B)
-    
-    if mulA*la.det(A.cell) < mulB*la.det(B.cell):
+
+    Acell = A.cell*float(A.scale)
+    Bcell = B.cell*float(B.scale)
+
+    if abs(mulA*la.det(Acell)) < abs(mulB*la.det(Bcell)):
         tmp = deepcopy(B)
         tmpmul = mulB
+        tmpcell = Bcell
         B = deepcopy(A)
         mulB = mulA
+        Bcell = Acell
         A = tmp
         mulA = tmpmul
-    
-    Acell = A.cell
-    Bcell = B.cell
+        Acell = tmpcell
     
     # Plotting the cell vectors of A and B
     fig = plt.figure()
@@ -179,34 +196,6 @@ def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp
     ax.set_ylim([-5, 5])
     ax.set_zlim([-5, 5])
     fig.savefig(outdir+'/CellVectors.svg')
-    
-    
-    ASC = t.sphere(Acell, mulA * ncell)
-    BSC = t.sphere(Bcell, mulB * ncell)
-    
-    # Plot gamma points of each A cell
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    ax.scatter(ASC[0,:], ASC[1,:], ASC[2,:])
-    maxXAxis = ASC.max() + 1
-    minXAxis = BSC.min() - 1
-    ax.set_xlim([minXAxis-1, maxXAxis+1])
-    ax.set_ylim([minXAxis-1, maxXAxis+1])
-    ax.set_zlim([minXAxis-1, maxXAxis+1])
-    ax.set_aspect('equal')
-    fig.savefig(outdir+'/Agrid.svg')
-    
-    # Plot gamma points of each B cell
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    ax.scatter(BSC[0,:], BSC[1,:], BSC[2,:])
-    maxXAxis = BSC.max() + 1
-    minXAxis = BSC.min() - 1
-    ax.set_xlim([minXAxis-1, maxXAxis+1])
-    ax.set_ylim([minXAxis-1, maxXAxis+1])
-    ax.set_zlim([minXAxis-1, maxXAxis+1])
-    ax.set_aspect('equal')
-    fig.savefig(outdir+'/Bgrid.svg')
     
     # For testing purposes
     if random:
@@ -241,23 +230,23 @@ def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp
         for a in A:
             if any(atom_types == a.type):
                 idx = np.where(atom_types == a.type)[0][0]
-                Apos[idx] = np.concatenate((Apos[idx], ASC + Acell.dot(np.reshape(a.pos,(3,1))).dot(np.ones((1,np.shape(ASC)[1])))), axis = 1) 
+                Apos[idx] = np.concatenate((Apos[idx], t.sphere(Acell, mulA*ncell, a.pos*float(A.scale))), axis = 1) 
                 atomsA[idx] += 1
             else:
-                Apos.append(ASC + Acell.dot(np.reshape(a.pos,(3,1))).dot(np.ones((1,np.shape(ASC)[1]))))
+                Apos.append(t.sphere(Acell, mulA*ncell, a.pos*float(A.scale)))
                 atom_types = np.append(atom_types, a.type)
                 atomsA = np.append(atomsA,1)
-    
+
         Apos = np.concatenate(Apos, axis=1)
-    
+
         Bpos = [None]*len(atom_types)
         atomsB = np.zeros(len(atom_types), np.int)
         for a in B:
             idx = np.where(atom_types == a.type)[0][0]
             if atomsB[idx] == 0:
-                Bpos[idx] = BSC + Bcell.dot(np.reshape(a.pos,(3,1))).dot(np.ones((1,np.shape(BSC)[1])))
+                Bpos[idx] = np.concatenate((Bpos[idx], t.sphere(Bcell, mulB*ncell, a.pos*float(B.scale))), axis = 1)
             else:
-                Bpos[idx] = np.concatenate((Bpos[idx], BSC + Bcell.dot(np.reshape(a.pos,(3,1))).dot(np.ones((1,np.shape(BSC)[1])))), axis = 1) 
+                Bpos[idx] = np.concatenate((Bpos[idx], t.sphere(Bcell, mulB*ncell, a.pos*float(B.scale))), axis = 1) 
             atomsB[idx] += 1
     
         Bpos = np.concatenate(Bpos, axis=1)
@@ -269,7 +258,7 @@ def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp
         Apos = np.asfortranarray(Apos)
         Bpos = np.asfortranarray(Bpos) 
         t_time = time.time()
-        Apos_map, Bpos, Bposst, n_map, class_list, tmat, dmin = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell, la.inv(Acell), atoms, niter, nana, remap, adjust, 1e-3, 1e-3)
+        Apos_map, Bpos, Bposst, n_map, class_list, tmat, dmin = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell, la.inv(Acell), atoms, niter, nana, remap, adjust, 1e-5, 1e-5)
         t_time = time.time() - t_time
         Bpos = np.asanyarray(Bpos)
         Apos = np.asanyarray(Apos)
@@ -312,6 +301,13 @@ def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp
             ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,1],Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,2], c="C%d"%(2*i))
             ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,1], Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,2], c="C%d"%(2*i), alpha = 0.5)
         ax.scatter(Bpos.T[natB*num*i:natB*num*(i+1),0],Bpos.T[natB*num*i:natB*num*(i+1),1], Bpos.T[natB*num*i:natB*num*(i+1),2], alpha=0.5, c="C%d"%(2*i+1))
+    
+    centerofmassA = np.mean(Apos,axis=1)
+    centerofmassB = np.mean(Bpos,axis=1)
+
+    ax.scatter(centerofmassA, centerofmassA, centerofmassA, s=60, c='red')
+    ax.scatter(centerofmassA, centerofmassA, centerofmassA, s=60, c='green')
+
     maxXAxis = np.max([Apos.max(), Bpos.max()]) + 1
     ax.set_xlim([-maxXAxis, maxXAxis])
     ax.set_ylim([-maxXAxis, maxXAxis])
@@ -425,18 +421,18 @@ def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp
     
     cell = find_cell(class_list, Bposst)
     
-    print(cell)
 
     # Finds a squarer cell
     # cell = gruber(cell)
     
     # Make a pylada structure
-    cell_coord = la.inv(cell).dot(pos_in_struc)
-    idx_struc = np.where(np.sum((cell_coord < 1-tol) & (cell_coord > - tol), axis = 0 ) == 3)[0]
+    cell_coord = np.mod(la.inv(cell).dot(pos_in_struc)+tol,1)-tol
     Struc = Structure(cell)
-    for i, disp_type in enumerate(class_list[idx_struc]):
-        Struc.add_atom(*(tuple(pos_in_struc[:,idx_struc[i]])+(str(disp_type),)))
-        
+    print(zip(uniqueclose(cell_coord, tol)))
+    print(uniqueclose(cell_coord, tol))
+    for i, disp in zip(*uniqueclose(cell_coord, tol)):
+        Struc.add_atom(*(tuple(cell.dot(disp))+(str(class_list[i]),)))
+
     # Makes sure it is the primitive cell 
     Struc = primitive(Struc, tolerance = tol)
     
@@ -449,8 +445,8 @@ def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp
     
     cell = Struc.cell
     
-    print("Displacement Lattice")
-    print(cell)
+    print("Displacement Structure")
+    print(Struc)
     
     print("Volume stretching factor:", la.det(stMat))
     print("Total displacement stretched cell:", Total_disp)
@@ -476,9 +472,9 @@ def p2ptrans(fileA, fileB, ncell, fracA, fracB, niter, nana, remap, adjust, disp
     def init_struc():
         for i,disp in enumerate(Struc):
             ax.quiver(disp.pos[0], disp.pos[1], disp.pos[2], vec_classes[int(disp.type)][0],vec_classes[int(disp.type)][1], vec_classes[int(disp.type)][2], color="C%d"%i)
-            ax.scatter(disp.pos[0], disp.pos[1], disp.pos[2], alpha = 0.5, s=10, color="C%d"%i)
+            ax.scatter(disp.pos[0], disp.pos[1], disp.pos[2], alpha = 0.5, s=10, color="C%d"%(i%10))
         ax.quiver(np.zeros(3), np.zeros(3), np.zeros(3), cell[0,:], cell[1,:], cell[2,:], color = "red", alpha = 0.3)
-        maxXAxis = cell.max() + 1
+        maxXAxis = abs(cell).max() + 1
         ax.set_xlim([-maxXAxis, maxXAxis])
         ax.set_ylim([-maxXAxis, maxXAxis])
         ax.set_zlim([-maxXAxis, maxXAxis])

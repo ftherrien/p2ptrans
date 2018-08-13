@@ -42,13 +42,16 @@ module tiling
   end subroutine parallelepiped
 
 
-  subroutine sphere(Acell,ncell,ASC)
+  subroutine sphere(Acell, ncell, center, ASC)
 
     double precision, intent(in), dimension(3,3) :: &
          Acell ! Matrix containing the 3 cell vectors
 
     integer, intent(in) :: &
          ncell ! Number of repetition in each direction
+    
+    double precision, intent(in), dimension(3) :: &
+         center
 
     double precision, intent(out), dimension(3,ncell) :: &
          ASC ! Position of each cell in the SC
@@ -82,14 +85,14 @@ module tiling
     nny = abs(int(2*rad*norm(cross(Acell(:,3),Acell(:,1)))/(2*dot_product(Acell(:,2),cross(Acell(:,3),Acell(:,1))))))+1
     nnz = abs(int(2*rad*norm(cross(Acell(:,2),Acell(:,3)))/(2*dot_product(Acell(:,1),cross(Acell(:,2),Acell(:,3))))))+1
 
-    print*, 'Square cell dimensions:',nnx, nny, nnz
+    write(*,*) 'Square cell dimensions:',nnx, nny, nnz
 
     l = 0
     dists = -1
     do i=-nnx,nnx
        do j=-nny,nny
           do k=-nnz,nnz
-             dist = norm(matmul(Acell,(/i+0.5d0,j+0.5d0,k+0.5d0/)))
+             dist = norm(matmul(Acell,(/i,j,k/) + center))
              if (dist <= rad) then
                 if (l < ncell) l=l+1
                 if (l == 1) then
@@ -102,7 +105,7 @@ module tiling
                    dists(l-m+1:ncell) = dists(l-m:ncell-1)
                    dists(l-m) = dist
                    ASC(:,l-m+1:ncell) = ASC(:,l-m:ncell-1)
-                   ASC(:,l-m) = matmul(Acell,(/i,j,k/))
+                   ASC(:,l-m) = matmul(Acell,(/i,j,k/) + center)
                 endif
              endif
           enddo

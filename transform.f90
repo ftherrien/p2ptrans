@@ -519,6 +519,7 @@ contains
     double precision :: &
          dist, &
          dist_prev, &
+         dist_init, &
          s1, s2, s3, & ! Sine of angles
          c1, c2, c3, & ! Cosine of angles
          k, & ! Slanting factor
@@ -545,8 +546,8 @@ contains
     k = 1.0d0
 
     slant = eye()
-    dist = 0
-    dist_prev = tol+1
+    dist = 0.0d0
+    dist_prev = tol + 1.0d0
 
     j=0
     do while (j < n_iter .and. abs(dist - dist_prev) > tol)
@@ -583,6 +584,10 @@ contains
        dist_prev = dist
        dist = sum(sqrt(sum((Apos - free_trans(Bpos,slant,vec))**2,1)))
 
+       if (j==1) then
+          dist_init = dist
+       endif
+
        ! print*, dist, dist_prev - dist, "SLANT"
 
        E = Apos - free_trans(Bpos,slant,vec)
@@ -593,11 +598,11 @@ contains
        M3 = k * (matmul(v1, transpose(dv2d3)))
        Mk = matmul(v1,transpose(v2))
 
-       angles(1) = angles(1) + rate1 * dist / nat * sum(matmul(E,transpose(Bpos)) * M1)
-       angles(2) = angles(2) + rate1 * dist / nat * sum(matmul(E,transpose(Bpos)) * M2)
-       angles(3) = angles(3) + rate1 * dist / nat * sum(matmul(E,transpose(Bpos)) * M3)
-       k = k + rate1 * 0.01 * dist / nat  * sum(matmul(E,transpose(Bpos)) * Mk)
-       vec = vec + rate2 * dist / nat  * matmul(E,ones)
+       angles(1) = angles(1) + rate1 * dist / dist_init * sum(matmul(E,transpose(Bpos)) * M1)
+       angles(2) = angles(2) + rate1 * dist / dist_init * sum(matmul(E,transpose(Bpos)) * M2)
+       angles(3) = angles(3) + rate1 * dist / dist_init * sum(matmul(E,transpose(Bpos)) * M3)
+       k = k + rate1 * 0.01 * dist / dist_init  * sum(matmul(E,transpose(Bpos)) * Mk)
+       vec = vec + rate2 * dist / dist_init  * matmul(E,ones)
        
     enddo
 
@@ -642,6 +647,7 @@ contains
          dist, &
          dist_prev, &
          dist_2prev, &
+         dist_init, &
          s2, s3, & ! Sine of angle 1 and 2
          c2, c3, & ! Cosine of angle 1 and 2
          nat
@@ -656,13 +662,13 @@ contains
 
     ones = 1.0d0
 
-    dist = 0
-    dist_prev = tol+1
+    M = rot_mat(angles)
+    dist = 0.0d0
+    dist_prev = tol + 1.0d0
     dist_2prev = dist_prev
 
-    M = rot_mat(angles)
-
     j=0
+
     do while (j < n_iter .and. abs(dist - dist_prev) > tol)
        j=j+1
 
@@ -671,6 +677,10 @@ contains
        ! dist_2prev = dist_prev
        dist_prev = dist
        dist = sum(sqrt(sum((Apos - free_trans(Bpos,M,vec))**2,1)))
+
+       if (j==1) then
+          dist_init = dist
+       endif
 
        E = Apos - free_trans(Bpos,M,vec)
        E = E / spread(sqrt(sum(E**2,1)),1,3)
@@ -737,10 +747,10 @@ contains
               
        ! print*, dist, dist_prev - dist, "ROT"
 
-       angles(1) = angles(1) + rate1 * dist / nat * sum(matmul(E,transpose(Bpos)) * M1)
-       angles(2) = angles(2) + rate1 * dist / nat * sum(matmul(E,transpose(Bpos)) * M2)
-       angles(3) = angles(3) + rate1 * dist / nat * sum(matmul(E,transpose(Bpos)) * M3)
-       vec       = vec       + rate2 * dist / nat * matmul(E,ones)
+       angles(1) = angles(1) + rate1 * dist / dist_init * sum(matmul(E,transpose(Bpos)) * M1)
+       angles(2) = angles(2) + rate1 * dist / dist_init * sum(matmul(E,transpose(Bpos)) * M2)
+       angles(3) = angles(3) + rate1 * dist / dist_init * sum(matmul(E,transpose(Bpos)) * M3)
+       vec       = vec       + rate2 * dist / dist_init * matmul(E,ones)
               
     enddo
 
@@ -784,6 +794,7 @@ contains
     double precision :: &
          dist, &
          dist_prev, &
+         dist_init, &
          nat
 
     integer :: &
@@ -796,7 +807,7 @@ contains
 
     ones = 1.0d0
 
-    dist = 0
+    dist = 0.0d0
     dist_prev = tol+1
 
     j=0
@@ -806,6 +817,10 @@ contains
        dist_prev = dist
        dist = sum(sqrt(sum((Apos - free_trans(Bpos,tmat,vec))**2,1)))
        
+       if (j==1) then
+          dist_init = dist
+       endif
+
        ! print*, dist, dist_prev - dist, "FREE"
 
        E = Apos - free_trans(Bpos,tmat,vec)
@@ -832,12 +847,12 @@ contains
        !print*, "ddet"
        !write(*,"(3(F5.3,X))") ddet
 
-       tmat = tmat + rate1 * dist / nat * matmul(E,transpose(Bpos)) ! old
+       tmat = tmat + rate1 * dist / dist_init * matmul(E,transpose(Bpos)) ! old
        ! tmat = tmat + rate1*dist*( matmul(E,transpose(Bpos))/det(tmat,3)**(1.0d0/3.0d0) &
        !     + 1.0d0/3.0d0*dist/det(tmat,3)**(4.0d0/3.0d0)*ddet) ! tmp cubic root version
        ! tmat = tmat + rate1*dist*( matmul(E,transpose(Bpos))/det(tmat,3) &
        !      + dist/det(tmat,3)**2*ddet) ! tmp 
-       vec = vec   + rate2 * dist / nat * matmul(E,ones)
+       vec = vec   + rate2 * dist / dist_init * matmul(E,ones)
 
     enddo
 
@@ -893,6 +908,7 @@ contains
     double precision :: &
          std, &
          std_prev, &
+         std_init, &
          nat
 
     integer :: &
@@ -905,9 +921,10 @@ contains
 
     print*, n_classes
 
-    std = 1.0d0
-    std_prev = 2.0d0+tol
-
+    std  = 1.0d0
+    std_prev = 2.0d0 + tol
+    std_init = std
+           
     j=0
     do while (j < n_iter .and. abs(std - std_prev) > tol)
        j=j+1
@@ -938,12 +955,16 @@ contains
           E = Apos_class - free_trans(Bpos_class,tmat,vec)
           E = E - matmul(reshape(sum(E,2),(/3,1/))/size(E,2), ones)
 
-          tmat_grad = tmat_grad + rate1 * std_prev / nat * matmul(E,transpose(Bpos_class))
-          vec_grad = vec_grad + rate2 * std_prev / nat * matmul(E,transpose(ones))
+          tmat_grad = tmat_grad + rate1 * std_prev / std_init * matmul(E,transpose(Bpos_class))
+          vec_grad = vec_grad + rate2 * std_prev / std_init * matmul(E,transpose(ones))
 
           deallocate(Apos_class, Bpos_class, ones, E)
        enddo
        
+       if (j==1) then
+          std_init = std
+       endif
+
        ! print*, std, std_prev - std, "STD"
 
        tmat = tmat + tmat_grad
