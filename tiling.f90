@@ -81,31 +81,31 @@ module tiling
     
     rad = (abs(det(Acell,3))*ncell*3/(4*pi))**(1.0d0/3.0d0) + diag
 
-    nnx = abs(int(2*rad*norm(cross(Acell(:,1),Acell(:,2)))/(2*dot_product(Acell(:,3),cross(Acell(:,1),Acell(:,2))))))+1
+    nnz = abs(int(2*rad*norm(cross(Acell(:,1),Acell(:,2)))/(2*dot_product(Acell(:,3),cross(Acell(:,1),Acell(:,2))))))+1
     nny = abs(int(2*rad*norm(cross(Acell(:,3),Acell(:,1)))/(2*dot_product(Acell(:,2),cross(Acell(:,3),Acell(:,1))))))+1
-    nnz = abs(int(2*rad*norm(cross(Acell(:,2),Acell(:,3)))/(2*dot_product(Acell(:,1),cross(Acell(:,2),Acell(:,3))))))+1
+    nnx = abs(int(2*rad*norm(cross(Acell(:,2),Acell(:,3)))/(2*dot_product(Acell(:,1),cross(Acell(:,2),Acell(:,3))))))+1
 
     write(*,*) 'Square cell dimensions:',nnx, nny, nnz
 
     l = 0
-    dists = -1
+    dists = -1.0d0
     do i=-nnx,nnx
        do j=-nny,nny
           do k=-nnz,nnz
-             dist = norm(matmul(Acell,(/i,j,k/) + center))
+             dist = norm(matmul(Acell,(/i,j,k/)) + center)
              if (dist <= rad) then
                 if (l < ncell) l=l+1
                 if (l == 1) then
                    dists(1) = dist
-                else if (dist < dists(l) .or. dists(l) == -1) then
+                else if (dist < dists(l) .or. dists(l) == -1.0d0) then
                    m=0
-                   do while (dist < dists(l-1-m))
+                   do while (dist < dists(l-1-m) .and. m < l-1)
                       m=m+1
                    enddo
                    dists(l-m+1:ncell) = dists(l-m:ncell-1)
                    dists(l-m) = dist
                    ASC(:,l-m+1:ncell) = ASC(:,l-m:ncell-1)
-                   ASC(:,l-m) = matmul(Acell,(/i,j,k/) + center)
+                   ASC(:,l-m) = matmul(Acell,(/i,j,k/)) + center
                 endif
              endif
           enddo
