@@ -114,7 +114,7 @@ random = False
 # B.add_atom(0,0,0,'Si')
 # B.add_atom(0.6,0.3,0,'Be')
 
-# The calssic
+# # The calssic
 # A = Structure(np.identity(3))
 # A.add_atom(0,0,0,'Si')
 
@@ -122,18 +122,18 @@ random = False
 # B.add_atom(0,0,0,'Si')
 
 # Classification classic
-A = Structure(np.identity(3))
-A.add_atom(0,0,0,'Si')
+A = Structure(np.array([[19.9121208191,0,0],[9.9560632706,17.2444074280,0],[0,0,1]]).T * 0.25)
+A.add_atom(0,0,0,'1')
 
-B = Structure(np.array([[0.7,0,0],[0.3,0.5,0],[0,0,1]]).T)
-B.add_atom(0,0,0,'Si')
+B = Structure(np.array([[7.27612877841,0,0],[3.6380643892,6.30131236331,0],[0,0,1]]).T)
+B.add_atom(0,0,0,'1')
 
 
 mul = lcm(len(A),len(B))
 mulA = mul//len(A)
 mulB = mul//len(B)
 
-if mulA*la.det(A.cell) < mulB*la.det(B.cell):
+if mulA*la.det(A.cell) > mulB*la.det(B.cell):
     tmp = deepcopy(B)
     tmpmul = mulB
     B = deepcopy(A)
@@ -141,7 +141,7 @@ if mulA*la.det(A.cell) < mulB*la.det(B.cell):
     A = tmp
     mulA = tmpmul
 
-ncell = 200
+ncell = 500
 
 # Setting the unit cells of A and B
 Acell = A.cell[:2,:2]
@@ -224,6 +224,7 @@ else:
     Bpos = [None]*len(atom_types)
     atomsB = np.zeros(len(atom_types), np.int)
     for a in B:
+        print(type(atom_types), atom_types)
         idx = np.where(atom_types == a.type)[0][0]
         if atomsB[idx] == 0:
             Bpos[idx] = BSC + Bcell.dot(np.reshape(a.pos[:2],(2,1))).dot(np.ones((1,np.shape(BSC)[1])))
@@ -239,29 +240,29 @@ else:
     assert all(mulA*atomsA == mulB*atomsB)
     atoms = mulA*atomsA
 
-fracB = 0.5
-fracA = 0.25 # fracA < fracB
+fracB = 0.25
+fracA = 0 # Set to 0 to allow skipping
 Acell_tmp = np.identity(3)
 Acell_tmp[:2,:2] = Acell
 
 Apos = np.asfortranarray(Apos)
 Bpos = np.asfortranarray(Bpos) 
-# t_time = time.time()
-# Apos_map, Bpos, Bposst, n_map, tmat, dmin = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell_tmp, la.inv(Acell_tmp), atoms, 1000, 100, 4, 6, 5e-7, 5e-7) #TMP
-# t_time = time.time() - t_time
-# Bpos = np.asanyarray(Bpos)
-# Apos = np.asanyarray(Apos)
+t_time = time.time()
+Apos_map, Bpos, Bposst, n_map, tmat, dmin = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell_tmp, la.inv(Acell_tmp), atoms, 100, 100, 4, 4, 1e-5, 1e-5) #TMP
+t_time = time.time() - t_time
+Bpos = np.asanyarray(Bpos)
+Apos = np.asanyarray(Apos)
 
-# print(dmin)
-# print("Mapping time:", t_time)
+print(dmin)
+print("Mapping time:", t_time)
 
-# pickle.dump((Apos_map, Bpos, Bposst, n_map, tmat, dmin), open("fastoptimization.dat","wb"))
+pickle.dump((Apos_map, Bpos, Bposst, n_map, tmat, dmin), open("fastoptimization.dat","wb"))
 
-# TMP for testing only -->
-tr.center(Apos)
-tr.center(Bpos)
-Apos_map, Bpos, Bposst, n_map, tmat, dmin = pickle.load(open("fastoptimization.dat","rb"))
-# <--  
+# # TMP for testing only -->
+# tr.center(Apos)
+# tr.center(Bpos)
+# Apos_map, Bpos, Bposst, n_map, tmat, dmin = pickle.load(open("fastoptimization.dat","rb"))
+# # <--  
 
 Apos = Apos[:2,:]
 Bpos = Bpos[:,:n_map]

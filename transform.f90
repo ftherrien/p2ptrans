@@ -306,7 +306,8 @@ contains
 
     double precision :: &
          dist, &
-         dist_prev
+         dist_prev, &
+         dist_init
 
     integer :: &
          i,j ! Iterator
@@ -327,67 +328,22 @@ contains
 
        dist_prev = dist
        dist = sum(sqrt(sum((Apos - free_trans(Bpos,M,vec))**2,1)))
+       ! print*, "ROT", dist, dist_prev - dist
+
+       if (j==1) then
+          dist_init = dist
+       endif
 
        E = Apos - free_trans(Bpos,M,vec)
        E = E / spread(sqrt(sum(E**2,1)),1,3)
-
-       ! ! ux and uy is for 3D only
-       ! Px = transpose(reshape((/2*u(1,1), &
-       !      u(2,1) , &
-       !      (u(1,1)*(1-u(2,1)**2) - 2*u(1,1)**3)/sqrt(u(1,1)**2*(1-u(2,1)**2)-u(1,1)**4), &
-       !      u(2,1)  , &
-       !      u(2,1)**2, &
-       !      -u(1,1)*u(2,1)**2/sqrt(u(2,1)**2*(1-u(1,1)**2)-u(2,1)**4), &
-       !      (u(1,1)*(1-u(2,1)**2) - 2*u(1,1)**3)/sqrt(u(1,1)**2*(1-u(2,1)**2)-u(1,1)**4) , &
-       !      -u(1,1)*u(2,1)**2/sqrt(u(2,1)**2*(1-u(1,1)**2)-u(2,1)**4), &
-       !      -2*u(1,1)/), &
-       !      (/3,3/)))
-       ! Qx = transpose(reshape((/0.0d0, &
-       !      u(1,1)/sqrt(1-u(1,1)**2-u(2,1)**2), &
-       !      u(2,1), &
-       !      -u(1,1)/sqrt(1-u(1,1)**2-u(2,1)**2), &
-       !      0.0d0, &
-       !      -1.0d0, &
-       !      -u(2,1), &
-       !      1.0d0, &
-       !      0.0d0/), &
-       !      (/3,3/)))
-
-       ! Mx = Px + (eye() - Px)*cos(theta) + Qx*sin(theta)
-
-       ! Py = transpose(reshape((/u(1,1)**2, &
-       !      u(1,1) , &
-       !      -u(2,1)*u(1,1)**2/sqrt(u(1,1)**2*(1-u(2,1)**2)-u(1,1)**4), &
-       !      u(1,1)  , &
-       !      2*u(2,1), &
-       !      (u(2,1)*(1-u(1,1)**2) - 2*u(2,1)**3)/sqrt(u(2,1)**2*(1-u(1,1)**2)-u(2,1)**4), &
-       !      -u(2,1)*u(1,1)**2/sqrt(u(1,1)**2*(1-u(2,1)**2)-u(1,1)**4) , &
-       !      (u(2,1)*(1-u(1,1)**2) - 2*u(2,1)**3)/sqrt(u(2,1)**2*(1-u(1,1)**2)-u(2,1)**4), &
-       !      -2*u(2,1)/), &
-       !      (/3,3/)))
-       ! Qy = transpose(reshape((/0.0d0, &
-       !      u(2,1)/sqrt(1-u(1,1)**2-u(2,1)**2), &
-       !      1.0d0, &
-       !      -u(2,1)/sqrt(1-u(1,1)**2-u(2,1)**2), &
-       !      0.0d0, &
-       !      u(1,1), &
-       !      -1.0d0, &
-       !      u(1,1), &
-       !      0.0d0/), &
-       !      (/3,3/)))
-
-       ! My = Py + (eye() - Py)*cos(theta) + Qy*sin(theta)
 
        Pt = matmul(u,transpose(u))
        Qt = transpose(reshape((/0.0d0,-u(3,1),u(2,1),u(3,1),0.0d0,-u(1,1),-u(2,1),u(1,1),0.0d0/),(/3,3/)))
 
        Mt = - (eye() - Pt)*sin(theta) + Qt*cos(theta)
 
-       ! u(1,1) = u(1,1) + rate1*dist*sum(matmul(E,transpose(Bpos)) * Mx)
-       ! u(2,1) = u(2,1) + rate1*dist*sum(matmul(E,transpose(Bpos)) * My)
-       ! u(3,1) = sqrt(1-u(1,1)**2-u(2,1)**2)
-       theta = theta + rate1*dist*sum(matmul(E,transpose(Bpos)) * Mt)
-       vec = vec + rate2*dist*matmul(E,ones)
+       theta = theta + rate1 * dist / dist_init * sum(matmul(E,transpose(Bpos)) * Mt)
+       vec   = vec   + rate2 * dist / dist_init * matmul(E,ones)
 
     enddo
 
@@ -423,7 +379,8 @@ contains
 
     double precision :: &
          dist, &
-         dist_prev
+         dist_prev, &
+         dist_init
 
     integer :: &
          j ! Iterator
@@ -442,15 +399,19 @@ contains
 
        dist_prev = dist
        dist = sum(sqrt(sum((Apos - free_trans(Bpos,tmat,vec))**2,1)))
+       ! print*, "FREE", dist, dist_prev - dist
 
+       if (j==1) then
+          dist_init = dist
+       endif
        
        E = Apos - free_trans(Bpos,tmat,vec)
        if (.not. sq) then
           E = E / spread(sqrt(sum(E**2,1)),1,3)
        endif
 
-       tmat = tmat + rate1*dist*matmul(E,transpose(Bpos))
-       vec = vec + rate2*dist*matmul(E,ones)
+       tmat = tmat + rate1 * dist / dist_init * matmul(E,transpose(Bpos))
+       vec  = vec  + rate2 * dist / dist_init * matmul(E,ones)
 
     enddo
 
@@ -617,6 +578,8 @@ contains
 
        dist_cur = sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt,rot_mat(theta_local,u_local),vec_local))**2,1)))
 
+       write(*,*) "Opt dist", thread, dist_cur
+
        if (dist_cur < dist_min(thread)) then
           dist_min(thread) = dist_cur
           theta_min(thread) = theta_local
@@ -633,6 +596,10 @@ contains
     u = u_min(:,pos)
     theta = theta_min(pos)
     vec = vec_min(:,pos)
+
+    print*, "Shortest Distance", minval(dist_min)
+    print*, "u", u
+    print*, "theta", theta
 
     deallocate(dist_min, &
          theta_min, &
@@ -744,7 +711,9 @@ contains
 
     call gradient_descent_explore(theta, u, vec, Apos, Bpos, Acell, iAcell, &
          fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2)
-    
+
+    print*, "Apres:", theta, u
+
     tmat = rot_mat(theta,u)
     
     do i=1,n_adjust
@@ -756,6 +725,8 @@ contains
           call mapping(Apos_mapped, Bpos_opt, Apos, Bpos, tBpos, &
                fracA, fracB, atoms, n_atoms)
           
+          print*, "Right after mapping!", sum(sqrt(sum((Apos_mapped - Bpos_opt)**2,1)))
+
           theta = 0
           tBpos_opt = free_trans(Bpos_opt,tmat,(/0.0d0,0.0d0,0.0d0/))
           

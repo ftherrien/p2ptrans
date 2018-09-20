@@ -3,8 +3,6 @@ module tiling
   implicit none
 
   public :: &
-       parallelepiped, &
-       sphere, &
        circle
        
   private :: &
@@ -14,98 +12,6 @@ module tiling
        norm
 
   contains
-
-  subroutine parallelepiped(Acell,nx,ny,nz,ASC)
-
-    double precision, intent(in), dimension(3,3) :: &
-         Acell ! Matrix containing the 3 cell vectors
-
-    integer, intent(in) :: &
-         nx,ny,nz ! Number of repetition in each direction
-
-    double precision, intent(out), dimension(3,nx*ny*nz) :: &
-         ASC ! Position of each cell in the SC
-    
-    integer :: &
-         i,j,k,l
-       
-    l = 0
-    do i=1,nx
-       do j=1,ny
-          do k=1,nz
-             l=l+1
-             ASC(:,l) = matmul(Acell,(/i,j,k/))
-          enddo
-       enddo
-    enddo
-    
-  end subroutine parallelepiped
-
-
-  subroutine sphere(Acell,ncell,ASC)
-
-    double precision, intent(in), dimension(3,3) :: &
-         Acell ! Matrix containing the 3 cell vectors
-
-    integer, intent(in) :: &
-         ncell ! Number of repetition in each direction
-
-    double precision, intent(out), dimension(3,ncell) :: &
-         ASC ! Position of each cell in the SC
-
-    double precision, dimension(ncell) :: &
-         dists
-    
-    integer :: &
-         i,j,k,l,nnx,nny,nnz, &
-         pos
-
-    double precision :: &
-         rad, dist, &
-         diag
-
-    double precision, parameter :: &
-         pi = 3.141592653589793d+0
-
-    ! Diagonals (This is probably overkill)
-    ! Finds the longest diagonal to add it to the radius of the sphere such that there is
-    ! at least n intger number of cells in the sphere.
-    diag = 0
-    diag = max(norm(Acell(:,1) + Acell(:,2) + Acell(:,3)),diag)
-    diag = max(norm(-Acell(:,1) + Acell(:,2) + Acell(:,3)),diag)
-    diag = max(norm(Acell(:,1) - Acell(:,2) + Acell(:,3)),diag)
-    diag = max(norm(-Acell(:,1) - Acell(:,2) + Acell(:,3)),diag)
-    
-    rad = (abs(det(Acell,3))*ncell*3/(4*pi))**(1.0d0/3.0d0) + diag
-
-    nnx = abs(int(2*rad*norm(cross(Acell(:,1),Acell(:,2)))/(2*dot_product(Acell(:,3),cross(Acell(:,1),Acell(:,2))))))+1
-    nny = abs(int(2*rad*norm(cross(Acell(:,3),Acell(:,1)))/(2*dot_product(Acell(:,2),cross(Acell(:,3),Acell(:,1))))))+1
-    nnz = abs(int(2*rad*norm(cross(Acell(:,2),Acell(:,3)))/(2*dot_product(Acell(:,1),cross(Acell(:,2),Acell(:,3))))))+1
-
-    print*, 'Square cell dimensions:',nnx, nny, nnz
-
-    l = 0
-    dists = 0
-    do i=-nnx,nnx
-       do j=-nny,nny
-          do k=-nnz,nnz
-             dist = norm(matmul(Acell,(/i+0.5d0,j+0.5d0,k+0.5d0/)))
-             if (dist <= rad) then
-                l=l+1
-                if (l<=ncell) then
-                   dists(l) = dist
-                   ASC(:,l) = matmul(Acell,(/i,j,k/))
-                elseif (maxval(dists) > dist) then
-                   pos = maxloc(dists,1)
-                   dists(pos) = dist
-                   ASC(:,pos) = matmul(Acell,(/i,j,k/))
-                endif
-             endif
-          enddo
-       enddo
-    enddo
-
-  end subroutine sphere  
 
   subroutine circle(Acell,ncell,ASC)
 
@@ -160,7 +66,7 @@ module tiling
                 dists(1) = dist
              else if (dist < dists(l) .or. dists(l) == -1) then
                 k=0
-                do while (dist < dists(l-1-k))
+                do while (dist < dists(l-1-k) .and. k < l-1)
                    k=k+1
                 enddo
                 dists(l-k+1:ncell) = dists(l-k:ncell-1)
