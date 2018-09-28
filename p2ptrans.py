@@ -1,62 +1,103 @@
 from p2ptrans import transform as tr
 import numpy as np
 import numpy.linalg as la
-# from mpl_toolkits.mplot3d import Axes3D
 import matplotlib
-matplotlib.use('Agg')
+# matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from p2ptrans import tiling as t
 import pickle
 import time
-from pylada.crystal import Structure, primitive, gruber
+from pylada.crystal import Structure, primitive, gruber, supercell
 from copy import deepcopy
+import warnings
 
-tol = 1e-5
+tol = 1e-2
+
+def uniqueclose(closest, tol):
+    unique = []
+    idx = []
+    for i,line in enumerate(closest.T):
+        there = False
+        for check in unique:
+            if np.allclose(check, line, atol=tol):
+                there = True
+                break
+        if not there:
+            unique.append(line)
+            idx.append(i)
+    return (np.array(idx), np.array(unique))
 
 def find_cell(class_list, positions, tol = 1e-5, frac_tol = 0.5):
-    cell = np.zeros((3,3))
-    for i in range(len(np.unique(class_list))):
+    cell_list = []
+    origin_list = []
+    for i in np.unique(class_list):
         newcell = np.identity(3)
         pos = positions[:, class_list == i]
-        pos = pos[:,1:] - pos[:,0:1].dot(np.ones((1,np.shape(pos)[1]-1))) # centered
+        center = np.argmin(la.norm(pos, axis = 0))
+        list_in = list(range(np.shape(pos)[1]))
+        list_in.remove(center)
+        origin = pos[:,center:center+1]
+        pos = pos[:,list_in] - origin.dot(np.ones((1,np.shape(pos)[1]-1))) # centered
         norms = la.norm(pos, axis = 0)
         idx = np.argsort(norms)
         j = 0;
         for k in idx:
             multiple = [0]
-            if j == 1:
+            #If there is already one cell vector (j=1) skips the candidate if it's parallel
+            if j == 1: 
                 if la.norm(np.cross(pos[:,k], newcell[:,0])) < tol:
                     continue
+            # If there is already two cell vectors (j=2) skips the candidate if it's parallel
+            # to one of the vectors
             elif j == 2:
                 if abs(la.det(np.concatenate((newcell[:,:2],pos[:,k:k+1]), axis=1))) < tol:
                     continue
+            # Goes through the displacements and finds the one that are parallel
             for p in pos.T:
-                if la.norm(np.cross(p,pos[:,k])) < tol:
+                if la.norm(np.cross(p,pos[:,k]))/(la.norm(p) * la.norm(pos[:,k])) < tol:
                     multiple.append(p.dot(pos[:,k])/la.norm(pos[:,k])**2)
+
+            # Find the norms of all vectors with respect to the center of the interval
+            # finds all the displacements inside the 'shell' of the interval
             if multiple != []:
                 multiple.sort()
-                shell = np.sum(norms < abs(multiple[0])*la.norm(pos[:,k]))/float(len(norms))
-                shell = min(shell, np.sum(norms < multiple[-1]*la.norm(pos[:,k]))/float(len(norms)))
+                norms = la.norm(pos - 1 / 2.0 * (multiple[0]+multiple[-1]) *
+                                pos[:,k:k+1].dot(np.ones((1,np.shape(pos)[1]))), axis = 0)
+                shell = np.sum(norms < 1 / 2.0 * (multiple[-1]-multiple[0])*la.norm(pos[:,k]) + tol) / float(len(norms))
+                # If it is the right size (to check next condition)
                 if len(multiple) == len(np.arange(round(multiple[0]), round(multiple[-1])\
     +1)):
-                    if np.allclose(multiple, np.arange(round(multiple[0]), round(multiple[-1])+1), tol) and shell > frac_tol:
+                    # If all the multiples are present and the interval cover more than a certain 
+                    # fraction of displacements the displacement is added as a cell vector
+                    if np.allclose(multiple, np.arange(round(multiple[0]), round(multiple[-1])+1), tol) and shell > frac_tol**3:
                         newcell[:,j] = pos[:,k]
                         j += 1
-                        if j == 2: break #In 2D only TMP TODO
-        else:
-            raise RuntimeError("Could not find periodic cell for displacement %d"%i)
-        if i==0:
-            cell = newcell
-        elif la.det(cell) < la.det(newcell):
-            if np.allclose(la.inv(cell).dot(newcell), np.round(la.inv(cell).dot(newcell)), tol):
-                cell = newcell
-            else:
-                raise RuntimeError("The periodicity of the different classes of displacement is different")
-        else:
-            if not np.allclose(la.inv(newcell).dot(cell), np.round(la.inv(newcell).dot(cell)),\
+                        if j == 2:
+                            for cell in cell_list:
+                                if abs(la.det(cell)) < abs(la.det(newcell)):
+                                    if not np.allclose(la.inv(cell).dot(newcell), np.round(la.inv(cell).dot(newcell)), tol):
+                                        raise RuntimeError("The periodicity of the different classes of displacement is different")
+                                else:
+                                    if not np.allclose(la.inv(newcell).dot(cell), np.round(la.inv(newcell).dot(cell)),\
      tol):
-                raise RuntimeError("The periodicity of the different classes of displacement is different")
-    return cell
+                                        raise RuntimeError("The periodicity of the different classes of displacement is different")
+
+                            # if la.det(newcell) < 0:
+                            #     newcell[:,2] = -newcell[:,2]
+
+                            cell_list.append(newcell)
+                            origin_list.append(origin)
+                            break
+        else:
+            warnings.warn("Could not find periodic cell for displacement %d. Increase sample size or use results with care."%i, RuntimeWarning)
+            
+    if len(cell_list) == 0:
+        raise RuntimeError("Could not find periodic cell for any displacement. Increase sample size.")
+
+    cell = cell_list[np.argmax([la.det(cell) for cell in cell_list])]
+    origin = origin_list[np.argmax([la.det(cell) for cell in cell_list])]
+
+    return cell, origin
 
 def classify(disps, tol = 1.e-1):
     vec_classes = [disps[:,0:1]]
@@ -65,8 +106,9 @@ def classify(disps, tol = 1.e-1):
         classified = False
         for j, vec_class in enumerate(vec_classes):
             vec_mean = np.mean(vec_class, axis=1)
-            if (abs(la.norm(vec_mean) - vec_mean.T.dot(disps[:,i])/la.norm(vec_mean)) < tol and 
-                la.norm(np.cross(vec_mean, disps[:,i]))/la.norm(vec_mean) < tol):
+            # if (abs(la.norm(vec_mean) - vec_mean.T.dot(disps[:,i])/la.norm(vec_mean)) < tol and 
+            #     la.norm(np.cross(vec_mean, disps[:,i]))/la.norm(vec_mean) < tol):
+            if (la.norm(vec_mean - disps[:,i]) < tol):
                 vec_classes[j] = np.concatenate((vec_class,disps[:,i:i+1]),axis=1)
                 if j == 3:
                     print(vec_mean, disps[:,i])
@@ -122,26 +164,34 @@ random = False
 # B.add_atom(0,0,0,'Si')
 
 # Classification classic
+
 A = Structure(np.array([[19.9121208191,0,0],[9.9560632706,17.2444074280,0],[0,0,1]]).T * 0.25)
 A.add_atom(0,0,0,'1')
+Alabel = "Ni"
 
-B = Structure(np.array([[7.27612877841,0,0],[3.6380643892,6.30131236331,0],[0,0,1]]).T)
+B = Structure(np.array([[7.27612877841,0,0],[3.6380643892,6.30131236331,0],[0,0,1]]).T*0.5)
 B.add_atom(0,0,0,'1')
+Blabel = "Zr"
 
 
 mul = lcm(len(A),len(B))
 mulA = mul//len(A)
 mulB = mul//len(B)
 
-if mulA*la.det(A.cell) > mulB*la.det(B.cell):
+if mulA*la.det(A.cell) < mulB*la.det(B.cell):
     tmp = deepcopy(B)
     tmpmul = mulB
+    tmplabel = Blabel
+
     B = deepcopy(A)
     mulB = mulA
+    Blabel = Alabel
+
     A = tmp
     mulA = tmpmul
+    Alabel = tmplabel
 
-ncell = 500
+ncell = 400
 
 # Setting the unit cells of A and B
 Acell = A.cell[:2,:2]
@@ -247,24 +297,23 @@ Acell_tmp[:2,:2] = Acell
 
 Apos = np.asfortranarray(Apos)
 Bpos = np.asfortranarray(Bpos) 
-t_time = time.time()
-Apos_map, Bpos, Bposst, n_map, tmat, dmin = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell_tmp, la.inv(Acell_tmp), atoms, 100, 100, 4, 4, 1e-5, 1e-5) #TMP
-t_time = time.time() - t_time
-Bpos = np.asanyarray(Bpos)
-Apos = np.asanyarray(Apos)
+# t_time = time.time()
+# Apos_map, Bpos, Bposst, n_map, tmat, dmin = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell_tmp, la.inv(Acell_tmp), atoms, 1000, 100, 4, 4, 1e-5, 1e-5) #TMP
+# t_time = time.time() - t_time
+# Bpos = np.asanyarray(Bpos)
+# Apos = np.asanyarray(Apos)
 
-print(dmin)
-print("Mapping time:", t_time)
+# print(dmin)
+# print("Mapping time:", t_time)
 
-pickle.dump((Apos_map, Bpos, Bposst, n_map, tmat, dmin), open("fastoptimization.dat","wb"))
+# pickle.dump((Apos_map, Bpos, Bposst, n_map, tmat, dmin), open("fastoptimization.dat","wb"))
 
-# # TMP for testing only -->
-# tr.center(Apos)
-# tr.center(Bpos)
-# Apos_map, Bpos, Bposst, n_map, tmat, dmin = pickle.load(open("fastoptimization.dat","rb"))
-# # <--  
+# TMP for testing only -->
+tr.center(Apos)
+tr.center(Bpos)
+Apos_map, Bpos, Bposst, n_map, tmat, dmin = pickle.load(open("fastoptimization.dat","rb"))
+# <--  
 
-Apos = Apos[:2,:]
 Bpos = Bpos[:,:n_map]
 Bposst = Bposst[:,:n_map]
 Apos_map = Apos_map[:,:n_map]
@@ -306,9 +355,10 @@ ax = fig.add_subplot(111)
 #ax.scatter(Apos.T[:,0],Apos.T[:,1])
 for i,num in enumerate(atoms):
     for j in range(num):
-        ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,1], c="C%d"%(2*i))
+        ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,1], c="C%d"%(2*i), label=Alabel)
         ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,1], c="C%d"%(2*i), alpha=0.5)
-    ax.scatter(Bposst.T[natB*num*i:natB*num*(i+1),0],Bposst.T[natB*num*i:natB*num*(i+1),1], alpha=0.5, c="C%d"%(2*i+1))
+    ax.scatter(Bposst.T[natB*num*i:natB*num*(i+1),0],Bposst.T[natB*num*i:natB*num*(i+1),1], alpha=0.5, c="C%d"%(2*i+1), label=Blabel)
+ax.legend()
 maxXAxis = np.max([Apos.max(), Bposst.max()]) + 1
 ax.set_xlim([-maxXAxis, maxXAxis])
 ax.set_ylim([-maxXAxis, maxXAxis])
@@ -317,14 +367,16 @@ ax.set_aspect('equal')
 # Displacement with stretching
 disps = Apos_map - Bposst
 
-#fig = plt.figure()
-#ax = fig.add_subplot(111)
-ax.quiver(Bposst.T[:,0], Bposst.T[:,1],disps.T[:,0], disps.T[:,1], scale_units='xy', scale=1)
+
+# fig = plt.figure()
+# ax = fig.add_subplot(111)
+ax.quiver(Bposst.T[:,0], Bposst.T[:,1],disps.T[:,0], disps.T[:,1],scale_units='xy', scale=1)
 maxXAxis = np.max([Apos.max(), Bposst.max()]) + 1
 ax.set_xlim([-maxXAxis, maxXAxis])
 ax.set_ylim([-maxXAxis, maxXAxis])
 ax.set_aspect('equal')
 fig.savefig('DispLattice_stretched.svg')
+
 
 # Stretching Matrix
 Acell3d = np.identity(3) # TMP only for 2D
@@ -347,50 +399,78 @@ print(stMat)
 print("Rotation Matrix:")
 print(rtMat)
 
-
 class_list, vec_classes = classify(disps)
 
-# Display the diffrent classes of displacement 
+print("vec_classes", vec_classes)
+
+
+# Only the displacements
+fig = plt.figure()
+ax = fig.add_subplot(111)
+maxXAxis = np.max(disps) + 1
+ax.set_xlim([-maxXAxis, maxXAxis])
+ax.set_ylim([-maxXAxis, maxXAxis])
+ax.set_aspect('equal')
 for i in range(len(vec_classes)):
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
     disps_class = disps[:,class_list==i]
-    Bposst_class = Bposst[:,class_list==i]
-    ax.quiver(Bposst_class.T[:,0], Bposst_class.T[:,1], disps_class.T[:,0], disps_class.T[:,1], scale_units='xy', scale=1)
-    maxXAxis = np.max([Apos.max(), Bposst.max()]) + 1
-    ax.set_xlim([-maxXAxis, maxXAxis])
-    ax.set_ylim([-maxXAxis, maxXAxis])
-    ax.set_aspect('equal')
-    fig.savefig('DispLattice_stretched_%d.svg'%i)
+    ndisps = np.shape(disps_class)[1]
+    ax.quiver(np.zeros((1,ndisps)), np.zeros((1,ndisps)), disps_class.T[:,0], disps_class.T[:,1], color="C%d"%(i%10), scale_units='inches', scale=1)
+fig.savefig('DispOverlayed.svg')
 
 # Centers the position on the first atom
-pos_in_struc = Bposst- Bposst[:,0:1].dot(np.ones((1,np.shape(Bposst)[1])))
+pos_in_struc = Bposst-Bposst[:,0:1].dot(np.ones((1,np.shape(Bposst)[1])))
 
-cell = find_cell(class_list, Bposst)
+print("Volume stretching factor:", la.det(tmat))
+print("Cell volume ratio (should be exactly the same):", mulA * la.det(Acell)/(mulB * la.det(Bcell)))
+
+# plt.show()
+
+cell, origin = find_cell(class_list, Bposst)
+
+pos_in_struc = Bposst - origin.dot(np.ones((1,np.shape(Bposst)[1])))
+posA_in_struc = Apos - origin.dot(np.ones((1,np.shape(Apos)[1])))
+
+
+
+# Make a pylada structure
+DispStruc = Structure(cell)
+FinalStrucA = Structure(cell)
+FinalStrucB = Structure(cell)
+
+cell_coord = np.mod(la.inv(cell).dot(pos_in_struc)+tol,1)-tol
+
+for i, disp in zip(*uniqueclose(cell_coord, tol)):
+    DispStruc.add_atom(*(tuple(cell.dot(disp))+(str(class_list[i]),)))
+    FinalStrucB.add_atom(*(tuple(cell.dot(disp))+(Blabel,)))
+
+cell_coord = np.mod(la.inv(cell).dot(posA_in_struc)+tol,1)-tol
+
+for i, disp in zip(*uniqueclose(cell_coord, tol)):
+    FinalStrucA.add_atom(*(tuple(cell.dot(disp))+(Alabel,)))
+    
+if la.det(cell) < 0:
+    cell[:,2] = -cell[:,2] 
 
 # Finds a squarer cell
 cell = gruber(cell)
-cell = cell[:,np.argsort(cell[2,:])] # Only in 2D so that the z component is last 
+cell = cell[:,np.argsort(cell[2,:])] # Only in 2D so that the z component is last
 
-# Make a pylada structure
-cell_coord = la.inv(cell).dot(pos_in_struc)
-idx_struc = np.where(np.sum((cell_coord < 1-tol) & (cell_coord > - tol), axis = 0 ) == 3)[0]
-Struc = Structure(cell)
-for i, disp_type in enumerate(class_list[idx_struc]):
-    Struc.add_atom(*(tuple(pos_in_struc[:,idx_struc[i]])+(str(disp_type),)))
-    
+DispStruc = supercell(DispStruc, cell)
+
 # Makes sure it is the primitive cell 
-Struc = primitive(Struc, tolerance = tol)
+DispStruc = primitive(DispStruc, tolerance = tol)
+
+FinalStrucA = supercell(FinalStrucA, DispStruc.cell)
+FinalStrucB = supercell(FinalStrucB, DispStruc.cell)
 
 # Total displacement per unit volume a as metric
 Total_disp = 0 
-for disp in Struc:
+for disp in DispStruc:
     Total_disp += la.norm(vec_classes[int(disp.type)])
 
-Total_disp = Total_disp / la.det(Struc.cell)
+Total_disp = Total_disp / la.det(DispStruc.cell)
 
-cell = Struc.cell
-
+cell = DispStruc.cell
 
 print("Displacement Lattice")
 print(cell)
@@ -402,24 +482,35 @@ print("Total displacement stretched cell:", Total_disp)
 fig = plt.figure()
 ax = fig.add_subplot(111)
 ax.quiver(pos_in_struc.T[:,0], pos_in_struc.T[:,1],disps.T[:,0], disps.T[:,1], scale_units='xy', scale=1)
-ax.quiver(np.zeros(2), np.zeros(2), cell[0,:2], cell[1,:2], scale_units='xy', scale=1)
+ax.quiver(np.zeros(2), np.zeros(2), cell[0,:2], cell[1,:2], scale_units='xy', scale=1, color="red")
 maxXAxis = pos_in_struc.max() + 1
 ax.set_xlim([-maxXAxis, maxXAxis])
 ax.set_ylim([-maxXAxis, maxXAxis])
 ax.set_aspect('equal')
 fig.savefig('DispLattice_stretched_cell_primittive.svg')
 
+print("DISPS", DispStruc)
+print("A", FinalStrucA)
+print("B", FinalStrucB)
+
 # Displays only the cell and the displacements in it
 fig = plt.figure()
 ax = fig.add_subplot(111)
-for disp in Struc:
+for i,disp in enumerate(DispStruc):
     ax.quiver(disp.pos[0],disp.pos[1], vec_classes[int(disp.type)][0],vec_classes[int(disp.type)][1], scale_units='xy', scale=1)
+    ax.scatter(FinalStrucB[i].pos[0], FinalStrucB[i].pos[1], color="C1")
+
+for i,a in enumerate(FinalStrucA):
+    ax.scatter(a.pos[0], a.pos[1], color="C0")
+    
 ax.quiver(np.zeros(2), np.zeros(2), cell[0,:2], cell[1,:2], scale_units='xy', scale=1, color = "blue", alpha = 0.3)
 maxXAxis = abs(cell).max() + 1
 ax.set_xlim([-maxXAxis, maxXAxis])
 ax.set_ylim([-maxXAxis, maxXAxis])
 ax.set_aspect('equal')
 fig.savefig('Displacement_structure.svg')
+
+plt.show()
 
 plt.close('All')
     
