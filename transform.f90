@@ -806,7 +806,7 @@ contains
   end subroutine gradient_descent_explore_free
 
   subroutine fastoptimization(Apos_out, Bpos_out, Bpos_out_stretch, &
-       n_out, tmat, dmin, &
+       n_out, ttrans, rtrans, dmin, &
        Apos, na, Bpos, nb, &
        fracA, fracB, Acell, iAcell, atoms, n_atoms, &
        n_iter, n_ana, n_conv, n_adjust, &
@@ -878,7 +878,11 @@ contains
     double precision, dimension(na,nb) :: &
          mat
 
-    double precision, intent(out), dimension(3,3) :: &
+    double precision, intent(out), dimension(3,4) :: &
+         ttrans, &
+         rtrans
+    
+    double precision, dimension(3,3) :: &
          tmat ! Transformation matrix
 
     double precision, &
@@ -964,7 +968,13 @@ contains
     
     Bpos_opt_stretch = free_trans(Bpos_opt,tmat,vec)
 
+    ttrans(:,1:3) = tmat
+    ttrans(:,4) = vec
+
     Bpos_opt = free_trans(Bpos_opt,rot_mat(theta,u),vec_rot)
+
+    rtrans(:,1:3) = rot_mat(theta,u)
+    rtrans(:,4) = vec_rot
     
     Bpos_out(:,1:n_out) = Bpos_opt
     Bpos_out_stretch(:,1:n_out) = Bpos_opt_stretch

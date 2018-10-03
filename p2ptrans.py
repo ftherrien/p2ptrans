@@ -210,6 +210,12 @@ fig.savefig('CellVectors.svg')
 ASC = t.circle(Acell, mulA * ncell)
 BSC = t.circle(Bcell, mulB * ncell)
 
+centerA = np.mean(ASC, axis=1)
+centerB = np.mean(BSC, axis=1)
+
+print("Center A", centerA)
+print("Center B", centerB)
+
 # Plot gamma points of each A cell
 fig = plt.figure()
 ax = fig.add_subplot(111)
@@ -297,22 +303,24 @@ Acell_tmp[:2,:2] = Acell
 
 Apos = np.asfortranarray(Apos)
 Bpos = np.asfortranarray(Bpos) 
-# t_time = time.time()
-# Apos_map, Bpos, Bposst, n_map, tmat, dmin = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell_tmp, la.inv(Acell_tmp), atoms, 1000, 100, 4, 4, 1e-5, 1e-5) #TMP
-# t_time = time.time() - t_time
-# Bpos = np.asanyarray(Bpos)
-# Apos = np.asanyarray(Apos)
+t_time = time.time()
+Apos_map, Bpos, Bposst, n_map, ttrans, rtrans, dmin = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell_tmp, la.inv(Acell_tmp), atoms, 1000, 100, 4, 4, 1e-5, 1e-5) #TMP
+t_time = time.time() - t_time
+Bpos = np.asanyarray(Bpos)
+Apos = np.asanyarray(Apos)
 
-# print(dmin)
-# print("Mapping time:", t_time)
+print(dmin)
+print("Mapping time:", t_time)
 
-# pickle.dump((Apos_map, Bpos, Bposst, n_map, tmat, dmin), open("fastoptimization.dat","wb"))
+pickle.dump((Apos_map, Bpos, Bposst, n_map, ttrans, rtrans, dmin), open("fastoptimization.dat","wb"))
 
-# TMP for testing only -->
-tr.center(Apos)
-tr.center(Bpos)
-Apos_map, Bpos, Bposst, n_map, tmat, dmin = pickle.load(open("fastoptimization.dat","rb"))
-# <--  
+# # TMP for testing only -->
+# tr.center(Apos)
+# tr.center(Bpos)
+# Apos_map, Bpos, Bposst, n_map, ttrans, rtrans, dmin = pickle.load(open("fastoptimization.dat","rb"))
+# # <--  
+
+tmat = ttrans[:,:3]
 
 Bpos = Bpos[:,:n_map]
 Bposst = Bposst[:,:n_map]
@@ -434,34 +442,35 @@ posA_in_struc = Apos - origin.dot(np.ones((1,np.shape(Apos)[1])))
 
 # Make a pylada structure
 DispStruc = Structure(cell)
-FinalStrucA = Structure(cell)
-FinalStrucB = Structure(cell)
+FinalStruc = Structure(cell)
 
 cell_coord = np.mod(la.inv(cell).dot(pos_in_struc)+tol,1)-tol
 
 for i, disp in zip(*uniqueclose(cell_coord, tol)):
     DispStruc.add_atom(*(tuple(cell.dot(disp))+(str(class_list[i]),)))
-    FinalStrucB.add_atom(*(tuple(cell.dot(disp))+(Blabel,)))
+    FinalStruc.add_atom(*(tuple(cell.dot(disp))+(Blabel,)))
 
 cell_coord = np.mod(la.inv(cell).dot(posA_in_struc)+tol,1)-tol
 
 for i, disp in zip(*uniqueclose(cell_coord, tol)):
-    FinalStrucA.add_atom(*(tuple(cell.dot(disp))+(Alabel,)))
+    FinalStruc.add_atom(*(tuple(cell.dot(disp))+(Alabel,)))
     
 if la.det(cell) < 0:
     cell[:,2] = -cell[:,2] 
 
 # Finds a squarer cell
+print("cell before gruber", cell)
 cell = gruber(cell)
-cell = cell[:,np.argsort(cell[2,:])] # Only in 2D so that the z component is last
+cell = cell[:,np.argsort(abs(cell[2,:]))] # Only in 2D so that the z component is last
+cell[1,:] = cell[2,2]*cell[1,:]
+cell[2,2] = abs(cell[2,2])
 
 DispStruc = supercell(DispStruc, cell)
 
 # Makes sure it is the primitive cell 
 DispStruc = primitive(DispStruc, tolerance = tol)
 
-FinalStrucA = supercell(FinalStrucA, DispStruc.cell)
-FinalStrucB = supercell(FinalStrucB, DispStruc.cell)
+FinalStruc = supercell(FinalStruc, DispStruc.cell)
 
 # Total displacement per unit volume a as metric
 Total_disp = 0 
@@ -471,6 +480,8 @@ for disp in DispStruc:
 Total_disp = Total_disp / la.det(DispStruc.cell)
 
 cell = DispStruc.cell
+
+pickle.dump((Alabel, Blabel, rtrans, ttrans, cell, centerA, centerB), open("transformation.dat","wb")) 
 
 print("Displacement Lattice")
 print(cell)
@@ -490,18 +501,19 @@ ax.set_aspect('equal')
 fig.savefig('DispLattice_stretched_cell_primittive.svg')
 
 print("DISPS", DispStruc)
-print("A", FinalStrucA)
-print("B", FinalStrucB)
+print("A", FinalStruc)
 
 # Displays only the cell and the displacements in it
 fig = plt.figure()
 ax = fig.add_subplot(111)
 for i,disp in enumerate(DispStruc):
     ax.quiver(disp.pos[0],disp.pos[1], vec_classes[int(disp.type)][0],vec_classes[int(disp.type)][1], scale_units='xy', scale=1)
-    ax.scatter(FinalStrucB[i].pos[0], FinalStrucB[i].pos[1], color="C1")
 
-for i,a in enumerate(FinalStrucA):
-    ax.scatter(a.pos[0], a.pos[1], color="C0")
+for i,a in enumerate(FinalStruc):
+    if a.type == Alabel:
+        ax.scatter(a.pos[0], a.pos[1], color="C0")
+    else:
+        ax.scatter(a.pos[0], a.pos[1], color="C1")
     
 ax.quiver(np.zeros(2), np.zeros(2), cell[0,:2], cell[1,:2], scale_units='xy', scale=1, color = "blue", alpha = 0.3)
 maxXAxis = abs(cell).max() + 1
