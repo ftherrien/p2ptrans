@@ -13,6 +13,15 @@ import warnings
 
 tol = 1e-2
 
+def twoDCell(cell):
+    cell = cell[:,np.argsort(abs(cell[2,:]))] # Only in 2D so that the z component is last
+    if cell[2,2] < 0:
+        tmp = deepcopy(cell[:,0])
+        cell[:,0] = deepcopy(cell[:,1])
+        cell[:,1] = tmp
+    cell[2,2] = abs(cell[2,2])
+    return cell
+
 def uniqueclose(closest, tol):
     unique = []
     idx = []
@@ -110,8 +119,6 @@ def classify(disps, tol = 1.e-1):
             #     la.norm(np.cross(vec_mean, disps[:,i]))/la.norm(vec_mean) < tol):
             if (la.norm(vec_mean - disps[:,i]) < tol):
                 vec_classes[j] = np.concatenate((vec_class,disps[:,i:i+1]),axis=1)
-                if j == 3:
-                    print(vec_mean, disps[:,i])
                 class_list[i] = j
                 classified = True
                 break
@@ -144,71 +151,36 @@ def gcd(x, y):
 # Begin Program
 
 random = False
+output = True
+stats_on = True
+
 
 # Eventually this can be from pcread
+A = Structure(np.array([[7.247844507162113,0,0],[3.6239222535810565, 6.276817465881893,0],[0,0,2]]).T*0.5)
+A.add_atom(0, 0,0,'1')
+Alabel = "Zr"
 
-# Multiple atoms example
-# A = Structure(np.identity(3))
-# A.add_atom(0,0,0,'Si')
-# A.add_atom(0.1,0.1,0,'Be')
-
-# B = Structure(np.array([[1.1,0,0],[1.1,1.5,0],[0,0,1]]).T)
-# B.add_atom(0,0,0,'Si')
-# B.add_atom(0.6,0.3,0,'Be')
-
-# # The calssic
-# A = Structure(np.identity(3))
-# A.add_atom(0,0,0,'Si')
-
-# B = Structure(np.array([[-1.0,1.0,0],[0.5,0.5,0],[0,0,1]]).T)
-# B.add_atom(0,0,0,'Si')
-
-# Classification classic
-
-A = Structure(np.array([[19.9121208191,0,0],[9.9560632706,17.2444074280,0],[0,0,1]]).T * 0.25)
-A.add_atom(0,0,0,'1')
-Alabel = "Ni"
-
-B = Structure(np.array([[7.281785632659066,0,0],[3.640892816329533, 6.306211342795291,0],[0,0,1]]).T*0.5)
+B = Structure(np.array([[4.97803173955,0,0],[2.48901586978,4.3111019473,0],[0,0,1]]).T)
 B.add_atom(0,0,0,'1')
-Blabel = "Zr"
+Blabel = "Ni"
+
+print("Initial volume of structures:")
+print("A:", la.det(A.cell))
+print("B:", la.det(B.cell))
 
 
 mul = lcm(len(A),len(B))
 mulA = mul//len(A)
 mulB = mul//len(B)
-
-if mulA*la.det(A.cell) < mulB*la.det(B.cell):
-    tmp = deepcopy(B)
-    tmpmul = mulB
-    tmplabel = Blabel
-
-    B = deepcopy(A)
-    mulB = mulA
-    Blabel = Alabel
-
-    A = tmp
-    mulA = tmpmul
-    Alabel = tmplabel
-
-ncell = 400
+                
+ncell = 550
 
 # Setting the unit cells of A and B
 Acell = A.cell[:2,:2]
 Bcell = B.cell[:2,:2] 
 
-# Plotting the cell vectors of A and B
-fig = plt.figure()
-ax = fig.add_subplot(111)
-ax.quiver(np.ones(3), np.ones(3), Bcell[0,:], Bcell[1,:])
-ax.quiver(-np.ones(3), -np.ones(3), Acell[0,:], Acell[1,:])
-ax.set_xlim([-5, 5])
-ax.set_ylim([-5, 5])
-fig.savefig('CellVectors.svg')
-
-
-ASC = t.circle(Acell, mulA * ncell)
-BSC = t.circle(Bcell, mulB * ncell)
+ASC = t.circle(Acell, ncell*mulA)
+BSC = t.circle(Bcell, ncell*mulB)
 
 centerA = np.mean(ASC, axis=1)
 centerB = np.mean(BSC, axis=1)
@@ -216,28 +188,31 @@ centerB = np.mean(BSC, axis=1)
 print("Center A", centerA)
 print("Center B", centerB)
 
-# Plot gamma points of each A cell
-fig = plt.figure()
-ax = fig.add_subplot(111)
-ax.scatter(ASC[0,:], ASC[1,:], c='k')
-maxXAxis = np.max([ASC[0,:].max(),ASC[1,:].max()])
-minXAxis = np.min([ASC[0,:].min(),ASC[1,:].min()])
-ax.set_xlim([minXAxis-1, maxXAxis+1])
-ax.set_ylim([minXAxis-1, maxXAxis+1])
-ax.set_aspect('equal')
-fig.savefig('Agrid.svg')
-
-# Plot gamma points of each B cell
-fig = plt.figure()
-ax = fig.add_subplot(111)
-ax.scatter(BSC[0,:], BSC[1,:], facecolor='w', edgecolor='k')
-maxXAxis = np.max([BSC[0,:].max(),BSC[1,:].max()])
-minXAxis = np.min([BSC[0,:].min(),BSC[1,:].min()])
-ax.set_xlim([minXAxis-1, maxXAxis+1])
-ax.set_ylim([minXAxis-1, maxXAxis+1])
-ax.set_aspect('equal')
-fig.savefig('Bgrid.svg')
-
+if output:
+    # Plot gamma points of each A cell
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.scatter(ASC[0,:], ASC[1,:], c='k', label=Alabel)
+    maxXAxis = np.max([ASC[0,:].max(),ASC[1,:].max()])
+    minXAxis = np.min([ASC[0,:].min(),ASC[1,:].min()])
+    ax.set_xlim([minXAxis-1, maxXAxis+1])
+    ax.set_ylim([minXAxis-1, maxXAxis+1])
+    ax.set_aspect('equal')
+    fig.legend()
+    fig.savefig('Agrid.svg')
+    
+    # Plot gamma points of each B cell
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.scatter(BSC[0,:], BSC[1,:], facecolor='w', edgecolor='k', label=Blabel)
+    maxXAxis = np.max([BSC[0,:].max(),BSC[1,:].max()])
+    minXAxis = np.min([BSC[0,:].min(),BSC[1,:].min()])
+    ax.set_xlim([minXAxis-1, maxXAxis+1])
+    ax.set_ylim([minXAxis-1, maxXAxis+1])
+    ax.set_aspect('equal')
+    fig.legend()
+    fig.savefig('Bgrid.svg')
+    
 # For testing purposes
 if random:
     # Create a random Apos and B with random small displacement
@@ -268,10 +243,10 @@ else:
     for a in A:
         if any(atom_types == a.type):
             idx = np.where(atom_types == a.type)[0][0]
-            Apos[idx] = np.concatenate((Apos[idx], ASC + Acell.dot(np.reshape(a.pos[:2],(2,1))).dot(np.ones((1,np.shape(ASC)[1])))), axis = 1) 
+            Apos[idx] = np.concatenate((Apos[idx], ASC + np.reshape(a.pos[:2],(2,1)).dot(np.ones((1,np.shape(ASC)[1])))), axis = 1) 
             atomsA[idx] += 1
         else:
-            Apos.append(ASC + Acell.dot(np.reshape(a.pos[:2],(2,1))).dot(np.ones((1,np.shape(ASC)[1]))))
+            Apos.append(ASC + np.reshape(a.pos[:2],(2,1)).dot(np.ones((1,np.shape(ASC)[1]))))
             atom_types = np.append(atom_types, a.type)
             atomsA = np.append(atomsA,1)
 
@@ -283,9 +258,9 @@ else:
         print(type(atom_types), atom_types)
         idx = np.where(atom_types == a.type)[0][0]
         if atomsB[idx] == 0:
-            Bpos[idx] = BSC + Bcell.dot(np.reshape(a.pos[:2],(2,1))).dot(np.ones((1,np.shape(BSC)[1])))
+            Bpos[idx] = BSC + np.reshape(a.pos[:2],(2,1)).dot(np.ones((1,np.shape(BSC)[1])))
         else:
-            Bpos[idx] = np.concatenate((Bpos[idx], BSC + Bcell.dot(np.reshape(a.pos[:2],(2,1))).dot(np.ones((1,np.shape(BSC)[1])))), axis = 1) 
+            Bpos[idx] = np.concatenate((Bpos[idx], BSC + np.reshape(a.pos[:2],(2,1)).dot(np.ones((1,np.shape(BSC)[1])))), axis = 1) 
         atomsB[idx] += 1
 
     Bpos = np.concatenate(Bpos, axis=1)
@@ -297,14 +272,14 @@ else:
     atoms = mulA*atomsA
 
 fracB = 0.25
-fracA = 0 # Set to 0 to allow skipping
+fracA = 0.00 # Set to 0 to allow skipping
 Acell_tmp = np.identity(3)
 Acell_tmp[:2,:2] = Acell
 
 Apos = np.asfortranarray(Apos)
 Bpos = np.asfortranarray(Bpos) 
 t_time = time.time()
-Apos_map, Bpos, Bposst, n_map, ttrans, rtrans, dmin = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell_tmp, la.inv(Acell_tmp), atoms, 1000, 100, 4, 4, 1e-5, 1e-5) #TMP
+Apos_map, Bpos, Bposst, n_map, ttrans, rtrans, dmin, stats = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell_tmp, la.inv(Acell_tmp), atoms, 1000, 200, 7, 2, 1e-5, 1e-5) #TMP
 t_time = time.time() - t_time
 Bpos = np.asanyarray(Bpos)
 Apos = np.asanyarray(Apos)
@@ -312,13 +287,14 @@ Apos = np.asanyarray(Apos)
 print(dmin)
 print("Mapping time:", t_time)
 
-pickle.dump((Apos_map, Bpos, Bposst, n_map, ttrans, rtrans, dmin), open("fastoptimization.dat","wb"))
+pickle.dump((Apos_map, Bpos, Bposst, n_map, ttrans, rtrans, dmin, stats), open("fastoptimization.dat","wb"))
 
 # # TMP for testing only -->
 # tr.center(Apos)
 # tr.center(Bpos)
-# Apos_map, Bpos, Bposst, n_map, ttrans, rtrans, dmin = pickle.load(open("fastoptimization.dat","rb"))
-# # <--  
+# Apos_map, Bpos, Bposst, n_map, ttrans, rtrans, dmin, stats = pickle.load(open("fastoptimization.dat","rb"))
+# # <--
+
 
 tmat = ttrans[:,:3]
 
@@ -330,7 +306,48 @@ natB = np.shape(Bposst)[1] // np.sum(atoms)
 nat = np.shape(Apos)[1] // np.sum(atoms)
 natA = int(fracA*np.shape(Apos)[1]/np.sum(atoms))
 
+if stats_on:
+    angles = stats[:,0]
+    randangles = stats[:,4]
+    dists = stats[:,3]
+    
+    angles= np.mod(angles,np.pi/3)
+    randangles= np.mod(randangles,np.pi/3)
+    
+    idx = np.argsort(angles)
+    angles = 180*angles[idx]/np.pi
+    
+    plt.figure()
+    plt.hist(angles,100)
+    
+    plt.figure()
+    plt.hist(randangles,100)
+    
+    #Running std
+    
+    size = 20
+    stdrun = np.zeros(len(angles)-size)
+    for i in range(len(angles)-size):
+        stdrun[i] = np.std(angles[i:i+size])
+    
+    plt.figure()
+    plt.plot(angles[size//2:-size//2],stdrun)
+    
+    
+    plt.figure()
+    plt.plot(angles)
+    
+    plt.figure()
+    plt.plot(stats[:,3])
 
+meanrun = np.zeros(len(dists)-size)
+for i in range(len(dists)-size):
+    meanrun[i] = np.mean(dists[i:i+size])
+
+plt.figure()
+plt.plot(angles[size//2:-size//2],meanrun)
+
+    
 # Plotting the Apos and Bpos overlayed
 fig = plt.figure()
 ax = fig.add_subplot(111)
@@ -401,6 +418,9 @@ stMat = la.inv(tr.canonicalize(Bcell)).dot(tr.canonicalize(tmat.dot(Bcell)))
 # Rotation Matrix
 rtMat = tmat.dot(Bcell).dot(la.inv(stMat)).dot(la.inv(Bcell))
 
+print("Shift Vector:")
+print(ttrans[:,3])
+
 print("Stretching Matrix:")
 print(stMat)
 
@@ -408,9 +428,6 @@ print("Rotation Matrix:")
 print(rtMat)
 
 class_list, vec_classes = classify(disps)
-
-print("vec_classes", vec_classes)
-
 
 # Only the displacements
 fig = plt.figure()
@@ -431,14 +448,20 @@ pos_in_struc = Bposst-Bposst[:,0:1].dot(np.ones((1,np.shape(Bposst)[1])))
 print("Volume stretching factor:", la.det(tmat))
 print("Cell volume ratio (should be exactly the same):", mulA * la.det(Acell)/(mulB * la.det(Bcell)))
 
-# plt.show()
+plt.show()
 
 cell, origin = find_cell(class_list, Bposst)
 
 pos_in_struc = Bposst - origin.dot(np.ones((1,np.shape(Bposst)[1])))
 posA_in_struc = Apos - origin.dot(np.ones((1,np.shape(Apos)[1])))
 
+# Postive volume
+if la.det(cell) < 0:
+    cell[:,2] = -cell[:,2] 
 
+# Finds a squarer cell
+print("cell before gruber", cell)
+cell = twoDCell(gruber(cell))
 
 # Make a pylada structure
 DispStruc = Structure(cell)
@@ -454,21 +477,11 @@ cell_coord = np.mod(la.inv(cell).dot(posA_in_struc)+tol,1)-tol
 
 for i, disp in zip(*uniqueclose(cell_coord, tol)):
     FinalStruc.add_atom(*(tuple(cell.dot(disp))+(Alabel,)))
-    
-if la.det(cell) < 0:
-    cell[:,2] = -cell[:,2] 
-
-# Finds a squarer cell
-print("cell before gruber", cell)
-cell = gruber(cell)
-cell = cell[:,np.argsort(abs(cell[2,:]))] # Only in 2D so that the z component is last
-cell[1,:] = cell[2,2]*cell[1,:]
-cell[2,2] = abs(cell[2,2])
-
-DispStruc = supercell(DispStruc, cell)
 
 # Makes sure it is the primitive cell 
-DispStruc = primitive(DispStruc, tolerance = tol)
+DispStruc = primitive(DispStruc, tolerance = tol)    
+
+DispStruc = supercell(DispStruc, twoDCell(DispStruc.cell))    
 
 FinalStruc = supercell(FinalStruc, DispStruc.cell)
 
@@ -477,14 +490,27 @@ Total_disp = 0
 for disp in DispStruc:
     Total_disp += la.norm(vec_classes[int(disp.type)])
 
-Total_disp = Total_disp / la.det(DispStruc.cell)
-
 cell = DispStruc.cell
 
 pickle.dump((Alabel, Blabel, rtrans, ttrans, cell, centerA, centerB), open("transformation.dat","wb")) 
 
 print("Displacement Lattice")
 print(cell)
+
+print("Volume of the Displacement Lattice")
+print(la.det(cell))
+
+print("Number of bonds per unit volume:")
+print(len(DispStruc)/la.det(cell))
+
+print("Average distance per bond")
+print(Total_disp/len(DispStruc))
+
+print("Number of bonds in cell")
+print(len(DispStruc))
+
+print("Number of atoms in cell")
+print(len(FinalStruc)-len(DispStruc))
 
 print("Volume stretching factor:", la.det(stMat))
 print("Total displacement stretched cell:", Total_disp)

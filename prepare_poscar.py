@@ -9,7 +9,7 @@ la = np.linalg
 
 spacing = 2 # Angstrom
 
-tickness = 10
+tickness = 15
 
 Alabel, Blabel, rtrans, ttrans, cell, centerA, centerB = pickle.load(open("transformation.dat","rb")) 
 
@@ -28,7 +28,7 @@ for a in A:
     if a.type == Alabel:
         break
 else:
-    A = tmp
+    tmp = A
     A = B
     B = tmp
     for a in A:
@@ -55,17 +55,17 @@ for b in B:
         if b.pos[2] < shiftB[2]:
             shiftB = b.pos
 
-fig = plt.figure()
-ax = fig.add_subplot(111)
-ax.set_aspect('equal')
+# fig = plt.figure()
+# ax = fig.add_subplot(111)
+# ax.set_aspect('equal')
 
-for a in supercell(A, np.array([[10,0,0],[0,10,0],[0,0,1]]).dot(A.cell):
-    if abs(a.pos[2] - shiftA) < 1e-5:
-        ax.scatter(a.pos[0], a.pos[1], color="red", alpha='0.5')
+# for a in supercell(A, np.array([[10,0,0],[0,10,0],[0,0,1]]).dot(A.cell):
+#     if abs(a.pos[2] - shiftA) < 1e-5:
+#         ax.scatter(a.pos[0], a.pos[1], color="red", alpha='0.5')
 
-for b in supercell(B, np.array([[10,0,0],[0,10,0],[0,0,1]]).dot(B.cell):
-    if abs(b.pos[2] - shiftB) < 1e-5:
-        ax.scatter(b.pos[0], b.pos[1], color="blue", alpha='0.5')
+# for b in supercell(B, np.array([[10,0,0],[0,10,0],[0,0,1]]).dot(B.cell):
+#     if abs(b.pos[2] - shiftB) < 1e-5:
+#         ax.scatter(b.pos[0], b.pos[1], color="blue", alpha='0.5')
 
 A.cell[:,2] = -A.cell[:,2] # The substrate is at the bottom
 newA = Structure(A.cell)
@@ -154,22 +154,31 @@ ax = fig.add_subplot(111)
 ax.set_aspect('equal')
 
 once=False
-for a in A:
+for i,a in enumerate(A):
     if abs(a.pos[2]) < 1e-5:
-        ax.scatter(a.pos[0], a.pos[1], color="red", alpha='0.5')
         if not once:
             once = True
             ax.quiver(a.pos[0], a.pos[1], zrv1[0], zrv1[1], scale_units='xy', scale=1)
             ax.quiver(a.pos[0], a.pos[1], zrv2[0], zrv2[1], scale_units='xy', scale=1)
 
+        if not np.mod(i,4):
+            ax.scatter(a.pos[0], a.pos[1], color="red", alpha='0.5')
+        else:
+            ax.scatter(a.pos[0], a.pos[1], color="green", alpha='0.5')
+
 once=False
-for b in B:
+for i, b in enumerate(B):
     if abs(b.pos[2]) < 1e-5:
-        ax.scatter(b.pos[0], b.pos[1], color="blue", alpha='0.5')
+
         if not once:
             once = True
+            center = b.pos
             ax.quiver(b.pos[0], b.pos[1], niv1[0], niv1[1], scale_units='xy', scale=1)
             ax.quiver(b.pos[0], b.pos[1], niv2[0], niv2[1], scale_units='xy', scale=1)
+
+        print(abs(la.inv(oBcell).dot(b.pos - center) - np.round(la.inv(2*oBcell).dot(b.pos - center))))
+        
+        ax.scatter(b.pos[0], b.pos[1], color="blue", alpha='0.5')
 
 plt.show()
             

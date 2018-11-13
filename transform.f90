@@ -415,7 +415,7 @@ contains
 
   end subroutine analytical_gd_free
   
-  subroutine gradient_descent_explore(theta,u, vec, Apos, Bpos, cell, icell, &
+  subroutine gradient_descent_explore(theta,u,vec,stats, Apos, Bpos, cell, icell, &
        fracA, fracB, atoms, n_atoms, n_iter, n_ana, n_conv, rate1, rate2)
     ! New Gradient Descent Random
 
@@ -457,6 +457,9 @@ contains
          vec, &     ! Translation vector
          u
 
+    double precision, intent(out), dimension(n_iter,5) :: &
+         stats
+    
     double precision, dimension(3) :: &
          vec_local, &     ! Translation vector
          u_local
@@ -518,7 +521,7 @@ contains
     mul_vec = diag*2/sqrt(2.0d0) !Only in 2D sqrt(3) in 3D
     
     !$omp parallel default(private) shared(dist_min, &
-    !$omp theta_min, u_min, vec_min, u, theta, vec) &
+    !$omp theta_min, u_min, vec_min, u, theta, vec, stats) &
     !$omp firstprivate(n_iter, mul_vec, cell, fracA, fracB, &
     !$omp icell, n_conv, n_ana, Apos, Bpos, rate1, rate2, atoms, n_atoms)
 
@@ -546,6 +549,12 @@ contains
 
        theta_local = theta_local*2*pi
 
+       ! ! TMP testing
+       ! theta_local = 5.02d0 * pi / 180.0d0
+       ! ! TMP testing
+
+       stats(j,5) = theta_local
+          
        vec_local = vec_local - (/0.5d0,0.5d0,0.5d0/)
        vec_local(3) = 0.0d0 ! 2D only
 
@@ -582,6 +591,10 @@ contains
 
        write(*,*) "Opt dist", thread, dist_cur
 
+       stats(j,1) = theta_local
+       stats(j,2:3) = vec_local(1:2)
+       stats(j,4) = dist_cur
+       
        if (dist_cur < dist_min(thread)) then
           dist_min(thread) = dist_cur
           theta_min(thread) = theta_local
@@ -806,7 +819,7 @@ contains
   end subroutine gradient_descent_explore_free
 
   subroutine fastoptimization(Apos_out, Bpos_out, Bpos_out_stretch, &
-       n_out, ttrans, rtrans, dmin, &
+       n_out, ttrans, rtrans, dmin, stats, &
        Apos, na, Bpos, nb, &
        fracA, fracB, Acell, iAcell, atoms, n_atoms, &
        n_iter, n_ana, n_conv, n_adjust, &
@@ -861,6 +874,9 @@ contains
     double precision, intent(out) :: &
          dmin
 
+    double precision, intent(out), dimension(n_iter,5) :: &
+         stats
+
     double precision, dimension(3) :: &
          vec, & ! Translation vecto
          vec_rot, & ! Translation vector for the rotated unstretched matrix
@@ -907,12 +923,20 @@ contains
     call center(Bpos,nb)
     call center(Apos,na)
 
-    call gradient_descent_explore(theta, u, vec, Apos, Bpos, Acell, iAcell, &
+    call gradient_descent_explore(theta, u, vec, stats, Apos, Bpos, Acell, iAcell, &
          fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2)
 
     print*, "Apres:", theta, u
 
     tmat = rot_mat(theta,u)
+
+    ! tmat = transpose(reshape((/0.99585865, -0.09091507, 0., &
+    !      0.09091507, 0.99585865, 0., &
+    !      0., 0., 1./),(/3,3/)))
+
+    ! vec = (/-1.81149900e+00, -3.79245244e-04, 0.00000000e+00/)
+
+    u = (/0.0d0, 0.0d0, 1.0d0/)
     
     ! call gradient_descent_explore_free(tmat, vec, Apos, Bpos, Acell, iAcell, &
     !      fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2)
