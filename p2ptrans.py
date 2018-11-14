@@ -156,13 +156,13 @@ stats_on = True
 
 
 # Eventually this can be from pcread
-A = Structure(np.array([[7.247844507162113,0,0],[3.6239222535810565, 6.276817465881893,0],[0,0,2]]).T*0.5)
-A.add_atom(0, 0,0,'1')
-Alabel = "Zr"
+B = Structure(np.array([[7.247844507162113,0,0],[3.6239222535810565, 6.276817465881893,0],[0,0,2]]).T*0.5)
+B.add_atom(0, 0,0,'1')
+Blabel = "Zr"
 
-B = Structure(np.array([[4.97803173955,0,0],[2.48901586978,4.3111019473,0],[0,0,1]]).T)
-B.add_atom(0,0,0,'1')
-Blabel = "Ni"
+A = Structure(np.array([[4.97803173955,0,0],[2.48901586978,4.3111019473,0],[0,0,2]]).T*0.5)
+A.add_atom(0,0,0,'1')
+Alabel = "Ni"
 
 print("Initial volume of structures:")
 print("A:", la.det(A.cell))
@@ -279,7 +279,7 @@ Acell_tmp[:2,:2] = Acell
 Apos = np.asfortranarray(Apos)
 Bpos = np.asfortranarray(Bpos) 
 t_time = time.time()
-Apos_map, Bpos, Bposst, n_map, ttrans, rtrans, dmin, stats = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell_tmp, la.inv(Acell_tmp), atoms, 1000, 200, 7, 2, 1e-5, 1e-5) #TMP
+Apos_map, Bpos, Bposst, n_map, ttrans, rtrans, dmin, stats = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell_tmp, la.inv(Acell_tmp), atoms, 50000, 200, 7, 2, 1e-5, 1e-5) #TMP
 t_time = time.time() - t_time
 Bpos = np.asanyarray(Bpos)
 Apos = np.asanyarray(Apos)
@@ -318,9 +318,11 @@ if stats_on:
     angles = 180*angles[idx]/np.pi
     
     plt.figure()
+    plt.title("Final Angle distribution")
     plt.hist(angles,100)
     
     plt.figure()
+    plt.title("Random Angle distribution")
     plt.hist(randangles,100)
     
     #Running std
@@ -331,13 +333,16 @@ if stats_on:
         stdrun[i] = np.std(angles[i:i+size])
     
     plt.figure()
+    plt.title("Running STD")
     plt.plot(angles[size//2:-size//2],stdrun)
     
     
     plt.figure()
+    plt.title("Ordered angles")
     plt.plot(angles)
     
     plt.figure()
+    plt.title("Distances (not ordered)")
     plt.plot(stats[:,3])
 
 meanrun = np.zeros(len(dists)-size)
@@ -345,6 +350,7 @@ for i in range(len(dists)-size):
     meanrun[i] = np.mean(dists[i:i+size])
 
 plt.figure()
+plt.title('Running Mean')
 plt.plot(angles[size//2:-size//2],meanrun)
 
     
