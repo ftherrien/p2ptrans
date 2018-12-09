@@ -1123,6 +1123,194 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
 
   end subroutine gradient_descent_explore
 
+  subroutine gradient_descent_explore_free(tmat, vec, Apos, Bpos, cell, icell, &
+       fracA, fracB, atoms, n_atoms, n_iter, n_ana, n_conv, rate1, rate2, tol, max_vol)
+    ! New Gradient Descent Random
+
+    use omp_lib
+
+    integer, intent(in) :: &
+         n_iter, n_atoms, & ! Number of atoms
+         n_ana, &
+         n_conv
+
+    double precision, intent(in) :: &
+         rate1, & ! Rate for tmat
+         rate2, & ! Rate for disp
+         fracA, fracB, & ! Fraction of A and B to use in optimisation
+         tol, &
+         max_vol
+
+    double precision :: &
+         rand_rate1, & ! Rate for tmat
+         rand_rate2 ! Rate for disp
+
+    integer, intent(in), dimension(n_atoms) :: &
+         atoms
+
+    double precision, intent(in), dimension(:,:) :: &
+         Apos, Bpos ! Centered position of the atoms
+
+    double precision, intent(in), dimension(3,3) :: &
+         cell, &  ! cell
+         icell ! inverse of cell
+    
+    double precision, dimension(3,size(Bpos,2)) :: &
+         postmp, & ! position matrix
+         tBpos
+
+    double precision, dimension(3,int(fracB*size(Apos,2)/sum(atoms))*sum(atoms)) :: &
+         Apos_mapped, & ! position matrix
+         Apos_mapped_prev, &
+         Bpos_opt
+    
+    double precision, intent(out), dimension(3) :: &
+         vec             ! Translation vector
+
+    double precision, dimension(3) :: &
+         vec_local       ! Translation vector
+
+    double precision, intent(out), dimension(3,3) :: &
+         tmat    ! Transformation matrix
+
+    double precision, dimension(3,3) :: &
+         mat_tmp, & ! Temporary transformation matrix
+         mat_out, & ! Output transformation matrix
+         mat_min, &
+         P,Q, &
+         tmat_local
+
+    double precision, allocatable, dimension(:,:) :: &
+         dmat
+
+    integer, allocatable, dimension(:) :: &
+         map
+
+    double precision :: &
+         dist_plus, & ! distance when adding dx
+         dist_minus, & ! distance when substracting dx
+         accept, & ! Accept step
+         dist_cur, &
+         dist_map, &
+         dist_stretch, &
+         mul_vec, &
+         diag
+
+    double precision, allocatable, dimension(:) :: &
+         dist_min
+
+    double precision, allocatable, dimension(:,:,:) :: &
+         tmat_min
+
+    double precision, allocatable, dimension(:,:) :: &
+         vec_min
+    
+    integer :: &
+         i,j,k,l, & ! Iterator
+         id, idx, &
+         n, & ! Size of Bpos
+         An_cell, Bn_cell, &
+         n_threads, thread, &
+         pos
+
+    double precision, parameter :: &
+         pi = 3.141592653589793d0
+
+    diag = 0
+    diag = max(norm(cell(:,1) + cell(:,2) + cell(:,3)),diag)
+    diag = max(norm(-cell(:,1) + cell(:,2) + cell(:,3)),diag)
+    diag = max(norm(cell(:,1) - cell(:,2) + cell(:,3)),diag)
+    diag = max(norm(-cell(:,1) - cell(:,2) + cell(:,3)),diag)
+
+    mul_vec = diag*2/sqrt(3.0d0)
+    
+    !$omp parallel default(private) shared(dist_min, &
+    !$omp tmat_min, vec_min, vec) &
+    !$omp firstprivate(n_iter, mul_vec, max_vol, cell, fracA, fracB, &
+    !$omp icell, n_conv, n_ana, Apos, Bpos, rate1, rate2, atoms, n_atoms)
+
+    call init_random_seed()
+    
+    n_threads = OMP_get_num_threads()
+
+    !$omp single
+    allocate(dist_min(n_threads), &
+         tmat_min(3,3,n_threads), &
+         vec_min(3,n_threads))
+    !$omp end single
+
+    thread = OMP_get_thread_num() + 1
+    
+    dist_min(thread) = sum(sqrt(sum((Apos - Bpos)**2,1)))
+    
+    !$omp do
+    do j=1, n_iter
+       
+       call random_number(tmat_local)
+       call random_number(vec_local)
+
+       tmat_local = tmat_local * (max_vol / det(tmat_local,3))**(1.0d0/3.0d0)
+
+       vec_local = vec_local - (/0.5d0,0.5d0,0.5d0/)
+
+       vec_local = vec_local * mul_vec
+       
+       vec_local = vec_local - matmul(cell,nint(matmul(icell,vec_local))) 
+
+       write(*,*) "New initial step", thread, j, "tmat vol", det(tmat_local,3) 
+       
+       Apos_mapped = 1.0d0
+       Apos_mapped_prev = 0.0d0
+       k=1
+
+       do while ( k <= n_conv .and. any(Apos_mapped /= Apos_mapped_prev))
+          k=k+1
+
+          Apos_mapped_prev = Apos_mapped
+          
+          tBpos = free_trans(Bpos,tmat_local,vec_local)
+
+          call mapping(Apos_mapped, Bpos_opt, Apos, Bpos, tBpos, &
+               fracA, fracB, atoms, n_atoms)
+
+          call analytical_gd_free(tmat_local, vec_local, Apos_mapped, Bpos_opt, &
+               .false., n_ana, rate1, rate2, tol)
+
+       enddo
+
+       dist_cur = sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt,tmat_local,vec_local))**2,1)))
+
+       print*, "Opt dist", dist_cur, thread, j, "tmat_vol", det(tmat_local,3), vec_local
+
+       if (dist_cur < dist_min(thread)) then
+          dist_min(thread) = dist_cur
+          tmat_min(:,:,thread) = tmat_local
+          vec_min(:,thread) = vec_local
+       endif
+
+    enddo
+    !$omp end do
+    !$omp barrier
+    !$omp single
+
+    pos = minloc(dist_min, 1)
+    
+    tmat = tmat_min(:,:,pos)
+    vec = vec_min(:,pos)
+
+    print*, "Shortest dist", dist_min(pos)
+    print*, "tmat", tmat
+    print*, "Vec", vec
+
+    deallocate(dist_min, &
+         tmat_min,&
+         vec_min)
+    !$omp end single 
+    
+    !$omp end parallel
+
+  end subroutine gradient_descent_explore_free
+
   subroutine fastoptimization(Apos_out, Bpos_out, Bpos_out_stretch, & ! Output
        n_out, n_A, classes_list_out, & ! Output
        tmat, dmin, & ! Output
@@ -1200,7 +1388,9 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
          std, std_prev, &
          tol_adjust, &
          tol, &
-         tol_class
+         tol_class, &
+         tol_std, &
+         max_vol
 
     double precision, allocatable, dimension(:,:) :: &
          dmat
@@ -1250,18 +1440,23 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
 
     logical :: &
          slanting, &
-         fixed_vol
+         fixed_vol, &
+         remap, &
+         free
 
     namelist /input/ &
          fracA, fracB, &
-         tol, tol_class, &
+         tol, tol_std, &
+         tol_class, &
          rate1, rate2, &
          fixed_vol, slanting, &
          n_iter, n_ana, &
-         n_conv, n_adjust
+         n_conv, n_adjust, &
+         max_vol
 
     ! Namelist default values
     tol = 1.0d-4
+    tol_std = tol*1.0d-3
     tol_class = 1.0d-3
     rate1 = 1.0d-5
     rate2 = 1.0d-5
@@ -1273,6 +1468,7 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
     n_ana = 300
     n_conv = 5
     n_adjust = 10
+    max_vol = 4.0d0
 
     open (unit = 11, file = filename, status = 'OLD')
     read (11, input)
@@ -1299,9 +1495,21 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
     call center(Bpos,nb)
     call center(Apos,na)
 
-    call gradient_descent_explore(angles, vec, Apos, Bpos, Acell, iAcell, &
-         fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2, tol)
+    if (free) then
+       
+       call gradient_descent_explore_free(tmat, vec, Apos, Bpos, Acell, iAcell, &
+            fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2, tol, &
+            max_vol)
+    
+    else
+    
+       call gradient_descent_explore(angles, vec, Apos, Bpos, Acell, iAcell, &
+            fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2, tol)
 
+       tmat = rot_mat(angles)
+
+    endif
+       
     ! open (10,file='savebest.dat',form='unformatted')
     ! read(10) angles,vec
     ! close(10)
@@ -1313,8 +1521,6 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
 
     ! angles = (/3.4339149701581557, 1.6048859230251857, 4.0612796987166346/)
     ! vec = (/0.10050885919574745, -0.56119755905278279, -3.1596588407696302/)
-
-    tmat = rot_mat(angles)
 
     write(*,*) "/======== Stretching Adjustment ========\\"
     
@@ -1411,7 +1617,7 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
     classes_list = 0
     classes_list_prev = 1
     j=0
-    do while ( std > tol_class .and. any(classes_list /= classes_list_prev) .and. j < 10)
+    do while ( std > tol_class .and. j < 10)
        j = j + 1
        
        write(*,*) "-->", j
@@ -1420,7 +1626,6 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
        std_prev = std
 
        disps = Apos_mapped-free_trans(Bpos_opt,tmat,vec)
-
 
        n_B = 0 
        n_tot = 0
@@ -1446,16 +1651,38 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
        enddo
 
        call analytical_gd_std(std, tmat, vec, Apos_mapped, Bpos_opt, &
-            n_classes, classes_list, n_ana*1000, rate1, rate2, tol)
+            n_classes, classes_list, n_ana*1000, rate1, rate2, tol_std)
 
        deallocate(n_classes)
 
+       if (remap) then
+          
+          center_vec = sum(free_trans(Bpos_opt,tmat,vec) - Apos_mapped,2) / n_out
+
+          Apos_mapped_prev = Apos_mapped
+          
+          tBpos = free_trans(Bpos,tmat,vec + center_vec)
+          
+          call mapping(Apos_mapped, Bpos_opt, Apos, Bpos, tBpos, &
+               fracA, fracB, atoms, n_atoms)
+
+          if (any(Apos_mapped_prev /= Apos_mapped)) then
+             print*, "REMAP!"
+          endif
+ 
+       endif
+
        write(*,*) "Tolerance for classification:", tol_adjust
        write(*,*) "Final standard deviation:", sqrt(std/dble(size(Apos_mapped,2)-1))
-
-       tol_adjust = min(3.0d0*sqrt(std/dble(size(Apos_mapped,2)-1)), tol_adjust/2.0d0) !3 sigma 99%
-
+       write(*,*) "Number of classes:", n_tot
        write(*,*) "Stretched distance", sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt, tmat, vec))**2,1)))
+
+       ! tol_adjust = min(3.0d0*sqrt(std/dble(size(Apos_mapped,2)-1)), tol_adjust/2.0d0) !3 sigma 99%
+
+       if (all(classes_list == classes_list_prev) .and. std_prev - std < tol) then
+          tol_adjust = tol_adjust/2.0d0
+       endif
+       
 
     enddo
 
