@@ -2,8 +2,6 @@ from p2ptrans import transform as tr
 import numpy as np
 import numpy.linalg as la
 import matplotlib
-# matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 from p2ptrans import tiling as t
 import pickle
 import time
@@ -153,7 +151,14 @@ def gcd(x, y):
 random = False
 output = True
 stats_on = True
+display = True
+use = False
 
+if display:
+    import matplotlib.pyplot as plt
+else:
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
 
 # Eventually this can be from pcread
 B = Structure(np.array([[7.247844507162113,0,0],[3.6239222535810565, 6.276817465881893,0],[0,0,2]]).T*0.5)
@@ -173,7 +178,8 @@ mul = lcm(len(A),len(B))
 mulA = mul//len(A)
 mulB = mul//len(B)
                 
-ncell = 550
+ncell = 1000
+
 
 # Setting the unit cells of A and B
 Acell = A.cell[:2,:2]
@@ -278,25 +284,28 @@ Acell_tmp[:2,:2] = Acell
 
 Apos = np.asfortranarray(Apos)
 Bpos = np.asfortranarray(Bpos) 
-t_time = time.time()
-Apos_map, Bpos, Bposst, n_map, ttrans, rtrans, dmin, stats = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell_tmp, la.inv(Acell_tmp), atoms, 50000, 200, 7, 2, 1e-5, 1e-5) #TMP
-t_time = time.time() - t_time
-Bpos = np.asanyarray(Bpos)
-Apos = np.asanyarray(Apos)
 
-print(dmin)
-print("Mapping time:", t_time)
-
-pickle.dump((Apos_map, Bpos, Bposst, n_map, ttrans, rtrans, dmin, stats), open("fastoptimization.dat","wb"))
-
-# # TMP for testing only -->
-# tr.center(Apos)
-# tr.center(Bpos)
-# Apos_map, Bpos, Bposst, n_map, ttrans, rtrans, dmin, stats = pickle.load(open("fastoptimization.dat","rb"))
-# # <--
-
+if not use:
+    t_time = time.time()
+    Apos_map, Bpos, Bposst, n_map, class_list, ttrans, rtrans, dmin, stats = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell_tmp, la.inv(Acell_tmp), atoms, 100000, 200, 7, 2, 1e-5, 1e-5) #TMP
+    t_time = time.time() - t_time
+    Bpos = np.asanyarray(Bpos)
+    Apos = np.asanyarray(Apos)
+    
+    print(dmin)
+    print("Mapping time:", t_time)
+    
+    pickle.dump((Apos_map, Bpos, Bposst, n_map, class_list, ttrans, rtrans, dmin, stats), open("fastoptimization.dat","wb"))
+else:
+    # TMP for testing only -->
+    tr.center(Apos)
+    tr.center(Bpos)
+    Apos_map, Bpos, Bposst, n_map, ttrans, rtrans, dmin, stats = pickle.load(open("fastoptimization.dat","rb"))
+    # <--
 
 tmat = ttrans[:,:3]
+
+# class_list = class_list[:n_map]-1
 
 Bpos = Bpos[:,:n_map]
 Bposst = Bposst[:,:n_map]
@@ -327,15 +336,14 @@ if stats_on:
     
     #Running std
     
-    size = 20
+    size = 200
     stdrun = np.zeros(len(angles)-size)
     for i in range(len(angles)-size):
         stdrun[i] = np.std(angles[i:i+size])
     
     plt.figure()
     plt.title("Running STD")
-    plt.plot(angles[size//2:-size//2],stdrun)
-    
+    plt.semilogy(angles[size//2:-size//2],stdrun)
     
     plt.figure()
     plt.title("Ordered angles")
@@ -345,14 +353,27 @@ if stats_on:
     plt.title("Distances (not ordered)")
     plt.plot(stats[:,3])
 
-meanrun = np.zeros(len(dists)-size)
-for i in range(len(dists)-size):
-    meanrun[i] = np.mean(dists[i:i+size])
+    meanrun = np.zeros(len(dists)-size)
+    for i in range(len(dists)-size):
+        meanrun[i] = np.mean(dists[idx[i:i+size]])
 
-plt.figure()
-plt.title('Running Mean')
-plt.plot(angles[size//2:-size//2],meanrun)
+    from scipy.signal import find_peaks
 
+    peaks,properties = find_peaks(-meanrun, prominence=1.2)
+
+    print("PEAKS:")
+    print(properties)
+    print(stats[idx[size//2:-size//2][peaks],0])
+    print(dists[idx[size//2:-size//2][peaks]])
+    print(stats[idx[size//2:-size//2][peaks],1:3])
+
+    plt.figure()
+    plt.title('Running Mean')
+    plt.plot(angles[size//2:-size//2],meanrun)
+    ax = plt.gca()
+    ymin, ymax = ax.get_ylim()
+    ax.vlines(x=angles[size//2:-size//2][peaks], ymin=ymin, ymax=ymax, color='r')
+    
     
 # Plotting the Apos and Bpos overlayed
 fig = plt.figure()
@@ -397,7 +418,7 @@ ax.set_aspect('equal')
 
 # Displacement with stretching
 disps = Apos_map - Bposst
-
+# vec_classes = np.array([np.mean(disps[:,class_list==d_type], axis=1) for d_type in np.unique(class_list)])
 
 # fig = plt.figure()
 # ax = fig.add_subplot(111)
@@ -423,6 +444,9 @@ stMat = la.inv(tr.canonicalize(Bcell)).dot(tr.canonicalize(tmat.dot(Bcell)))
 
 # Rotation Matrix
 rtMat = tmat.dot(Bcell).dot(la.inv(stMat)).dot(la.inv(Bcell))
+
+print("Rotation Angles")
+print(np.arctan2(rtrans[1,0],rtrans[0,0])*180/np.pi)
 
 print("Shift Vector:")
 print(ttrans[:,3])
@@ -454,7 +478,10 @@ pos_in_struc = Bposst-Bposst[:,0:1].dot(np.ones((1,np.shape(Bposst)[1])))
 print("Volume stretching factor:", la.det(tmat))
 print("Cell volume ratio (should be exactly the same):", mulA * la.det(Acell)/(mulB * la.det(Bcell)))
 
-plt.show()
+if display:
+    plt.show()
+
+print("CLASS LIST:", class_list)
 
 cell, origin = find_cell(class_list, Bposst)
 
@@ -554,7 +581,8 @@ ax.set_ylim([-maxXAxis, maxXAxis])
 ax.set_aspect('equal')
 fig.savefig('Displacement_structure.svg')
 
-plt.show()
+if display:
+    plt.show()
 
 plt.close('All')
     
