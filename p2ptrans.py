@@ -12,6 +12,8 @@ from copy import deepcopy
 import argparse
 import os
 import warnings
+from format_spglib import from_spglib, to_spglib
+from spglib import get_spacegroup
 
 colorlist=['#929591', 'r', 'k','b','#06470c','#ceb301', '#9e0168', '#26f7fd', '#f97306', '#c20078']
 
@@ -209,6 +211,9 @@ def dir2angles(plane):
     angles[1] = np.arctan2(plane[1], plane[0])
     return angles*180/np.pi
 
+def rotate(icell,fcell):
+    U,S,V = la.svd(icell.dot(fcell.T))
+    return V.conj().T.dot(U.conj().T).real
 
 def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
 
@@ -371,6 +376,9 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
     else:
         print("Transition from %s to %s"%(fileB, fileA))
     
+    print("Initial SpaceGroup:", get_spacegroup(to_spglib(B), symprec=1e-4, angle_tolerance=2.0))
+    print("Final SpaceGroup:", get_spacegroup(to_spglib(A), symprec=1e-4, angle_tolerance=2.0))
+
     # Plotting the cell vectors of A and B
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
@@ -460,9 +468,6 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
         
         class_list = class_list[:n_map]-1
 
-        vec = Bposst[:,0:1] - tmat.dot(oldBpos)[:,0:1]
-        vecv = vec.dot(np.ones((1,n_map)))
-
         Bpos = Bpos[:,:n_map]
         Bposst = Bposst[:,:n_map]
         Apos_map = Apos_map[:,:n_map]
@@ -475,8 +480,6 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
 
         # disps = Apos_map - Bposst #TMP
         # class_list, vec_classes = classify(disps, tol = 1.e-2) #TMP
-
-        foundcell, origin = find_cell(class_list, Bposst)
 
         try:
             foundcell, origin = find_cell(class_list, Bposst)
@@ -676,7 +679,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
         
     print("Showing")
     
-    # plt.show()
+    plt.show()
 
     if not found:
         raise RuntimeError("Could not find good displacement cell. Increase system size")
@@ -709,7 +712,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
         else:
             i = np.argmin(la.norm(np.array([pos_in_struc[:,i] for i in idx]),axis=0))
             incell.append((i,pos_in_struc[:,i]))
-            print("Could not find all disp. in first cell, certain displacement could be broken")
+            print("Warning: Could not find all disp. in first cell.")
         
     for i, disp in incell:
         dispStruc.add_atom(*(tuple(disp)+(str(class_list[i]),)))
@@ -719,41 +722,71 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
        cell[:,2] = -cell[:,2] 
 
     # Finds a squarer cell
-    # cell = gruber(cell)
+    cell = gruber(cell)
 
     dispStruc = supercell(dispStruc, cell)
+    stinitStruc = supercell(stinitStruc, cell)
 
     # Makes sure it is the primitive cell 
     dispStruc = primitive(dispStruc, tolerance = tol)
-    stinitStruc = supercell(stinitStruc, dispStruc.cell)
+    stinitStruc = primitive(stinitStruc, tolerance = tol)
+
 
     finalStruc = Structure(dispStruc.cell)
     for i,a in enumerate(dispStruc):
         finalStruc.add_atom(*(a.pos+vec_classes[int(a.type)]),stinitStruc[i].type)
 
     print("Is it a supercell?")
-    print(la.inv(Acell)*dispStruc.cell)
-    print(la.inv(Bcell)*dispStruc.cell)
+    print(la.inv(Acell).dot(dispStruc.cell))
+    print(la.inv(Bcell.dot(tmat)).dot(dispStruc.cell))
 
     print("Number of A cell in dispCell:", la.det(dispStruc.cell)/(mulA*la.det(Acell)))
     print("Number of B cell in dispCell:", la.det(dispStruc.cell)/(mulB*la.det(tmat.dot(Bcell))))
 
     # Produce transition
 
+    print("Producing transition!")
+
     n_steps = 100
 
     os.makedirs(outdir+"/TransPOSCARS", exist_ok=True)
 
+    itmat = rotate(la.inv(tmat).dot(finalStruc.cell), finalStruc.cell).dot(la.inv(tmat))
+
     spgList = []
     for i in range(n_steps):
-        curMat = (la.inv(tmat)-np.eye(3))*i/n_steps + np.eye(3)
-        curStruc = Structure(finalStruc.cell.dot(curMat))
+        curMat = (itmat-np.eye(3))*i/n_steps + np.eye(3)
+        curStruc = Structure(curMat.dot(finalStruc.cell))
+        # curPlot = []
         for j,a in enumerate(dispStruc):
             curDisp = vec_classes[int(a.type)]*i/n_steps
-            curPos = (finalStruc[j].pos - curDisp).dot(curMat)
-            curStruc.add_atom(*(curPos),finalStruc[j].type)
-        write.poscar(curStruc, vasp5=True, file=outdir+"Trans_%d.POSCAR")
-        spgList.append(space_group(curStruc))
+            curPos = curMat.dot((finalStruc[j].pos - curDisp).reshape((3,1)))
+            # if not j:
+            #     origin = curPos
+            #     curStruc.add_atom(*(np.zeros(3)),finalStruc[j].type)
+            # else:
+            #     curStruc.add_atom(*(curPos-origin),finalStruc[j].type)
+            curStruc.add_atom(*(curPos.T.tolist()[0]),finalStruc[j].type)
+            # curPlot.append(curPos.T.tolist()[0])
+        # curPlot = np.array(curPlot)
+        # fig = plt.figure()
+        # ax = fig.add_subplot(111, projection='3d')
+        # ax.scatter(curPlot[:,0], curPlot[:,1], curPlot[:,2], color = "C0")
+        # ax.quiver(np.zeros(3), np.zeros(3), np.zeros(3), curStruc.cell[0,:], curStruc.cell[1,:], curStruc.cell[2,:], color = "red")
+        # ax.quiver(np.zeros(3), np.zeros(3), np.zeros(3), A.cell[0,:], A.cell[1,:], A.cell[2,:], color = "blue")
+        # ax.quiver(np.zeros(3), np.zeros(3), np.zeros(3), B.cell[0,:], B.cell[1,:], B.cell[2,:], color = "green")
+        # ax.dist = 3
+        # ax.view_init(90,0)
+        # maxXAxis = 8
+        # ax.set_xlim([-maxXAxis, maxXAxis])
+        # ax.set_ylim([-maxXAxis, maxXAxis])
+        # ax.set_zlim([-maxXAxis, maxXAxis])
+        # ax.set_aspect('equal')
+        # fig.savefig(outdir+"/TransPOSCARS"+"/Trans_%03d.png"%i)
+        write.poscar(curStruc, vasp5=True, file=outdir+"/TransPOSCARS"+"/POSCAR_%03d"%i)
+        #curStruc = primitive(curStruc)
+        #curStruc = supercell(curStruc, gruber(curStruc.cell))
+        spgList.append(get_spacegroup(to_spglib(curStruc), symprec=1e-1, angle_tolerance=3.0))
 
     print(spgList)
 
@@ -795,6 +828,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
             ax.scatter(disp.pos[0], disp.pos[1], disp.pos[2], alpha = 0.5, s=10, color=colorlist[i%10])
             ax.scatter(finalStruc[i].pos[0], finalStruc[i].pos[1], finalStruc[i].pos[2], alpha = 1, s=10, color=colorlist[i%10])
         ax.quiver(np.zeros(3), np.zeros(3), np.zeros(3), cell[0,:], cell[1,:], cell[2,:], color = "red", alpha = 0.3)
+        ax.quiver(np.zeros(3), np.zeros(3), np.zeros(3), Acell[0,:], Acell[1,:], Acell[2,:], color = "blue", alpha = 0.3)
         maxXAxis = abs(cell).max() + 1
         ax.set_xlim([-maxXAxis, maxXAxis])
         ax.set_ylim([-maxXAxis, maxXAxis])
@@ -957,6 +991,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
     make_fig(n_states,n_states)
 
     if display:
+        print("Showing")
         plt.show()
     else:
         make_anim(n_states)

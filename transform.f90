@@ -1194,7 +1194,8 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
          dist_map, &
          dist_stretch, &
          mul_vec, &
-         diag
+         diag, &
+         dt_tmat
 
     double precision, allocatable, dimension(:) :: &
          dist_min
@@ -1225,7 +1226,7 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
     mul_vec = diag*2/sqrt(3.0d0)
     
     !$omp parallel default(private) shared(dist_min, &
-    !$omp tmat_min, vec_min, vec) &
+    !$omp tmat_min, vec_min, vec, tmat) &
     !$omp firstprivate(n_iter, mul_vec, max_vol, cell, fracA, fracB, &
     !$omp icell, n_conv, n_ana, Apos, Bpos, rate1, rate2, atoms, n_atoms)
 
@@ -1249,7 +1250,11 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
        call random_number(tmat_local)
        call random_number(vec_local)
 
-       tmat_local = tmat_local * (max_vol / det(tmat_local,3))**(1.0d0/3.0d0)
+       tmat_local = max_vol*tmat_local
+
+       dt_tmat = det(tmat_local,3)
+
+       tmat_local = dt_tmat / abs(dt_tmat) * tmat_local * (abs(modulo(dt_tmat, max_vol) / dt_tmat))**(1.0d0/3.0d0)
 
        vec_local = vec_local - (/0.5d0,0.5d0,0.5d0/)
 
@@ -1452,7 +1457,9 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
          fixed_vol, slanting, &
          n_iter, n_ana, &
          n_conv, n_adjust, &
-         max_vol
+         max_vol, free
+
+    remap = .true.
 
     ! Namelist default values
     tol = 1.0d-4
@@ -1469,6 +1476,7 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
     n_conv = 5
     n_adjust = 10
     max_vol = 4.0d0
+    free = .false.
 
     open (unit = 11, file = filename, status = 'OLD')
     read (11, input)
@@ -1500,7 +1508,6 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
        call gradient_descent_explore_free(tmat, vec, Apos, Bpos, Acell, iAcell, &
             fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2, tol, &
             max_vol)
-    
     else
     
        call gradient_descent_explore(angles, vec, Apos, Bpos, Acell, iAcell, &
@@ -1572,9 +1579,6 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
        endif
        
     enddo
-
-    print*, "tmat", tmat
-    print*, "vec", vec
 
     rBpos_opt = free_trans(Bpos_opt, rot_mat(angles), vec_rot)
 
@@ -1656,7 +1660,7 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
        deallocate(n_classes)
 
        if (remap) then
-          
+
           center_vec = sum(free_trans(Bpos_opt,tmat,vec) - Apos_mapped,2) / n_out
 
           Apos_mapped_prev = Apos_mapped
