@@ -1124,7 +1124,8 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
   end subroutine gradient_descent_explore
 
   subroutine gradient_descent_explore_free(tmat, vec, Apos, Bpos, cell, icell, &
-       fracA, fracB, atoms, n_atoms, n_iter, n_ana, n_conv, rate1, rate2, tol, max_vol)
+       fracA, fracB, atoms, n_atoms, n_iter, n_ana, n_conv, rate1, rate2, tol, max_vol, &
+       fixed_vol, ratio)
     ! New Gradient Descent Random
 
     use omp_lib
@@ -1139,7 +1140,11 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
          rate2, & ! Rate for disp
          fracA, fracB, & ! Fraction of A and B to use in optimisation
          tol, &
-         max_vol
+         max_vol, &
+         ratio
+
+    logical, intent(in) :: &
+         fixed_vol
 
     double precision :: &
          rand_rate1, & ! Rate for tmat
@@ -1254,7 +1259,11 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
 
        dt_tmat = det(tmat_local,3)
 
-       tmat_local = dt_tmat / abs(dt_tmat) * tmat_local * (abs(modulo(dt_tmat, max_vol) / dt_tmat))**(1.0d0/3.0d0)
+       if (fixed_vol) then
+          tmat_local = dt_tmat / abs(dt_tmat) * tmat_local * abs((ratio / dt_tmat))**(1.0d0/3.0d0)
+       else
+          tmat_local = dt_tmat / abs(dt_tmat) * tmat_local * (abs(modulo(dt_tmat, max_vol) / dt_tmat))**(1.0d0/3.0d0)
+       endif
 
        vec_local = vec_local - (/0.5d0,0.5d0,0.5d0/)
 
@@ -1507,7 +1516,7 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
        
        call gradient_descent_explore_free(tmat, vec, Apos, Bpos, Acell, iAcell, &
             fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2, tol, &
-            max_vol)
+            max_vol, fixed_vol,  ratio)
     else
     
        call gradient_descent_explore(angles, vec, Apos, Bpos, Acell, iAcell, &
@@ -1571,12 +1580,7 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
 
        write(*,*) "Unstretched distance:", sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt, rot_mat(angles), vec_rot))**2,1)))
 
-       if (fixed_vol) then
-          print*, "HERE"
-          call analytical_gd_vol(tmat, vec, Apos_mapped, Bpos_opt,.false., n_ana*100, 0.001*rate1, 0.01*rate2, tol, ratio)
-       else
-          call analytical_gd_free(tmat, vec, Apos_mapped, Bpos_opt,.false., n_ana*100, 0.001*rate1, 0.01*rate2, tol)
-       endif
+       call analytical_gd_free(tmat, vec, Apos_mapped, Bpos_opt,.false., n_ana*100, 0.001*rate1, 0.01*rate2, tol)
        
     enddo
 
@@ -1705,7 +1709,7 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
     Bpos_out_stretch(:,1:n_out) = Bpos_opt_stretch
     Apos_out(:,1:n_out) = Apos_mapped
 
-    dmin = sum(sqrt(sum((Apos_mapped - Bpos_out)**2,1)))
+    dmin = sum(sqrt(sum((Apos_mapped - rBpos_opt)**2,1)))
 
     ! ! Print the cost matrix
     ! mat = cost(Apos,Bpos,n)   
