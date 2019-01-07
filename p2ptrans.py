@@ -148,11 +148,13 @@ def gcd(x, y):
 # \/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
 # Begin Program
 
+sym = 6
 random = False
 output = True
 stats_on = True
 display = True
-use = False
+use = True
+aff = 0
 
 if display:
     import matplotlib.pyplot as plt
@@ -161,11 +163,13 @@ else:
     import matplotlib.pyplot as plt
 
 # Eventually this can be from pcread
-B = Structure(np.array([[7.247844507162113,0,0],[3.6239222535810565, 6.276817465881893,0],[0,0,2]]).T*0.5)
+B = Structure(np.array([[3.6678788324556724,0,0],[1.8339393525882195,3.1764772365036733,0],[0,0,1]]).T) 
+#B = Structure(np.array([[7.247844507162113,0,0],[3.6239222535810565, 6.276817465881893,0],[0,0,2]]).T*0.5)
 B.add_atom(0, 0,0,'1')
 Blabel = "Zr"
 
-A = Structure(np.array([[4.97803173955,0,0],[2.48901586978,4.3111019473,0],[0,0,2]]).T*0.5)
+A = Structure(np.array([[4.934297879818212,0,0],[-2.4670561590795694,4.273351862766654,0],[0,0,2]]).T*0.5)
+#A = Structure(np.array([[4.97803173955,0,0],[2.48901586978,4.3111019473,0],[0,0,2]]).T*0.5)
 A.add_atom(0,0,0,'1')
 Alabel = "Ni"
 
@@ -178,7 +182,7 @@ mul = lcm(len(A),len(B))
 mulA = mul//len(A)
 mulB = mul//len(B)
                 
-ncell = 1000
+ncell = 550
 
 
 # Setting the unit cells of A and B
@@ -187,12 +191,6 @@ Bcell = B.cell[:2,:2]
 
 ASC = t.circle(Acell, ncell*mulA)
 BSC = t.circle(Bcell, ncell*mulB)
-
-centerA = np.mean(ASC, axis=1)
-centerB = np.mean(BSC, axis=1)
-
-print("Center A", centerA)
-print("Center B", centerB)
 
 if output:
     # Plot gamma points of each A cell
@@ -270,7 +268,14 @@ else:
         atomsB[idx] += 1
 
     Bpos = np.concatenate(Bpos, axis=1)
-        
+
+    centerA = np.mean(Apos, axis=1)
+    centerB = np.mean(Bpos, axis=1)
+
+    print("Center A", centerA)
+    print("Center B", centerB)
+
+
     Apos = np.concatenate([Apos,np.zeros((1,np.shape(Apos)[1]))]) # TMP Only in 2D Adds the 3rd dim. 
     Bpos = np.concatenate([Bpos,np.zeros((1,np.shape(Bpos)[1]))])
 
@@ -287,33 +292,24 @@ Bpos = np.asfortranarray(Bpos)
 
 if not use:
     t_time = time.time()
-    Apos_map, Bpos, Bposst, n_map, class_list, ttrans, rtrans, dmin, stats = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell_tmp, la.inv(Acell_tmp), atoms, 100000, 200, 7, 2, 1e-5, 1e-5) #TMP
+    Apos_map_list, Bpos_list, Bposst_list, n_map, class_list_list, ttrans, rtrans, dmin, stats, n_peaks = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell_tmp, la.inv(Acell_tmp), atoms, 100000, 200, 7, 2, sym, 1e-5, 1e-5) #TMP
     t_time = time.time() - t_time
     Bpos = np.asanyarray(Bpos)
     Apos = np.asanyarray(Apos)
     
-    print(dmin)
     print("Mapping time:", t_time)
     
-    pickle.dump((Apos_map, Bpos, Bposst, n_map, class_list, ttrans, rtrans, dmin, stats), open("fastoptimization.dat","wb"))
+    pickle.dump((Apos_map_list, Bpos_list, Bposst_list, n_map, class_list_list, ttrans, rtrans, dmin, stats, n_peaks), open("fastoptimization.dat","wb"))
 else:
     # TMP for testing only -->
     tr.center(Apos)
     tr.center(Bpos)
-    Apos_map, Bpos, Bposst, n_map, ttrans, rtrans, dmin, stats = pickle.load(open("fastoptimization.dat","rb"))
+    Apos_map_list, Bpos_list, Bposst_list, n_map, class_list_list, ttrans, rtrans, dmin, stats, n_peaks = pickle.load(open("fastoptimization.dat","rb"))
     # <--
 
-tmat = ttrans[:,:3]
+    print("Number of Peaks from fastopt", n_peaks)
 
-# class_list = class_list[:n_map]-1
-
-Bpos = Bpos[:,:n_map]
-Bposst = Bposst[:,:n_map]
-Apos_map = Apos_map[:,:n_map]
-
-natB = np.shape(Bposst)[1] // np.sum(atoms)
-nat = np.shape(Apos)[1] // np.sum(atoms)
-natA = int(fracA*np.shape(Apos)[1]/np.sum(atoms))
+print(dmin)
 
 if stats_on:
     angles = stats[:,0]
@@ -373,216 +369,202 @@ if stats_on:
     ax = plt.gca()
     ymin, ymax = ax.get_ylim()
     ax.vlines(x=angles[size//2:-size//2][peaks], ymin=ymin, ymax=ymax, color='r')
+
+for k in range(n_peaks):
+    tmat = ttrans[k,:,:3]
+
+    class_list = class_list_list[k,:n_map]-1
+
+    Bpos = Bpos_list[k,:,:n_map]
+    Bposst = Bposst_list[k,:,:n_map]
+    Apos_map = Apos_map_list[k,:,:n_map]
+
+    natB = np.shape(Bposst)[1] // np.sum(atoms)
+    nat = np.shape(Apos)[1] // np.sum(atoms)
+    natA = int(fracA*np.shape(Apos)[1]/np.sum(atoms))    
     
+    if k==aff:
+        # Plotting the Apos and Bpos overlayed
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        #ax.scatter(Apos.T[:,0],Apos.T[:,1])
+        for i,num in enumerate(atoms):
+            for j in range(num):
+                ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,1], c="C%d"%(2*i))
+                ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,1], c="C%d"%(2*i), alpha = 0.5)
+            ax.scatter(Bpos.T[natB*num*i:natB*num*(i+1),0],Bpos.T[natB*num*i:natB*num*(i+1),1], alpha=0.5, c="C%d"%(2*i+1))
+        maxXAxis = np.max([Apos.max(), Bpos.max()]) + 1
+        ax.set_xlim([-maxXAxis, maxXAxis])
+        ax.set_ylim([-maxXAxis, maxXAxis])
+        ax.set_aspect('equal')
+        
+        # Displacements without stretching (for plotting)
+        disps = Apos_map - Bpos
+
+        #fig = plt.figure()
+        #ax = fig.add_subplot(111)
+        ax.quiver(Bpos.T[:,0], Bpos.T[:,1], disps.T[:,0], disps.T[:,1], scale_units='xy', scale=1)
+        maxXAxis = np.max([Apos.max(), Bpos.max()]) + 1
+        ax.set_xlim([-maxXAxis, maxXAxis])
+        ax.set_ylim([-maxXAxis, maxXAxis])
+        ax.set_aspect('equal')
+        fig.savefig('DispLattice.svg')
+
+    # Displacement with stretching
+    disps = Apos_map - Bposst
     
-# Plotting the Apos and Bpos overlayed
-fig = plt.figure()
-ax = fig.add_subplot(111)
-#ax.scatter(Apos.T[:,0],Apos.T[:,1])
-for i,num in enumerate(atoms):
-    for j in range(num):
-        ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,1], c="C%d"%(2*i))
-        ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,1], c="C%d"%(2*i), alpha = 0.5)
-    ax.scatter(Bpos.T[natB*num*i:natB*num*(i+1),0],Bpos.T[natB*num*i:natB*num*(i+1),1], alpha=0.5, c="C%d"%(2*i+1))
-maxXAxis = np.max([Apos.max(), Bpos.max()]) + 1
-ax.set_xlim([-maxXAxis, maxXAxis])
-ax.set_ylim([-maxXAxis, maxXAxis])
-ax.set_aspect('equal')
+    if k==aff:
+        # Plotting the Apos and Bposst overlayed
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        #ax.scatter(Apos.T[:,0],Apos.T[:,1])
+        for i,num in enumerate(atoms):
+            for j in range(num):
+                ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,1], c="C%d"%(2*i), label=Alabel)
+                ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,1], c="C%d"%(2*i), alpha=0.5)
+            ax.scatter(Bposst.T[natB*num*i:natB*num*(i+1),0],Bposst.T[natB*num*i:natB*num*(i+1),1], alpha=0.5, c="C%d"%(2*i+1), label=Blabel)
+        ax.legend()
+        maxXAxis = np.max([Apos.max(), Bposst.max()]) + 1
+        ax.set_xlim([-maxXAxis, maxXAxis])
+        ax.set_ylim([-maxXAxis, maxXAxis])
+        ax.set_aspect('equal')
+        
+        # fig = plt.figure()
+        # ax = fig.add_subplot(111)
+        ax.quiver(Bposst.T[:,0], Bposst.T[:,1],disps.T[:,0], disps.T[:,1],scale_units='xy', scale=1)
+        maxXAxis = np.max([Apos.max(), Bposst.max()]) + 1
+        ax.set_xlim([-maxXAxis, maxXAxis])
+        ax.set_ylim([-maxXAxis, maxXAxis])
+        ax.set_aspect('equal')
+        fig.savefig('DispLattice_stretched.svg')
 
-# Displacements without stretching (for plotting)
-disps = Apos_map - Bpos
+    # vec_classes = np.array([np.mean(disps[:,class_list==d_type], axis=1) for d_type in np.unique(class_list)])
+    class_list, vec_classes = classify(disps)
 
-#fig = plt.figure()
-#ax = fig.add_subplot(111)
-ax.quiver(Bpos.T[:,0], Bpos.T[:,1], disps.T[:,0], disps.T[:,1], scale_units='xy', scale=1)
-maxXAxis = np.max([Apos.max(), Bpos.max()]) + 1
-ax.set_xlim([-maxXAxis, maxXAxis])
-ax.set_ylim([-maxXAxis, maxXAxis])
-ax.set_aspect('equal')
-fig.savefig('DispLattice.svg')
+    if k==aff:
+        # Only the displacements
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        maxXAxis = np.max(disps) + 1
+        ax.set_xlim([-maxXAxis, maxXAxis])
+        ax.set_ylim([-maxXAxis, maxXAxis])
+        ax.set_aspect('equal')
+        for i in range(len(vec_classes)):
+            disps_class = disps[:,class_list==i]
+            ndisps = np.shape(disps_class)[1]
+            ax.quiver(np.zeros((1,ndisps)), np.zeros((1,ndisps)), disps_class.T[:,0], disps_class.T[:,1], color="C%d"%(i%10), scale_units='inches', scale=1)
+        fig.savefig('DispOverlayed.svg')
+        
+    # Centers the position on the first atom
+    pos_in_struc = Bposst-Bposst[:,0:1].dot(np.ones((1,np.shape(Bposst)[1])))
 
-# Plotting the Apos and Bposst overlayed
-fig = plt.figure()
-ax = fig.add_subplot(111)
-#ax.scatter(Apos.T[:,0],Apos.T[:,1])
-for i,num in enumerate(atoms):
-    for j in range(num):
-        ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,1], c="C%d"%(2*i), label=Alabel)
-        ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,1], c="C%d"%(2*i), alpha=0.5)
-    ax.scatter(Bposst.T[natB*num*i:natB*num*(i+1),0],Bposst.T[natB*num*i:natB*num*(i+1),1], alpha=0.5, c="C%d"%(2*i+1), label=Blabel)
-ax.legend()
-maxXAxis = np.max([Apos.max(), Bposst.max()]) + 1
-ax.set_xlim([-maxXAxis, maxXAxis])
-ax.set_ylim([-maxXAxis, maxXAxis])
-ax.set_aspect('equal')
+    print("Volume stretching factor:", k, la.det(tmat))
+    print("Cell volume ratio (should be exactly the same):",k, mulA * la.det(Acell)/(mulB * la.det(Bcell)))
 
-# Displacement with stretching
-disps = Apos_map - Bposst
-# vec_classes = np.array([np.mean(disps[:,class_list==d_type], axis=1) for d_type in np.unique(class_list)])
+    if display:
+        plt.show()
 
-# fig = plt.figure()
-# ax = fig.add_subplot(111)
-ax.quiver(Bposst.T[:,0], Bposst.T[:,1],disps.T[:,0], disps.T[:,1],scale_units='xy', scale=1)
-maxXAxis = np.max([Apos.max(), Bposst.max()]) + 1
-ax.set_xlim([-maxXAxis, maxXAxis])
-ax.set_ylim([-maxXAxis, maxXAxis])
-ax.set_aspect('equal')
-fig.savefig('DispLattice_stretched.svg')
+    print("CLASS LIST:",k, class_list)
 
+    try:
+        cell, origin = find_cell(class_list, Bposst)
+    except:
+        print("Could not find cell for peak %d"%k)
+        continue
 
-# Stretching Matrix
-Acell3d = np.identity(3) # TMP only for 2D
-Acell3d[:2,:2] = Acell
-Acell = Acell3d
+    pos_in_struc = Bposst - origin.dot(np.ones((1,np.shape(Bposst)[1])))
+    posA_in_struc = Apos - origin.dot(np.ones((1,np.shape(Apos)[1])))
 
-Bcell3d = np.identity(3) # TMP only for 2D
-Bcell3d[:2,:2] = Bcell
-Bcell = Bcell3d
+    # Postive volume
+    if la.det(cell) < 0:
+        cell[:,2] = -cell[:,2] 
 
-# Stretching Matrix
-stMat = la.inv(tr.canonicalize(Bcell)).dot(tr.canonicalize(tmat.dot(Bcell)))
+    # Finds a squarer cell
+    print("cell before gruber", cell)
+    cell = twoDCell(gruber(cell))
 
-# Rotation Matrix
-rtMat = tmat.dot(Bcell).dot(la.inv(stMat)).dot(la.inv(Bcell))
+    # Make a pylada structure
+    DispStruc = Structure(cell)
+    FinalStruc = Structure(cell)
 
-print("Rotation Angles")
-print(np.arctan2(rtrans[1,0],rtrans[0,0])*180/np.pi)
+    cell_coord = np.mod(la.inv(cell).dot(pos_in_struc)+tol,1)-tol
 
-print("Shift Vector:")
-print(ttrans[:,3])
+    for i, disp in zip(*uniqueclose(cell_coord, tol)):
+        DispStruc.add_atom(*(tuple(cell.dot(disp))+(str(class_list[i]),)))
+        FinalStruc.add_atom(*(tuple(cell.dot(disp))+(Blabel,)))
 
-print("Stretching Matrix:")
-print(stMat)
+    cell_coord = np.mod(la.inv(cell).dot(posA_in_struc)+tol,1)-tol
 
-print("Rotation Matrix:")
-print(rtMat)
+    for i, disp in zip(*uniqueclose(cell_coord, tol)):
+        FinalStruc.add_atom(*(tuple(cell.dot(disp))+(Alabel,)))
 
-class_list, vec_classes = classify(disps)
+    # Makes sure it is the primitive cell 
+    DispStruc = primitive(DispStruc, tolerance = tol)    
 
-# Only the displacements
-fig = plt.figure()
-ax = fig.add_subplot(111)
-maxXAxis = np.max(disps) + 1
-ax.set_xlim([-maxXAxis, maxXAxis])
-ax.set_ylim([-maxXAxis, maxXAxis])
-ax.set_aspect('equal')
-for i in range(len(vec_classes)):
-    disps_class = disps[:,class_list==i]
-    ndisps = np.shape(disps_class)[1]
-    ax.quiver(np.zeros((1,ndisps)), np.zeros((1,ndisps)), disps_class.T[:,0], disps_class.T[:,1], color="C%d"%(i%10), scale_units='inches', scale=1)
-fig.savefig('DispOverlayed.svg')
+    DispStruc = supercell(DispStruc, twoDCell(DispStruc.cell))    
 
-# Centers the position on the first atom
-pos_in_struc = Bposst-Bposst[:,0:1].dot(np.ones((1,np.shape(Bposst)[1])))
+    FinalStruc = supercell(FinalStruc, DispStruc.cell)
 
-print("Volume stretching factor:", la.det(tmat))
-print("Cell volume ratio (should be exactly the same):", mulA * la.det(Acell)/(mulB * la.det(Bcell)))
+    # Total displacement per unit volume a as metric
+    Total_disp = 0 
+    for disp in DispStruc:
+        Total_disp += la.norm(vec_classes[int(disp.type)])
 
-if display:
-    plt.show()
+    cell = DispStruc.cell
 
-print("CLASS LIST:", class_list)
+    pickle.dump((Alabel, Blabel, rtrans, ttrans[k,:,:], cell, centerA, centerB), open("transformation_%d.dat"%k,"wb")) 
 
-cell, origin = find_cell(class_list, Bposst)
+    print("Displacement Lattice", k)
+    print(cell)
 
-pos_in_struc = Bposst - origin.dot(np.ones((1,np.shape(Bposst)[1])))
-posA_in_struc = Apos - origin.dot(np.ones((1,np.shape(Apos)[1])))
+    print("Volume of the Displacement Lattice", k)
+    print(la.det(cell))
 
-# Postive volume
-if la.det(cell) < 0:
-    cell[:,2] = -cell[:,2] 
+    print("Number of bonds per unit volume:", k)
+    print(len(DispStruc)/la.det(cell))
 
-# Finds a squarer cell
-print("cell before gruber", cell)
-cell = twoDCell(gruber(cell))
+    print("Average distance per bond", k)
+    print(Total_disp/len(DispStruc))
 
-# Make a pylada structure
-DispStruc = Structure(cell)
-FinalStruc = Structure(cell)
+    print("Number of bonds in cell",k)
+    print(len(DispStruc))
 
-cell_coord = np.mod(la.inv(cell).dot(pos_in_struc)+tol,1)-tol
+    print("Number of atoms in cell", k)
+    print(len(FinalStruc)-len(DispStruc))
 
-for i, disp in zip(*uniqueclose(cell_coord, tol)):
-    DispStruc.add_atom(*(tuple(cell.dot(disp))+(str(class_list[i]),)))
-    FinalStruc.add_atom(*(tuple(cell.dot(disp))+(Blabel,)))
-
-cell_coord = np.mod(la.inv(cell).dot(posA_in_struc)+tol,1)-tol
-
-for i, disp in zip(*uniqueclose(cell_coord, tol)):
-    FinalStruc.add_atom(*(tuple(cell.dot(disp))+(Alabel,)))
-
-# Makes sure it is the primitive cell 
-DispStruc = primitive(DispStruc, tolerance = tol)    
-
-DispStruc = supercell(DispStruc, twoDCell(DispStruc.cell))    
-
-FinalStruc = supercell(FinalStruc, DispStruc.cell)
-
-# Total displacement per unit volume a as metric
-Total_disp = 0 
-for disp in DispStruc:
-    Total_disp += la.norm(vec_classes[int(disp.type)])
-
-cell = DispStruc.cell
-
-pickle.dump((Alabel, Blabel, rtrans, ttrans, cell, centerA, centerB), open("transformation.dat","wb")) 
-
-print("Displacement Lattice")
-print(cell)
-
-print("Volume of the Displacement Lattice")
-print(la.det(cell))
-
-print("Number of bonds per unit volume:")
-print(len(DispStruc)/la.det(cell))
-
-print("Average distance per bond")
-print(Total_disp/len(DispStruc))
-
-print("Number of bonds in cell")
-print(len(DispStruc))
-
-print("Number of atoms in cell")
-print(len(FinalStruc)-len(DispStruc))
-
-print("Volume stretching factor:", la.det(stMat))
-print("Total displacement stretched cell:", Total_disp)
-
-# Displays displacement with the disp cell overlayed
-fig = plt.figure()
-ax = fig.add_subplot(111)
-ax.quiver(pos_in_struc.T[:,0], pos_in_struc.T[:,1],disps.T[:,0], disps.T[:,1], scale_units='xy', scale=1)
-ax.quiver(np.zeros(2), np.zeros(2), cell[0,:2], cell[1,:2], scale_units='xy', scale=1, color="red")
-maxXAxis = pos_in_struc.max() + 1
-ax.set_xlim([-maxXAxis, maxXAxis])
-ax.set_ylim([-maxXAxis, maxXAxis])
-ax.set_aspect('equal')
-fig.savefig('DispLattice_stretched_cell_primittive.svg')
-
-print("DISPS", DispStruc)
-print("A", FinalStruc)
-
-# Displays only the cell and the displacements in it
-fig = plt.figure()
-ax = fig.add_subplot(111)
-for i,disp in enumerate(DispStruc):
-    ax.quiver(disp.pos[0],disp.pos[1], vec_classes[int(disp.type)][0],vec_classes[int(disp.type)][1], scale_units='xy', scale=1)
-
-for i,a in enumerate(FinalStruc):
-    if a.type == Alabel:
-        ax.scatter(a.pos[0], a.pos[1], color="C0")
-    else:
-        ax.scatter(a.pos[0], a.pos[1], color="C1")
-    
-ax.quiver(np.zeros(2), np.zeros(2), cell[0,:2], cell[1,:2], scale_units='xy', scale=1, color = "blue", alpha = 0.3)
-maxXAxis = abs(cell).max() + 1
-ax.set_xlim([-maxXAxis, maxXAxis])
-ax.set_ylim([-maxXAxis, maxXAxis])
-ax.set_aspect('equal')
-fig.savefig('Displacement_structure.svg')
-
-if display:
-    plt.show()
+    if k==aff:
+        # Displays displacement with the disp cell overlayed
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.quiver(pos_in_struc.T[:,0], pos_in_struc.T[:,1],disps.T[:,0], disps.T[:,1], scale_units='xy', scale=1)
+        ax.quiver(np.zeros(2), np.zeros(2), cell[0,:2], cell[1,:2], scale_units='xy', scale=1, color="red")
+        maxXAxis = pos_in_struc.max() + 1
+        ax.set_xlim([-maxXAxis, maxXAxis])
+        ax.set_ylim([-maxXAxis, maxXAxis])
+        ax.set_aspect('equal')
+        fig.savefig('DispLattice_stretched_cell_primittive.svg')
+        
+        # Displays only the cell and the displacements in it
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        for i,disp in enumerate(DispStruc):
+            ax.quiver(disp.pos[0],disp.pos[1], vec_classes[int(disp.type)][0],vec_classes[int(disp.type)][1], scale_units='xy', scale=1)
+        
+        for i,a in enumerate(FinalStruc):
+            if a.type == Alabel:
+                ax.scatter(a.pos[0], a.pos[1], color="C0")
+            else:
+                ax.scatter(a.pos[0], a.pos[1], color="C1")
+            
+        ax.quiver(np.zeros(2), np.zeros(2), cell[0,:2], cell[1,:2], scale_units='xy', scale=1, color = "blue", alpha = 0.3)
+        maxXAxis = abs(cell).max() + 1
+        ax.set_xlim([-maxXAxis, maxXAxis])
+        ax.set_ylim([-maxXAxis, maxXAxis])
+        ax.set_aspect('equal')
+        fig.savefig('Displacement_structure.svg')
+        
+    if display:
+        plt.show()
 
 plt.close('All')
     

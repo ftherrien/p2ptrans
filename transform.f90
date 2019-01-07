@@ -995,11 +995,120 @@ contains
 
   end subroutine gradient_descent_explore_free
 
+  function sort(array) result(idx)
+    
+    double precision, intent(in), dimension(:) :: &
+         array
+
+    double precision, dimension(size(array)) :: &
+         order
+
+    integer, dimension(size(array)) :: &
+         idx
+
+    integer :: &
+         k,i,n
+    
+    n = size(array)
+
+    order(1) = array(1)
+    idx(1) = 1
+
+    do i=2, n 
+       k=0
+       do while (array(i) < order(i-1-k) .and. k < i-1)
+          k=k+1
+       enddo
+       order(i-k+1:n) = order(i-k:n-1)
+       order(i-k) = array(i)
+       idx(i-k+1:n) = idx(i-k:n-1)
+       idx(i-k) = i
+    enddo
+
+  end function sort
+
+  subroutine find_peaks(array, n_array, tol_prom, n, peaks_out, idx_out, prom_out) 
+    
+    double precision, intent(in), dimension(:) :: &
+         array
+
+    integer, intent(in) :: &
+         n_array
+
+    double precision, intent(in) :: &
+         tol_prom
+    
+    double precision, intent(out), dimension(size(array)) :: &
+         peaks_out, prom_out
+
+    double precision, dimension(size(array)) :: &
+         peaks, peaks_copy, prom
+    
+    integer, intent(out), dimension(size(array)) :: &
+         idx_out
+
+    integer, dimension(size(array)) :: &
+         idx, idx_copy, idxx
+
+    integer :: &
+         i,j,n,id
+    
+    integer, parameter :: &
+         peak_size = 10
+
+    n=0
+    do i = 1, n_array
+       if (all(array(max(1, i-peak_size):max(1,i-1)) >= array(i)) .and. &
+            all(array(min(i+1, n_array):min(i+peak_size, n_array)) >= array(i))) then
+          n=n+1
+          idx(n) = i
+          peaks(n) = array(i)
+       endif
+
+    enddo
+
+    idxx(1:n) = sort(peaks(1:n))
+
+    peaks_copy = peaks
+    idx_copy = idx
+
+
+    do i=1,n
+       peaks(i) = peaks_copy(idxx(i))
+       idx(i) = idx_copy(idxx(i))
+    enddo
+
+    prom(1) = 1
+
+    do i=2,n
+       id = idx(minloc(abs(idx(1:i-1)-idx(i)), 1))
+       if (id < idx(i)) then
+          prom(i) = (maxval(array(id:idx(i))) - peaks(i)) / (maxval(array) - peaks(1))
+
+       else
+          prom(i) = (maxval(array(idx(i):id)) - peaks(i)) / (maxval(array) - peaks(1))
+       endif
+    enddo
+
+    j = 0
+    do i=1,n-1
+       if (prom(i) > tol_prom) then
+          j = j + 1
+          peaks_out(j) = peaks(i)
+          idx_out(j) = idx(i)
+          prom_out(j) = prom(i)
+       endif
+    enddo
+
+    n = j
+
+  end subroutine find_peaks
+
   subroutine fastoptimization(Apos_out, Bpos_out, Bpos_out_stretch, &
-       n_out, classes_list_out, ttrans, rtrans, dmin, stats, &
+       n_out, classes_list_out, ttrans, rtrans, dmin, stats, n_peaks, &
        Apos, na, Bpos, nb, &
        fracA, fracB, Acell, iAcell, atoms, n_atoms, &
-       n_iter, n_ana, n_conv, n_adjust, &
+       n_iter, n_ana, n_conv, n_adjust, sym, &
        rate1, rate2)
 
     integer, intent(in) :: &
@@ -1014,7 +1123,8 @@ contains
          n_iter, &   ! Number of iteration of the gradient descent
          n_ana, &
          n_conv, &
-         n_adjust
+         n_adjust, &
+         sym         ! Rotational symmetry
 
     double precision, intent(inout), dimension(3,na) :: &
          Apos ! Position of the atoms
@@ -1022,10 +1132,10 @@ contains
     double precision, intent(inout), dimension(3,nb) :: &
          Bpos ! Position of the atoms
 
-    double precision, intent(out), dimension(3,na) :: &
+    double precision, intent(out), dimension(n_iter,3,na) :: &
          Apos_out ! Position of the atoms
 
-    double precision, intent(out), dimension(3,nb) :: &
+    double precision, intent(out), dimension(n_iter,3,nb) :: &
          Bpos_out, & ! Position of the atoms
          Bpos_out_stretch
 
@@ -1033,7 +1143,8 @@ contains
          tBpos ! Position of the atoms
 
     integer, intent(out) :: &
-         n_out
+         n_out, &
+         n_peaks
 
     double precision, intent(in), dimension(3,3) :: &
          Acell, & ! Unit cell of A
@@ -1070,13 +1181,26 @@ contains
          tol_class, &
          std, std_prev
 
+    double precision, dimension(n_iter) :: &
+         dists, meanrun,  &
+         peaks, prom, &
+         peak_thetas, &
+         thetas
+
+    double precision, dimension(n_iter,2) :: &
+         vecs, &
+         peak_vecs
+
+    integer, dimension(n_iter) :: &
+         idx
+
     double precision, allocatable, dimension(:,:) :: &
          dmat
 
     double precision, dimension(na,nb) :: &
          mat
 
-    double precision, intent(out), dimension(3,4) :: &
+    double precision, intent(out), dimension(n_iter,3,4) :: &
          ttrans, &
          rtrans
     
@@ -1091,11 +1215,12 @@ contains
          disps
 
     integer :: &
-         i, j, &
+         i, j, k, &
          n, id, &
          An_cell, Bn_cell, &
          n_B, n_tot, &
-         n_frac
+         n_frac, &
+         size_mean
 
     double precision, parameter :: &
          pi = 3.141592653589793d0
@@ -1106,7 +1231,7 @@ contains
          n_classes_trail, &
          n_classes
 
-    integer, intent(out), dimension(size(Apos,2)) :: &
+    integer, intent(out), dimension(n_iter, size(Apos,2)) :: &
          classes_list_out
 
     tol_class = 1.0d-3
@@ -1124,29 +1249,51 @@ contains
     call center(Bpos,nb)
     call center(Apos,na)
 
-    ! call gradient_descent_explore(theta, u, vec, stats, Apos, Bpos, Acell, iAcell, &
-    !      fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2)
+    call gradient_descent_explore(theta, u, vec, stats, Apos, Bpos, Acell, iAcell, &
+         fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2)
 
-    ! print*, "Apres:", theta, u
 
-    u = (/0.0d0, 0.0d0, 1.0d0/)
-    theta = 6.21457609d0
+    idx = sort(modulo(stats(:,1), 2.0d0*pi/dble(sym)))
 
-    tmat = rot_mat(theta,u)
+    do i=1,n_iter
+       thetas(i) = stats(idx(i),1)
+       dists(i) = stats(idx(i),4)
+       vecs(i,:) = stats(idx(i),2:3)
+    enddo
 
-    ! tmat = transpose(reshape((/0.99585865, -0.09091507, 0., &
-    !      0.09091507, 0.99585865, 0., &
-    !      0., 0., 1./),(/3,3/)))
+    size_mean = int(2d-2*n_iter)
 
-    vec = (/-1.74321147d0, -0.82457995d0, 0.00000000d0/)
-    
+    do i=1, n_iter-size_mean+1
+       meanrun(i) = sum(dists(i:i+size_mean-1))/dble(size_mean)
+    enddo
+
+    call find_peaks(meanrun, n_iter-size_mean+1, 0.6d0, n_peaks, peaks, idx, prom)
+
+    do i=1,n_peaks
+       
+       peak_thetas(i) = thetas(idx(i)+int(size_mean/2))
+       peak_vecs(i,:) = vecs(idx(i)+int(size_mean/2),:)
+
+    enddo
+
+    print*, "peak angles", 180 * modulo(peak_thetas(1:n_peaks), 2.0d0*pi/dble(sym)) / pi
+    print*, "peaks", peaks(1:n_peaks)
+    print*, "prom", prom(1:n_peaks)
+
     ! call gradient_descent_explore_free(tmat, vec, Apos, Bpos, Acell, iAcell, &
     !      fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2)
 
     ! u = (/0.0d0, 0.0d0, 1.0d0/)
     
     ! print*, "Apres:", tmat
-    
+
+    do k=1,n_peaks
+
+    tmat = rot_mat(peak_thetas(k),u)
+
+    vec = 0
+    vec(1:2) = peak_vecs(k,:)
+
     do i=1,n_adjust
 
        do j=1,n_conv
@@ -1252,11 +1399,7 @@ contains
        enddo
 
        classes_list_out = 0
-       classes_list_out(1:n_out) = classes_list
-
-       deallocate(classes_list, &
-            classes_list_prev, &
-            n_classes_trail)
+       classes_list_out(k,1:n_out) = classes_list
 
        write(*,*) "Final tmat"
        write(*,"(3(F7.3,X))") tmat
@@ -1268,23 +1411,27 @@ contains
        ! End of calssification -----------------------------------
     endif
 
-
-
     Bpos_opt_stretch = free_trans(Bpos_opt,tmat,vec)
 
-    ttrans(:,1:3) = tmat
-    ttrans(:,4) = vec
+    ttrans(k,:,1:3) = tmat
+    ttrans(k,:,4) = vec
 
     Bpos_opt = free_trans(Bpos_opt,rot_mat(theta,u),vec_rot)
 
-    rtrans(:,1:3) = rot_mat(theta,u)
-    rtrans(:,4) = vec_rot
+    rtrans(k,:,1:3) = rot_mat(theta,u)
+    rtrans(k,:,4) = vec_rot
     
-    Bpos_out(:,1:n_out) = Bpos_opt
-    Bpos_out_stretch(:,1:n_out) = Bpos_opt_stretch
-    Apos_out(:,1:n_out) = Apos_mapped
+    Bpos_out(k,:,1:n_out) = Bpos_opt
+    Bpos_out_stretch(k,:,1:n_out) = Bpos_opt_stretch
+    Apos_out(k,:,1:n_out) = Apos_mapped
 
     dmin = sum(sqrt(sum((Apos_mapped - Bpos_opt)**2,1)))
+
+    enddo
+
+    deallocate(classes_list, &
+            classes_list_prev, &
+            n_classes_trail)
 
     ! ! Print the cost matrix
     ! mat = cost(Apos,Bpos,n)   
