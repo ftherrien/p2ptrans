@@ -1232,7 +1232,7 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
     
     !$omp parallel default(private) shared(dist_min, &
     !$omp tmat_min, vec_min, vec, tmat) &
-    !$omp firstprivate(n_iter, mul_vec, max_vol, cell, fracA, fracB, &
+    !$omp firstprivate(n_iter, mul_vec, fixed_vol, ratio, max_vol, cell, fracA, fracB, &
     !$omp icell, n_conv, n_ana, Apos, Bpos, rate1, rate2, atoms, n_atoms)
 
     call init_random_seed()
@@ -1513,7 +1513,6 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
     call center(Apos,na)
 
     if (free) then
-       
        call gradient_descent_explore_free(tmat, vec, Apos, Bpos, Acell, iAcell, &
             fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2, tol, &
             max_vol, fixed_vol,  ratio)
