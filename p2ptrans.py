@@ -70,80 +70,126 @@ def find_supercell(cell, newcell, tol):
         else:
             continue
         break
+    else:
+        return cell, None
 
     return cell, newcell
                 
+def find_multiples(vec, pos):
+    """Goes through the displacements and finds the one that are parallel"""
+    multiple = [0]
+    for p in pos.T:
+        if la.norm(np.cross(p,vec))/(la.norm(p) * la.norm(vec)) < tol:
+            multiple.append(p.dot(vec)/la.norm(vec)**2)
+    return multiple
 
-def find_cell(class_list, positions, tol = 1e-5, frac_tol = 0.5):
-    cell_list = []
-    origin_list = []
-    for i in np.unique(class_list):
-        newcell = np.identity(3)
-        pos = positions[:, class_list == i]
-        center = np.argmin(la.norm(pos, axis = 0))
-        list_in = list(range(np.shape(pos)[1]))
-        list_in.remove(center)
-        origin = pos[:,center:center+1]
-        pos = pos[:,list_in] - origin.dot(np.ones((1,np.shape(pos)[1]-1))) # centered
-        norms = la.norm(pos, axis = 0)
-        idx = np.argsort(norms)
-        j = 0;
-        for k in idx:
-            multiple = [0]
-            #If there is already one cell vector (j=1) skips the candidate if it's parallel
-            if j == 1: 
-                if la.norm(np.cross(pos[:,k], newcell[:,0])) < tol:
-                    continue
-            # If there is already two cell vectors (j=2) skips the candidate if it's parallel
-            # to one of the vectors
-            elif j == 2:
-                if abs(la.det(np.concatenate((newcell[:,:2],pos[:,k:k+1]), axis=1))) < tol:
-                    continue
-            # Goes through the displacements and finds the one that are parallel
-            for p in pos.T:
-                if la.norm(np.cross(p,pos[:,k]))/(la.norm(p) * la.norm(pos[:,k])) < tol:
-                    multiple.append(p.dot(pos[:,k])/la.norm(pos[:,k])**2)
+def find_cell(class_list, positions, tol = 1e-5, frac_shell = 0.5, frac_correct = 0.95, max_count=1000):
+    
+    cm = np.mean(positions, axis=1).reshape((3,1))
 
-            # Find the norms of all vectors with respect to the center of the interval
-            # finds all the displacements inside the 'shell' of the interval
-            if multiple != []:
-                multiple.sort()
-                norms = la.norm(pos - 1 / 2.0 * (multiple[0]+multiple[-1]) *
-                                pos[:,k:k+1].dot(np.ones((1,np.shape(pos)[1]))), axis = 0)
-                shell = np.sum(norms < 1 / 2.0 * (multiple[-1]-multiple[0])*la.norm(pos[:,k]) + tol) / float(len(norms))
-                # If it is the right size (to check next condition)
-                if len(multiple) == len(np.arange(round(multiple[0]), round(multiple[-1])\
-    +1)):
-                    # If all the multiples are present and the interval cover more than a certain 
-                    # fraction of displacements the displacement is added as a cell vector
-                    if np.allclose(multiple, np.arange(round(multiple[0]), round(multiple[-1])+1), tol) and shell > frac_tol**3:
-                        newcell[:,j] = pos[:,k]
-                        j += 1
-                        if j == 3:
-                            repeat = True
-                            while repeat:
-                                for l, cell in enumerate(cell_list):
-                                    prev_cell = cell
-                                    prev_newcell = newcell
-                                    cell_list[l], newcell = find_supercell(cell, newcell, tol)
+    for loop in [0,1]:
+        for i in np.unique(class_list):
+            pos = positions[:, class_list == i]
+            center = np.argmin(la.norm(pos, axis = 0))
+            list_in = list(range(np.shape(pos)[1]))
+            list_in.remove(center)
+            origin = pos[:,center:center+1]
+            pos = pos[:,list_in] - origin.dot(np.ones((1,np.shape(pos)[1]-1))) # centered
+            if not loop:
+                norms = la.norm(pos, axis = 0)
+                idx = np.argsort(norms)
+                minj = 0
+                maxj = len(idx)
+            else:
+                idx = np.arange(np.shape(pos)[1])
+                np.random.shuffle(idx)
+                minj = 3
+                maxj = len(idx)
+            count = 0
+
+            # for j in range(len(pos.T)):
+            #     if abs(pos[2,idx[j]]) < 1:
+            #         print("---", pos[:,idx[j]].T)
+            #     elif abs(pos[2,idx[j]]) > 13.1:
+            #         print("+++", pos[:,idx[j]].T)
+            #     else:
+            #         print(pos[:,idx[j]].T)
+
+            for j in range(minj, maxj):
+                if not loop:
+                    mink = j+1
+                    maxk = len(idx)
+                else:
+                    mink = 0
+                    maxk = j-1
+                for k in range(mink, maxk):
+                    if not loop:
+                        minl = k+1
+                        maxl = len(idx)
+                    else:
+                        minl = 0
+                        maxl = k-1
+                    for l in range(minl, maxl):
+                        # creates all possible cells 
+                        newcell=np.concatenate([pos[:,idx[j]:idx[j]+1], 
+                                                    pos[:,idx[k]:idx[k]+1], 
+                                                    pos[:,idx[l]:idx[l]+1]],axis=1)
+
+                        if abs(la.det(newcell)) > tol: # Cell as non-zero volume
+                            count += 1
+                            if count > max_count:
+                                break
+
+                            if la.det(newcell) < 0:
+                                newcell=np.concatenate([pos[:,idx[j]:idx[j]+1],
+                                                        pos[:,idx[l]:idx[l]+1],
+                                                        pos[:,idx[k]:idx[k]+1]],axis=1)
+
+                            norms = la.norm(positions - cm.dot(np.ones((1,np.shape(positions)[1]))), axis=0)
+                            apos = la.inv(newcell).dot(positions - origin.dot(np.ones((1,np.shape(positions)[1]))))
+
+                            inPos = apos[:,np.sum((apos < 1 - tol) & (apos > - tol),0)==3]
+                            inType = class_list[np.sum((apos < 1 - tol) & (apos > - tol),0)==3]
+                            
+                            n_map = 0
+                            for m, a in enumerate(apos.T):
+                                for n, b in enumerate(inPos.T):
+                                    # Check that the cell is repeating
+                                    if (all(abs(np.mod(a+tol,1)-tol-b) < tol) and 
+                                        inType[n] == class_list[m]):
+                                        break
                                 else:
-                                    repeat = False
-                            # if la.det(newcell) < 0:
-                            #     newcell[:,2] = -newcell[:,2]
-                            cell_list.append(newcell)
-                            origin_list.append(origin)
-                            break
-
-        else:
-            warnings.warn("Could not find periodic cell for displacement %d. Increase sample size or use results with care."%i, RuntimeWarning)
-            
-    if len(cell_list) == 0:
-        raise RuntimeError("Could not find periodic cell for any displacement. Increase sample size.")
-
-    cell = cell_list[np.argmax([la.det(cell) for cell in cell_list])]
-    origin = origin_list[np.argmax([la.det(cell) for cell in cell_list])]
-
-    return cell, origin
+                                    continue
+                                n_map += 1
+        
+                            genPos = []
+                            if float(n_map)/float(len(class_list)) > frac_correct:
+                                xMax = int(np.max(apos[0,:]))+1
+                                xMin = int(np.min(apos[0,:]))-1
+                                yMax = int(np.max(apos[1,:]))+1
+                                yMin = int(np.min(apos[1,:]))-1
+                                zMax = int(np.max(apos[2,:]))+1
+                                zMin = int(np.min(apos[2,:]))-1
+                                for x in range(xMin,xMax):
+                                    for y in range(yMin,yMax):
+                                        for z in range(zMin,zMax):
+                                            genPos.append(inPos + np.array([[x,y,z]]).T.dot(np.ones((1,np.shape(inPos)[1]))))
+                            
+                                genPos = newcell.dot(np.concatenate(genPos,axis=1))
+                                genPos = genPos + origin.dot(np.ones((1,np.shape(genPos)[1])))
+        
+                                if np.sum(la.norm(genPos - cm.dot(np.ones((1,np.shape(genPos)[1]))), axis = 0) < frac_shell * np.max(norms) - tol) == np.sum(norms < frac_shell * np.max(norms) - tol):
+                                    print("Found cell!")
+                                    return newcell, origin
+                    else:
+                        continue
+                    break
+                else:
+                    continue
+                break
+            print("WARNING: Could not find periodic cell using displacement %d. Increase sample size or use results with care."%i)
+        print("WARNING: Could not find cell using shortest distances, trying random order") 
+    raise RuntimeError("Could not find periodic cell for any displacement. Increase sample size.")                
 
 def lcm(x, y):
    """This function takes two
@@ -189,6 +235,8 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
 
     on_top = None
 
+    os.makedirs(outdir, exist_ok=True)
+
     if not display:
         matplotlib.use('Agg')
 
@@ -197,9 +245,10 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
     import matplotlib.gridspec as gridspec
     from matplotlib.patches import Rectangle
 
-    def add_panel(fig,g,angles, state, p, label):
+    def add_panel(fig,g,angles, state, p, label, anchor):
         color_list=[]
         ax = fig.add_subplot(g, projection='3d', proj_type = 'ortho')
+        ax.set_anchor(anchor)
         ax.view_init(*angles)
         maxXAxis = np.abs([c for a in Tpos for b in a for c in b.flatten()]).max() + 1
         ax.set_xlim([-maxXAxis, maxXAxis])
@@ -218,10 +267,10 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
         fig.patches.append(rec)
         for i,point in enumerate(toplot.T):
             if any(color_list==color_to_plot[i]) or not label or p:
-                ax.scatter(*point, c=colorlist[color_to_plot[i]], s=(2-color_to_plot[i])*40, depthshade=False)
+                ax.scatter(*point, c=colorlist[color_to_plot[i]], s=40, depthshade=False)
             else:
                 color_list.append(color_to_plot[i])
-                ax.scatter(*point, c=colorlist[color_to_plot[i]], s=(2-color_to_plot[i])*40, depthshade=False, label=atom_types[color_to_plot[i]])
+                ax.scatter(*point, c=colorlist[color_to_plot[i]], s=40, depthshade=False, label=atom_types[color_to_plot[i]])
 
     def all_panels(fig, gs, state, label):
         for p,pl in enumerate(planes):
@@ -229,15 +278,16 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
             plane = plane/la.norm(plane)
             angles = dir2angles(plane)
             if p ==0:
-                add_panel(fig,gs[0,0], angles, state, p, label)
+                add_panel(fig,gs[0,0], angles, state, p, label, 'E')
             elif p == 1:
-                add_panel(fig,gs[0,1], angles, state, p, label)
+                add_panel(fig,gs[0,1], angles, state, p, label, 'W')
             else:
-                add_panel(fig,gs[1,0], angles, state, p, label)
+                add_panel(fig,gs[1,0], angles, state, p, label, 'E')
             
         ax = fig.add_subplot(gs[1,1], projection='3d', proj_type = 'ortho')
+        ax.set_anchor('W')
         ax.set_axis_off()
-        ax.view_init(*(np.array(dir2angles(transStruc[state].cell[:,0]))+np.array([30,-30])))
+        ax.view_init(*(np.array(dir2angles(transStruc[state].cell[:,0]))+np.array([0,0])))
         ax.dist = 4
         maxXAxis = abs(transStruc[state].cell).max() + 1
         ax.set_xlim([-maxXAxis, maxXAxis])
@@ -270,7 +320,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
     
     def make_anim(n_states):
         fig = plt.figure(figsize=[12.8,7.2])
-        gs = gridspec.GridSpec(2, 3)
+        gs = gridspec.GridSpec(2, 2)
         gs.update(wspace=0.01, hspace=0.01)
         def animate_trans(state):
             all_panels(fig,gs, state, state==1)
@@ -326,6 +376,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
     B = read.poscar(fileB)
 
     if prim:
+        print("Finding primitive cell.")
         A = primitive(A)
         B = primitive(B)
     
@@ -354,8 +405,8 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
     else:
         print("Transition from %s to %s"%(fileA, fileB))
     
-    print("Initial SpaceGroup:", get_spacegroup(to_spglib(B), symprec=1e-4, angle_tolerance=2.0))
-    print("Final SpaceGroup:", get_spacegroup(to_spglib(A), symprec=1e-4, angle_tolerance=2.0))
+    print("Initial SpaceGroup:", get_spacegroup(to_spglib(B), symprec=0.3, angle_tolerance=3.0))
+    print("Final SpaceGroup:", get_spacegroup(to_spglib(A), symprec=0.3, angle_tolerance=3.0))
     
     tmat = np.eye(3)
     found = False
@@ -431,20 +482,25 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
             Apos_map, Bpos, Bposst, n_map, natA , class_list, tmat, dmin = pickle.load(open(outdir+"/fastoptimization.dat","rb"))
             Bpos = np.asanyarray(Bpos)
             Apos = np.asanyarray(Apos)
-        
-        print("Total distance between structures:", dmin)
-        
+
         class_list = class_list[:n_map]-1
+
+        print("Number of classes:", len(np.unique(class_list)))
 
         Bpos = Bpos[:,:n_map]
         Bposst = Bposst[:,:n_map]
         Apos_map = Apos_map[:,:n_map]
         
+        print("Total distance between structures:", dmin)
+        dmin = sum(np.sqrt(sum((Apos_map - Bpos)**2,0)))
+        print("Total distance between structures in python:", dmin)
+
         natB = n_map // np.sum(atoms)
         nat_map = n_map // np.sum(atoms)
         nat = np.shape(Apos)[1] // np.sum(atoms)
 
         try:
+            print("Looking for periodic cell...")
             foundcell, origin = find_cell(class_list, Bposst)
             if abs(abs(la.det(tmat)) - abs(mulA * la.det(Acell)/(mulB * la.det(Bcell)))) > tol_vol:
                 found = False
@@ -566,7 +622,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
         
     print("Showing")
     
-    # plt.show()
+    plt.show()
 
     if not found:
         raise RuntimeError("Could not find good displacement cell. Increase system size")
@@ -588,35 +644,43 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
     dispStruc = Structure(cell)
     stinitStruc = Structure(cell)
     incell = []
+
     for idx, disp in zip(*uniqueclose(cell_coord, tol)):
         for i in idx:
             if np.allclose(pos_in_struc[:,i], cell.dot(disp), atol=tol):
                 incell.append((i,pos_in_struc[:,i]))
                 break
         else:
-            i = np.argmin(la.norm(np.array([pos_in_struc[:,i] for i in idx]),axis=0))
-            incell.append((i,pos_in_struc[:,i]))
-            print("Warning: Could not find all disp. in first cell.")
+            i = np.argmin(la.norm(np.array([pos_in_struc[:,j] for j in idx]),axis=1))
+            incell.append((i,cell.dot(disp)))
         
     for i, disp in incell:
         dispStruc.add_atom(*(tuple(disp)+(str(class_list[i]),)))
         stinitStruc.add_atom(*(tuple(disp)+(whattype(i, natB),)))
-
+        
     if la.det(cell) < 0:
        cell[:,2] = -cell[:,2] 
 
     # Finds a squarer cell
-    cell = gruber(cell)
+    cell = gruber(cell) #TMP
 
     dispStruc = supercell(dispStruc, cell)
-    stinitStruc = supercell(stinitStruc, cell)
 
-    print("dispStruc", dispStruc)
-    print("stinitStruc", stinitStruc) 
+    print("LEN1", len(dispStruc))
 
     # Makes sure it is the primitive cell 
     dispStruc = primitive(dispStruc, tolerance = tol)
-    stinitStruc = supercell(stinitStruc, stinitStruc.cell.dot(np.round(la.inv(stinitStruc.cell).dot(dispStruc.cell))))
+
+    print("LEN2", len(dispStruc))
+
+    tmpStruc = Structure(dispStruc.cell)
+    to_add = [np.mod(la.inv(dispStruc.cell).dot(a.pos)+tol,1)-tol for a in stinitStruc]
+    for idx, pos in zip(*uniqueclose(np.array(to_add).T, tol)):
+        tmpStruc.add_atom(*dispStruc.cell.dot(pos),stinitStruc[idx[0]].type)
+    
+    stinitStruc = tmpStruc
+
+    assert len(stinitStruc) == len(dispStruc)
 
     cell = dispStruc.cell
 
@@ -640,6 +704,33 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
     
     print("Total displacement stretched cell:", Total_disp)
 
+    # Displays only the cell and the displacements in it
+    fig = plt.figure()
+    ax = Axes3D(fig)
+    #ax = fig.add_subplot(111, projection='3d')
+    
+    def init_struc():
+        for i,disp in enumerate(dispStruc):
+            ax.quiver(disp.pos[0], disp.pos[1], disp.pos[2], vec_classes[int(disp.type)][0],vec_classes[int(disp.type)][1], vec_classes[int(disp.type)][2], color=colorlist[i%10])
+            ax.scatter(disp.pos[0], disp.pos[1], disp.pos[2], alpha = 0.5, s=10, color=colorlist[i%10])
+            ax.scatter(finalStruc[i].pos[0], finalStruc[i].pos[1], finalStruc[i].pos[2], alpha = 1, s=10, color=colorlist[i%10])
+        ax.quiver(np.zeros(3), np.zeros(3), np.zeros(3), cell[0,:], cell[1,:], cell[2,:], color = "red", alpha = 0.3)
+        ax.quiver(np.zeros(3), np.zeros(3), np.zeros(3), Acell[0,:], Acell[1,:], Acell[2,:], color = "blue", alpha = 0.3)
+        maxXAxis = abs(cell).max() + 1
+        ax.set_xlim([-maxXAxis, maxXAxis])
+        ax.set_ylim([-maxXAxis, maxXAxis])
+        ax.set_zlim([-maxXAxis, maxXAxis])
+        ax.set_aspect('equal')
+        fig.savefig(outdir+'/Displacement_structure.svg')
+        return fig,
+    
+    if not display:
+        anim = animation.FuncAnimation(fig, animate, init_func=init_struc,
+                                       frames=490, interval=30)
+        anim.save(outdir+'/DispStruc.gif', fps=30, codec='gif')
+    else:
+        init_struc()
+
     # Produce transition
 
     print("Producing transition!")
@@ -649,7 +740,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
     os.makedirs(outdir+"/TransPOSCARS", exist_ok=True)
 
     itmat = rotate(la.inv(tmat).dot(finalStruc.cell), finalStruc.cell).dot(la.inv(tmat))
-
+    
     spgList = []
     transStruc = []
     planes = [[1,0,0], [0,1,0], [0,0,1]]
@@ -664,7 +755,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
             curPos = curMat.dot((finalStruc[j].pos - curDisp).reshape((3,1)))
             curStruc.add_atom(*(curPos.T.tolist()[0]),finalStruc[j].type)
         write.poscar(curStruc, vasp5=True, file=outdir+"/TransPOSCARS"+"/POSCAR_%03d"%i)
-        spgList.append(get_spacegroup(to_spglib(curStruc), symprec=1e-1, angle_tolerance=3.0))
+        spgList.append(get_spacegroup(to_spglib(curStruc), symprec=0.3, angle_tolerance=3.0))
         transStruc.append(curStruc)
         
         color_array.append([])
@@ -693,8 +784,6 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
             Tpos[-1].append(np.array(Tpos_tmp).T)
             color_array[-1].append(types)
 
-    print
-
     print("Spacegroups along the transition:", spgList)
     
     # Displays displacement with the disp cell overlayed
@@ -702,40 +791,16 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
     ax = fig.add_subplot(111, projection='3d')
     ax.quiver(pos_in_struc.T[:,0], pos_in_struc.T[:,1], pos_in_struc.T[:,2], disps.T[:,0], disps.T[:,1], disps.T[:,2], color = "C0")
     ax.scatter(pos_in_struc.T[:,0], pos_in_struc.T[:,1], pos_in_struc.T[:,2], s=10, color = "C0")
-    ax.quiver(np.zeros(3), np.zeros(3), np.zeros(3), cell[0,:], cell[1,:], cell[2,:], color = "red")
+    ax.quiver(np.zeros(3), np.zeros(3), np.zeros(3), foundcell[0,:], foundcell[1,:], foundcell[2,:], color = "red")
+    ax.quiver(np.zeros(3), np.zeros(3), np.zeros(3), cell[0,:], cell[1,:], cell[2,:], color = "green")
     maxXAxis = pos_in_struc.max() + 1
     ax.set_xlim([-maxXAxis, maxXAxis])
     ax.set_ylim([-maxXAxis, maxXAxis])
     ax.set_zlim([-maxXAxis, maxXAxis])
     ax.set_aspect('equal')
-    fig.savefig(outdir+'/DispLattice_stretched_cell_primittive.svg')
-    
-    # Displays only the cell and the displacements in it
-    fig = plt.figure()
-    ax = Axes3D(fig)
-    #ax = fig.add_subplot(111, projection='3d')
-    
-    def init_struc():
-        for i,disp in enumerate(dispStruc):
-            ax.quiver(disp.pos[0], disp.pos[1], disp.pos[2], vec_classes[int(disp.type)][0],vec_classes[int(disp.type)][1], vec_classes[int(disp.type)][2], color=colorlist[i%10])
-            ax.scatter(disp.pos[0], disp.pos[1], disp.pos[2], alpha = 0.5, s=10, color=colorlist[i%10])
-            ax.scatter(finalStruc[i].pos[0], finalStruc[i].pos[1], finalStruc[i].pos[2], alpha = 1, s=10, color=colorlist[i%10])
-        ax.quiver(np.zeros(3), np.zeros(3), np.zeros(3), cell[0,:], cell[1,:], cell[2,:], color = "red", alpha = 0.3)
-        ax.quiver(np.zeros(3), np.zeros(3), np.zeros(3), Acell[0,:], Acell[1,:], Acell[2,:], color = "blue", alpha = 0.3)
-        maxXAxis = abs(cell).max() + 1
-        ax.set_xlim([-maxXAxis, maxXAxis])
-        ax.set_ylim([-maxXAxis, maxXAxis])
-        ax.set_zlim([-maxXAxis, maxXAxis])
-        ax.set_aspect('equal')
-        fig.savefig(outdir+'/Displacement_structure.svg')
-        return fig,
-    
-    if not display:
-        anim = animation.FuncAnimation(fig, animate, init_func=init_struc,
-                                       frames=490, interval=30)
-        anim.save(outdir+'/DispStruc.gif', fps=30, codec='gif')
-    else:
-        init_struc()
+    fig.savefig(outdir+'/DispLattice_stretched_cell_primitive.svg')
+
+    plt.show() #TMP
 
     # Growth directions
 
