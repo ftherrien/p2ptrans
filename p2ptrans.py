@@ -376,9 +376,9 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
     B = read.poscar(fileB)
 
     if prim:
-        print("Finding primitive cell.")
-        A = primitive(A)
-        B = primitive(B)
+        print("Making the cells primitive.")
+        A = primitive(A, tol)
+        B = primitive(B, tol)
     
     print("POSCARS")
     print(A)
@@ -662,7 +662,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
        cell[:,2] = -cell[:,2] 
 
     # Finds a squarer cell
-    cell = gruber(cell) #TMP
+    cell = gruber(cell)
 
     dispStruc = supercell(dispStruc, cell)
 
@@ -690,7 +690,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
 
     print("Is it a supercell?")
     print(la.inv(Acell).dot(dispStruc.cell))
-    print(la.inv(Bcell.dot(tmat)).dot(dispStruc.cell))
+    print(la.inv(tmat.dot(Bcell)).dot(dispStruc.cell))
 
     print("Number of A cell in dispCell:", la.det(dispStruc.cell)/(mulA*la.det(Acell)))
     print("Number of B cell in dispCell:", la.det(dispStruc.cell)/(mulB*la.det(tmat.dot(Bcell))))
