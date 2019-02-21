@@ -1,18 +1,22 @@
-from pylada.crystal import read, supercell, write, Structure
+from pylada.crystal import read, supercell, write, Structure, primitive
 import pickle
+import matplotlib
+# matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 from p2ptrans import tiling as t
 from copy import deepcopy
+import sys
 
 la = np.linalg
 
 cut = False
 spacing = 2 # Angstrom
 tickness = 15
+vacuum = 10 # on each side
 substrate = "Zr"
 
-Alabel, Blabel, rtrans, ttrans, cell, centerA, centerB = pickle.load(open("transformation_2.dat","rb")) 
+Alabel, Blabel, rtrans, ttrans, cell, centerA, centerB = pickle.load(open("transformation_%s.dat"%(sys.argv[1]),"rb"))
 
 if Blabel == substrate:
     tmp = Alabel
@@ -25,7 +29,7 @@ if Blabel == substrate:
     centerA = centerB
     centerB = tmp
 
-cell[:2,:2] = 2*cell[:2,:2]
+cell[:2,:2] = cell[:2,:2]
 
 centerA = np.append(centerA,0)
 centerB = np.append(centerB,0)
@@ -55,20 +59,32 @@ else:
 oAcell = A.cell # original A.cell
 oBcell = B.cell
 
+B = primitive(B)
+halfed_cell = oBcell
+halfed_cell[:2,:2] = 0.5*halfed_cell[:2,:2]
+B.cell = B.cell.dot(np.round(np.linalg.inv(B.cell).dot(halfed_cell)))
+B = supercell(B, B.cell)
+
 print("Alabel",Alabel,A)
 print("Blabel",Blabel,B)
 
 shiftA = -np.ones(3)*1e10
+minA = 1e10
 for a in A:
     if a.type == Alabel:
         if a.pos[2] > shiftA[2]:
             shiftA = a.pos
+    if a.pos[2] < minA:
+        minA = a.pos[2]
 
 shiftB = np.ones(3)*1e10
+maxB = -1e10
 for b in B:
     if b.type == Blabel:
         if b.pos[2] < shiftB[2]:
             shiftB = b.pos
+    if b.pos[2] > maxB:
+        maxB = b.pos[2]
 
 # fig = plt.figure()
 # ax = fig.add_subplot(111)
@@ -82,14 +98,16 @@ for b in B:
 #     if abs(b.pos[2] - shiftB) < 1e-5:
 #         ax.scatter(b.pos[0], b.pos[1], color="blue", alpha='0.5')
 
-A.cell[:,2] = -A.cell[:,2] # The substrate is at the bottom
+A.cell[2,2] = -(shiftA[2] - minA + vacuum) # The substrate is at the bottom
 newA = Structure(A.cell)
 for a in A:
     a.pos = a.pos - shiftA - centerA
-    if a.pos[2] < min(-A.cell[2,2],0) + 1e-10:
+    if a.pos[2] < 1e-10:
         newA.add_atom(*(tuple(a.pos)+(a.type,)))
 
-A = deepcopy(newA) #TODO: 'remove' would be more elegant, does not work for some reason
+A = deepcopy(newA) #TODO: remove would be more elegant, does not work for some reason
+
+print("After shift (A):", len(A)) 
 
 Asupercell = cell
 Asupercell[:,2] = A.cell[:,2]
@@ -112,14 +130,22 @@ Asupercell_prev = deepcopy(Asupercell)
 
 Asupercell = A.cell.dot(np.round(np.linalg.inv(A.cell).dot(Asupercell)))
 
+print("Should be", la.det(Asupercell) / la.det(A.cell))
+
 A = supercell(A, Asupercell)
 
+print("After supercell (A):", len(A))
+
 B.cell = ttrans[:,:3].dot(B.cell)
+print(maxB, shiftB[2], vacuum)
+B.cell[2,2] = maxB - shiftB[2] + vacuum
 for b in B:
     b.pos = (ttrans[:,:3].dot((b.pos - shiftB - centerB).reshape(3,1)) + ttrans[:,3:4]).T[0]
 
 B = supercell(B, B.cell)
-    
+
+print("After shift (B):", len(B))
+
 # B = supercell(B, np.concatenate((2*B.cell[:,:2],B.cell[:,2:3]), axis=1))
     
 Bsupercell = cell
@@ -145,7 +171,11 @@ Bsupercell = B.cell.dot(np.round(np.linalg.inv(B.cell).dot(Bsupercell)))
 
 print("Bsupercell diff", Bsupercell - Bsupercell_prev)
 
+print("Should be", la.det(Bsupercell) / la.det(B.cell))
+
 B = supercell(B, Bsupercell)
+
+print("After supercell (B):", len(B))
 
 # Angles between main planes
 
@@ -162,7 +192,7 @@ a2 = np.arccos(niv2.dot(zrv2)/(la.norm(niv2)*la.norm(zrv2)))
 print("The angle between Ni[1,1,-2] and YSZ[11-2] is:", 360*a1/(2*np.pi))
 
 ABcell = cell
-ABcell[:,2] = B.cell[:,2] - A.cell[:,2]
+ABcell[2,2] = B.cell[2,2] - A.cell[2,2] + spacing
 
 print("ABcell", ABcell)
 
@@ -203,13 +233,19 @@ for a in A:
 for a in B:
     AB.add_atom(*(tuple(a.pos-A.cell[:,2]+spacing)+(a.type,)))
 
-A = supercell(A,A.cell)
-B = supercell(B,B.cell)
-AB = supercell(AB,AB.cell)
-    
-write.poscar(A, vasp5=True, file="POSCAR_A")
-write.poscar(B, vasp5=True, file="POSCAR_B")
-write.poscar(AB,vasp5=True, file="POSCAR_AB")
+# print("Finding primitive cell")
+# A = primitive(supercell(A,A.cell), 1e-3)
+# B = primitive(supercell(B,B.cell), 1e-3)
+# AB = primitive(supercell(AB,AB.cell), 1e-3)
+
+print("Writting poscars!")
+print("A:", len(A))
+print("B:", len(B))
+print("AB:", len(AB))
+
+write.poscar(A, vasp5=True, file="POSCAR_A_%s"%(sys.argv[1]))
+write.poscar(B, vasp5=True, file="POSCAR_B_%s"%(sys.argv[1]))
+write.poscar(AB,vasp5=True, file="relaxations/poscars/POSCAR_AB_%s"%(sys.argv[1]))
 
 plt.show()
 
