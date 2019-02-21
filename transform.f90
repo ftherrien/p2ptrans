@@ -623,6 +623,8 @@ contains
               
     enddo
 
+    print*, j, abs(dist - dist_prev)
+
 
   end subroutine analytical_gd_rot
 
@@ -1173,8 +1175,10 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
          vec             ! Translation vector
 
     double precision, dimension(3) :: &
-         vec_local       ! Translation vector
-
+         vec_local, &       ! Translation vector
+         vec_rot_local, &
+         angles_local
+         
     double precision, intent(out), dimension(3,3) :: &
          tmat    ! Transformation matrix
 
@@ -1196,6 +1200,7 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
          dist_minus, & ! distance when substracting dx
          accept, & ! Accept step
          dist_cur, &
+         dist_cur_rot, &
          dist_map, &
          dist_stretch, &
          mul_vec, &
@@ -1247,22 +1252,24 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
 
     thread = OMP_get_thread_num() + 1
     
-    dist_min(thread) = sum(sqrt(sum((Apos - Bpos)**2,1)))
+    ! dist_min(thread) = sum(sqrt(sum((Apos - Bpos)**2,1)))
+    dist_min(thread) = 2*sum(sqrt(sum((Apos - Bpos)**2,1))) ! TMP TESTING
     
     !$omp do
     do j=1, n_iter
        
        call random_number(tmat_local)
        call random_number(vec_local)
-
-       tmat_local = max_vol*tmat_local
+       
+       tmat_local = max_vol * (tmat_local - 0.5d0)
 
        dt_tmat = det(tmat_local,3)
 
        if (fixed_vol) then
-          tmat_local = dt_tmat / abs(dt_tmat) * tmat_local * abs((ratio / dt_tmat))**(1.0d0/3.0d0)
+          ! tmat_local = dt_tmat / abs(dt_tmat) * tmat_local * abs((ratio / dt_tmat))**(1.0d0/3.0d0)
+          tmat_local = dt_tmat / abs(dt_tmat) * tmat_local * (abs(modulo(abs(dt_tmat), ratio) / dt_tmat))**(1.0d0/3.0d0)
        else
-          tmat_local = dt_tmat / abs(dt_tmat) * tmat_local * (abs(modulo(dt_tmat, max_vol) / dt_tmat))**(1.0d0/3.0d0)
+          tmat_local = dt_tmat / abs(dt_tmat) * tmat_local * (abs(modulo(abs(dt_tmat), max_vol) / dt_tmat))**(1.0d0/3.0d0)
        endif
 
        vec_local = vec_local - (/0.5d0,0.5d0,0.5d0/)
@@ -1271,7 +1278,7 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
        
        vec_local = vec_local - matmul(cell,nint(matmul(icell,vec_local))) 
 
-       write(*,*) "New initial step", thread, j, "tmat vol", det(tmat_local,3) 
+       write(*,*) "New initial step", thread, j, "tmat", tmat_local, "vec", vec 
        
        Apos_mapped = 1.0d0
        Apos_mapped_prev = 0.0d0
@@ -1292,12 +1299,21 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
 
        enddo
 
+       angles_local = 0 !TMP TESTING
+       vec_rot_local = vec_local !TMP TESTING
+       
+       call analytical_gd_rot(angles_local, vec_rot_local, Apos_mapped, Bpos_opt, &
+            n_ana*1000, rate1, rate2, tol) ! TMP TESTING
+       
        dist_cur = sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt,tmat_local,vec_local))**2,1)))
+       dist_cur_rot = sum(sqrt(sum((Apos_mapped - &
+            free_trans(Bpos_opt,rot_mat(angles_local),vec_rot_local))**2,1))) !TMP TESTING
 
-       print*, "Opt dist", dist_cur, thread, j, "tmat_vol", det(tmat_local,3), vec_local
+       print*, "Opt dist", dist_cur, dist_cur_rot, thread, j, "tmat", tmat_local, "vec", vec_local
 
-       if (dist_cur < dist_min(thread)) then
-          dist_min(thread) = dist_cur
+       if (dist_cur_rot + dist_cur < dist_min(thread)) then ! TMP TESTING
+       ! if (dist_cur < dist_min(thread)) then ! TMP TESTING
+          dist_min(thread) = dist_cur_rot + dist_cur
           tmat_min(:,:,thread) = tmat_local
           vec_min(:,thread) = vec_local
        endif
@@ -1345,7 +1361,8 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
          n_iter, &   ! Number of iteration of the gradient descent
          n_ana, &
          n_conv, &
-         n_adjust
+         n_adjust, &
+         n_class
 
     character*200, intent(in) :: &
          filename
@@ -1466,6 +1483,7 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
          fixed_vol, slanting, &
          n_iter, n_ana, &
          n_conv, n_adjust, &
+         n_class, &
          max_vol, free
 
     remap = .true.
@@ -1483,6 +1501,7 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
     n_iter = 1000
     n_ana = 300
     n_conv = 5
+    n_class = 30
     n_adjust = 10
     max_vol = 4.0d0
     free = .false.
@@ -1516,27 +1535,31 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
        call gradient_descent_explore_free(tmat, vec, Apos, Bpos, Acell, iAcell, &
             fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2, tol, &
             max_vol, fixed_vol,  ratio)
+       
+       ! ! TMP
+    
+       ! tmat = reshape((/14.169581396553781, 2.3320173388513159, 4.7349718188913528, &
+       !      1.7972410964944123, 0.85640784958714899, 1.8756601105809532, &
+       !      -14.637790992032205, 3.6553070360209956, 9.1003072912966108/), (/3,3/))
+       
+       ! vec = (/-2.5741392800163888E-002, -2.1854534845615208E-002, -2.8904459488832392/)
+       
     else
     
        call gradient_descent_explore(angles, vec, Apos, Bpos, Acell, iAcell, &
-            fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2, tol)
+           fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2, tol)
 
+       ! angles =  (/ 1.1836160364755223E-002, 3.2712551009080264, 5.1740793478627083 /)
+       ! vec =  (/ 0.53238369325184376, 0.47961378180126824, 0.22961059475291440 /)
+       
        tmat = rot_mat(angles)
 
     endif
        
     ! open (10,file='savebest.dat',form='unformatted')
     ! read(10) angles,vec
-    ! close(10)
-
-    ! TMP
-    ! angles = (/ 6.2791211408697398, 0.69052045410816076, 6.1873772335266128 /)
-    ! vec = (/ 0.56189533122518054, -0.56214213810691183, -0.65550248016880985 /)
+    ! close(10)    
     
-
-    ! angles = (/3.4339149701581557, 1.6048859230251857, 4.0612796987166346/)
-    ! vec = (/0.10050885919574745, -0.56119755905278279, -3.1596588407696302/)
-
     write(*,*) "/======== Stretching Adjustment ========\\"
     
     Apos_mapped_prev = 0.0d0
@@ -1624,10 +1647,27 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
     classes_list = 0
     classes_list_prev = 1
     j=0
-    do while ( std > tol_class .and. j < 10)
+    do while ( std > tol_class .and. j < n_class)
        j = j + 1
-       
+
        write(*,*) "-->", j
+       
+       if (remap .and. j/=1) then
+
+          center_vec = sum(free_trans(Bpos_opt,tmat,vec) - Apos_mapped,2) / n_out
+
+          Apos_mapped_prev = Apos_mapped
+          
+          tBpos = free_trans(Bpos,tmat,vec - center_vec)
+          
+          call mapping(Apos_mapped, Bpos_opt, Apos, Bpos, tBpos, &
+               fracA, fracB, atoms, n_atoms)
+
+          if (any(Apos_mapped_prev /= Apos_mapped)) then
+             print*, "REMAP!"
+          endif
+ 
+       endif
 
        classes_list_prev = classes_list
        std_prev = std
@@ -1662,23 +1702,6 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
 
        deallocate(n_classes)
 
-       if (remap) then
-
-          center_vec = sum(free_trans(Bpos_opt,tmat,vec) - Apos_mapped,2) / n_out
-
-          Apos_mapped_prev = Apos_mapped
-          
-          tBpos = free_trans(Bpos,tmat,vec + center_vec)
-          
-          call mapping(Apos_mapped, Bpos_opt, Apos, Bpos, tBpos, &
-               fracA, fracB, atoms, n_atoms)
-
-          if (any(Apos_mapped_prev /= Apos_mapped)) then
-             print*, "REMAP!"
-          endif
- 
-       endif
-
        write(*,*) "Tolerance for classification:", tol_adjust
        write(*,*) "Final standard deviation:", sqrt(std/dble(size(Apos_mapped,2)-1))
        write(*,*) "Number of classes:", n_tot
@@ -1701,8 +1724,10 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
 
     ! Reshift after classification
     center_vec = sum(free_trans(Bpos_opt,tmat,vec) - Apos_mapped,2) / n_out
-    
-    Bpos_opt_stretch = free_trans(Bpos_opt,tmat,vec + center_vec)
+
+    Bpos_opt_stretch = free_trans(Bpos_opt,tmat,vec - center_vec)
+
+    center_vec = sum(Bpos_opt_stretch - Apos_mapped,2) / n_out
 
     Bpos_out(:,1:n_out) = rBpos_opt
     Bpos_out_stretch(:,1:n_out) = Bpos_opt_stretch

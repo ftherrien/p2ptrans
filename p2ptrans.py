@@ -325,9 +325,9 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
         def animate_trans(state):
             all_panels(fig,gs, state, state==1)
 
-        animation.verbose.set_level('debug')
+        # animation.verbose.set_level('debug')
     
-        plt.rcParams['animation.ffmpeg_path'] = '/home/felixt/bin/ffmpeg'
+        plt.rcParams['animation.ffmpeg_path'] = '/home/felixt/projs/bin/ffmpeg'
         # Writer = animation.writers['ffmpeg']
         writer = animation.FFMpegWriter(fps=30,codec='prores', extra_args=['-loglevel', 'verbose','-f','mov'])
     
@@ -467,9 +467,15 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
             t_time = time.time() - t_time
             Bpos = np.asanyarray(Bpos)
             Apos = np.asanyarray(Apos)
-        
+
             print("Mapping time:", t_time)
-        
+
+            disps = Apos_map - Bposst
+
+            # for a in Apos_map.T:
+            #     print(a)
+            #     pickle.dump(a, open("bob.dat","wb"))
+                        
             pickle.dump((Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin), open(outdir+"/fastoptimization.dat","wb"))
         
         else:
@@ -514,7 +520,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
     # Plotting the Apos and Bpos overlayed
     fig = plt.figure(22)
     ax = fig.add_subplot(111, projection='3d')
-    ax.view_init(0,0) # TMP
+    ax.view_init(0,90) # TMP
     # ax.scatter(Apos.T[:,0],Apos.T[:,1])
     num_tot = 0
 
@@ -551,6 +557,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
     
     # Displacement with stretching
     disps = Apos_map - Bposst
+
     vec_classes = np.array([np.mean(disps[:,class_list==d_type], axis=1) for d_type in np.unique(class_list)])
 
     if pca:
@@ -558,7 +565,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
     
     fig = plt.figure()
     ax = Axes3D(fig)
-    ax.view_init(0,0) # TMP
+    ax.view_init(0,90) # TMP
     maxXAxis = np.max([Apos.max(), Bposst.max()]) + 1
     ax.set_xlim([-maxXAxis, maxXAxis])
     ax.set_ylim([-maxXAxis, maxXAxis])
@@ -621,8 +628,9 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
     print("Cell volume ratio (should be exactly the same):", mulA * la.det(Acell)/(mulB * la.det(Bcell)))
         
     print("Showing")
-    
-    plt.show()
+
+    if display:
+        plt.show()
 
     if not found:
         raise RuntimeError("Could not find good displacement cell. Increase system size")
@@ -683,9 +691,10 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
     assert len(stinitStruc) == len(dispStruc)
 
     cell = dispStruc.cell
-
+    
     finalStruc = Structure(dispStruc.cell)
     for i,a in enumerate(dispStruc):
+        print(a)
         finalStruc.add_atom(*(a.pos+vec_classes[int(a.type)]),stinitStruc[i].type)
 
     print("Is it a supercell?")
@@ -754,6 +763,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
             curDisp = vec_classes[int(a.type)]*i/n_steps
             curPos = curMat.dot((finalStruc[j].pos - curDisp).reshape((3,1)))
             curStruc.add_atom(*(curPos.T.tolist()[0]),finalStruc[j].type)
+            curStruc = supercell(curStruc, curStruc.cell)
         write.poscar(curStruc, vasp5=True, file=outdir+"/TransPOSCARS"+"/POSCAR_%03d"%i)
         spgList.append(get_spacegroup(to_spglib(curStruc), symprec=0.3, angle_tolerance=3.0))
         transStruc.append(curStruc)
@@ -849,7 +859,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
         print("Showing")
         plt.show()
     else:
-        make_anim(n_steps)
+        print("make_anim(n_steps)")
 
 
 if __name__=='__main__':
