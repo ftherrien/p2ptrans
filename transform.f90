@@ -245,6 +245,49 @@ contains
 
   end function cost_map
 
+  subroutine no_mapping(Apos_mapped, Bpos_opt, Apos, Bpos, fracA, fracB, atoms, n_atoms)
+    
+    integer, intent(in) :: &
+         n_atoms ! Number of types of atoms
+    double precision, intent(in), dimension(:,:) :: &
+         Apos, Bpos  ! position matrix
+    integer, intent(in), dimension(n_atoms) :: &
+         atoms
+    double precision, intent(in) :: &
+         fracA, fracB
+    double precision, intent(out), &
+         dimension(3,int(fracB*size(Apos,2)/sum(atoms))*sum(atoms)) :: &
+         Apos_mapped, Bpos_opt  ! position matrix
+
+    integer :: &
+         An_cell, & ! Number of cells
+         i,l, &
+         id, idx, &
+         n, n_B
+
+    An_cell = size(Apos,2)/sum(atoms)
+
+    id = 0
+    idx = 0
+    n = 0
+
+    do i=0,n_atoms-1
+
+       id = id + n
+
+       n = An_cell*atoms(i+1)
+       n_B = int(An_cell*fracB)*atoms(i+1)
+
+       do l=1, n_B
+          idx = idx +  1
+          Apos_mapped(:,idx) = Apos(:,id+l)
+          Bpos_opt(:,idx) = Bpos(:,id+l)
+       enddo
+
+    enddo
+
+  end subroutine no_mapping
+
   subroutine mapping(Apos_mapped, Bpos_opt, Apos, Bpos, tBpos, fracA, fracB, atoms, n_atoms)
     
     integer, intent(in) :: &
@@ -307,7 +350,7 @@ contains
     enddo
 
   end subroutine mapping
-
+  
   function eye() result(a)
     !Copied from Rosetta Code at: https://rosettacode.org/wiki/Identity_matrix#Fortran
     ! Checked and modified for double
@@ -476,7 +519,7 @@ contains
        
     enddo
 
-    print*, dist
+    ! print*, dist
 
   end subroutine analytical_gd_slant  
 
@@ -511,6 +554,12 @@ contains
          Q1, Q2, Q3, &
          M1, M2, M3, M
 
+    double precision, dimension(3) :: &
+         angles_prev
+
+    double precision, dimension(3,1) :: &
+         vec_prev
+    
     double precision, dimension(size(Bpos,2),1) :: &
          ones
 
@@ -616,14 +665,25 @@ contains
               
        ! print*, dist, dist_prev - dist, "ROT"
 
-       angles(1) = angles(1) + rate1 * dist / dist_init * sum(matmul(E,transpose(Bpos)) * M1)
-       angles(2) = angles(2) + rate1 * dist / dist_init * sum(matmul(E,transpose(Bpos)) * M2)
-       angles(3) = angles(3) + rate1 * dist / dist_init * sum(matmul(E,transpose(Bpos)) * M3)
-       vec       = vec       + rate2 * dist / dist_init * matmul(E,ones)
-              
+       if(dist > dist_init .or. dist_init < 1.0d-8) then
+          dist_init = 10 * dist_init
+          angles = angles_prev
+          vec = vec_prev
+       else
+
+          angles_prev = angles
+          vec_prev = vec
+          
+          angles(1) = angles(1) + rate1 * dist / dist_init * sum(matmul(E,transpose(Bpos)) * M1)
+          angles(2) = angles(2) + rate1 * dist / dist_init * sum(matmul(E,transpose(Bpos)) * M2)
+          angles(3) = angles(3) + rate1 * dist / dist_init * sum(matmul(E,transpose(Bpos)) * M3)
+          vec       = vec       + rate2 * dist / dist_init * matmul(E,ones)
+
+       endif
+       
     enddo
 
-    print*, j, abs(dist - dist_prev)
+    print*, j, abs(dist - dist_prev), dist
 
 
   end subroutine analytical_gd_rot
@@ -652,6 +712,9 @@ contains
          tmat     ! Transformation matrix
 
     double precision, dimension(3,3) :: &         
+         tmat_prev     ! Transformation matrix
+
+    double precision, dimension(3,3) :: &         
          ddet ! Determinant matrix (cofactor matrix)
     
     double precision, dimension(2,2) :: &         
@@ -660,6 +723,9 @@ contains
     double precision, intent(inout), dimension(3,1) :: &         
          vec     ! Translation vector
 
+    double precision, dimension(3,1) :: &         
+         vec_prev     ! Translation vector
+    
     double precision, dimension(size(Bpos,2),1) :: &
          ones
 
@@ -716,14 +782,27 @@ contains
        !print*, "ddet"
        !write(*,"(3(F5.3,X))") ddet
 
-       tmat = tmat + rate1 * dist / dist_init * matmul(E,transpose(Bpos)) ! old
-       ! tmat = tmat + rate1*dist*( matmul(E,transpose(Bpos))/det(tmat,3)**(1.0d0/3.0d0) &
-       !     + 1.0d0/3.0d0*dist/det(tmat,3)**(4.0d0/3.0d0)*ddet) ! tmp cubic root version
-       ! tmat = tmat + rate1*dist*( matmul(E,transpose(Bpos))/det(tmat,3) &
-       !      + dist/det(tmat,3)**2*ddet) ! tmp 
-       vec = vec   + rate2 * dist / dist_init * matmul(E,ones)
+       if(dist > dist_init .or. dist_init < 1.0d-8) then
+          dist_init = 10 * dist_init
+          tmat = tmat_prev
+          vec = vec_prev
+       else
 
+          tmat_prev = tmat
+          vec_prev = vec
+       
+          tmat = tmat + rate1 * dist / dist_init * matmul(E,transpose(Bpos)) ! old
+          ! tmat = tmat + rate1*dist*( matmul(E,transpose(Bpos))/det(tmat,3)**(1.0d0/3.0d0) &
+          !     + 1.0d0/3.0d0*dist/det(tmat,3)**(4.0d0/3.0d0)*ddet) ! tmp cubic root version
+          ! tmat = tmat + rate1*dist*( matmul(E,transpose(Bpos))/det(tmat,3) &
+          !      + dist/det(tmat,3)**2*ddet) ! tmp 
+          vec = vec   + rate2 * dist / dist_init * matmul(E,ones)
+
+       endif
+       
     enddo
+
+    print*, "free", j, dist  
 
   end subroutine analytical_gd_free
   
@@ -1343,7 +1422,7 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
 
   subroutine fastoptimization(Apos_out, Bpos_out, Bpos_out_stretch, & ! Output
        n_out, n_A, classes_list_out, & ! Output
-       tmat, dmin, & ! Output
+       tmat, dmin, vec, & ! Output
        Apos, na, Bpos, nb, &
        Acell, iAcell, ratio, &
        atoms, n_atoms, &
@@ -1406,8 +1485,10 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
     double precision, intent(out) :: &
          dmin
 
+    double precision, intent(out), dimension(3) :: &
+         vec        ! Translation vecto
+    
     double precision, dimension(3) :: &
-         vec, &     ! Translation vecto
          vec_rot, & ! Translation vector for the rotated unstretched matrix
          angles, &  ! Rotation angles
          center_vec ! Readjustment vector
@@ -1473,7 +1554,8 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
          slanting, &
          fixed_vol, &
          remap, &
-         free
+         free, &
+         check
 
     namelist /input/ &
          fracA, fracB, &
@@ -1484,7 +1566,8 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
          n_iter, n_ana, &
          n_conv, n_adjust, &
          n_class, &
-         max_vol, free
+         max_vol, free, &
+         check
 
     remap = .true.
 
@@ -1505,6 +1588,7 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
     n_adjust = 10
     max_vol = 4.0d0
     free = .false.
+    check = .false.
 
     open (unit = 11, file = filename, status = 'OLD')
     read (11, input)
@@ -1531,37 +1615,44 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
     call center(Bpos,nb)
     call center(Apos,na)
 
-    if (free) then
-       call gradient_descent_explore_free(tmat, vec, Apos, Bpos, Acell, iAcell, &
-            fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2, tol, &
-            max_vol, fixed_vol,  ratio)
-       
-       ! ! TMP
-    
-       ! tmat = reshape((/14.169581396553781, 2.3320173388513159, 4.7349718188913528, &
-       !      1.7972410964944123, 0.85640784958714899, 1.8756601105809532, &
-       !      -14.637790992032205, 3.6553070360209956, 9.1003072912966108/), (/3,3/))
-       
-       ! vec = (/-2.5741392800163888E-002, -2.1854534845615208E-002, -2.8904459488832392/)
-       
-    else
-    
-       call gradient_descent_explore(angles, vec, Apos, Bpos, Acell, iAcell, &
-           fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2, tol)
+    if (check) then
 
-       ! angles =  (/ 1.1836160364755223E-002, 3.2712551009080264, 5.1740793478627083 /)
-       ! vec =  (/ 0.53238369325184376, 0.47961378180126824, 0.22961059475291440 /)
+       tmat = eye()
+
+       vec = 0
+
+    else
        
-       tmat = rot_mat(angles)
+       if (free) then
+          call gradient_descent_explore_free(tmat, vec, Apos, Bpos, Acell, iAcell, &
+               fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2, tol, &
+               max_vol, fixed_vol,  ratio)
+          
+          ! ! TMP
+       
+          ! tmat = reshape((/14.169581396553781, 2.3320173388513159, 4.7349718188913528, &
+          !      1.7972410964944123, 0.85640784958714899, 1.8756601105809532, &
+          !      -14.637790992032205, 3.6553070360209956, 9.1003072912966108/), (/3,3/))
+          
+          ! vec = (/-2.5741392800163888E-002, -2.1854534845615208E-002, -2.8904459488832392/)
+          
+       else
+       
+          call gradient_descent_explore(angles, vec, Apos, Bpos, Acell, iAcell, &
+              fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2, tol)
+       
+          ! angles =  (/ 1.1836160364755223E-002, 3.2712551009080264, 5.1740793478627083 /)
+          ! vec =  (/ 0.53238369325184376, 0.47961378180126824, 0.22961059475291440 /)
+          
+          tmat = rot_mat(angles)
+       
+       endif
 
     endif
-       
-    ! open (10,file='savebest.dat',form='unformatted')
-    ! read(10) angles,vec
-    ! close(10)    
     
     write(*,*) "/======== Stretching Adjustment ========\\"
-    
+
+    Apos_mapped = 1.0d0
     Apos_mapped_prev = 0.0d0
     i=0
     do while (any(Apos_mapped /= Apos_mapped_2prev) .and. i <= n_adjust)
@@ -1576,10 +1667,19 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
           Apos_mapped_prev = Apos_mapped
           
           tBpos = free_trans(Bpos,tmat,vec)
-          
-          call mapping(Apos_mapped, Bpos_opt, Apos, Bpos, tBpos, &
+
+          if (check) then
+
+             call no_mapping(Apos_mapped, Bpos_opt, Apos, Bpos, &
                fracA, fracB, atoms, n_atoms)
 
+          else
+             
+             call mapping(Apos_mapped, Bpos_opt, Apos, Bpos, tBpos, &
+               fracA, fracB, atoms, n_atoms)
+
+          endif
+             
           angles = 0
           tBpos_opt = free_trans(Bpos_opt,tmat,(/0.0d0,0.0d0,0.0d0/))
           
@@ -1602,7 +1702,7 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
 
        write(*,*) "Unstretched distance:", sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt, rot_mat(angles), vec_rot))**2,1)))
 
-       call analytical_gd_free(tmat, vec, Apos_mapped, Bpos_opt,.false., n_ana*100, 0.001*rate1, 0.01*rate2, tol)
+       call analytical_gd_free(tmat, vec, Apos_mapped, Bpos_opt,.false., n_ana*1000, rate1, rate2, tol)
        
     enddo
 
@@ -1659,10 +1759,19 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
           Apos_mapped_prev = Apos_mapped
           
           tBpos = free_trans(Bpos,tmat,vec - center_vec)
-          
-          call mapping(Apos_mapped, Bpos_opt, Apos, Bpos, tBpos, &
-               fracA, fracB, atoms, n_atoms)
 
+          if (check) then
+             
+             call no_mapping(Apos_mapped, Bpos_opt, Apos, Bpos, &
+                  fracA, fracB, atoms, n_atoms)
+
+          else
+             
+             call mapping(Apos_mapped, Bpos_opt, Apos, Bpos, tBpos, &
+                  fracA, fracB, atoms, n_atoms)
+
+          endif
+             
           if (any(Apos_mapped_prev /= Apos_mapped)) then
              print*, "REMAP!"
           endif
@@ -1708,8 +1817,9 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
        write(*,*) "Stretched distance", sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt, tmat, vec))**2,1)))
 
        ! tol_adjust = min(3.0d0*sqrt(std/dble(size(Apos_mapped,2)-1)), tol_adjust/2.0d0) !3 sigma 99%
-
+       
        if (all(classes_list == classes_list_prev) .and. std_prev - std < tol) then
+!       if (abs(std_prev - std) < tol) then
           tol_adjust = tol_adjust/2.0d0
        endif
        

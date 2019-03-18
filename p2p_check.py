@@ -11,6 +11,8 @@ from pylada.crystal import Structure, primitive, gruber, read, write, supercell,
 from copy import deepcopy
 import argparse
 import os
+import re
+from glob import iglob
 import warnings
 from format_spglib import from_spglib, to_spglib
 from spglib import get_spacegroup
@@ -28,6 +30,7 @@ def readOptions():
     parser = argparse.ArgumentParser()
     parser.add_argument("-I","--initial",dest="A",type=str, default='./POSCAR_A', help="Initial Structure")
     parser.add_argument("-F","--final",dest="B",type=str, default='./POSCAR_B', help="Final Structure")
+    parser.add_argument("-O","--orig",dest="C",type=str, default='./POSCAR_C', help="Original Structure")
     parser.add_argument("-n","--ncell",dest="ncell",type=int, default=300, help="Number of cells to tile")
     parser.add_argument("-d","--display",dest="display",action="store_true", default=False, help="Unable interactive display")
     parser.add_argument("-p","--param", dest="filename", type=str, default='./p2p.in', help="Parameter file")
@@ -41,6 +44,7 @@ def readOptions():
     
     fileA = options.A
     fileB = options.B
+    fileC = options.C
     ncell = options.ncell
     filename = options.filename
     display = options.display
@@ -49,7 +53,7 @@ def readOptions():
     switch = options.switch
     prim = options.prim
     
-    return fileA, fileB, ncell, filename, display, outdir, use, switch, prim
+    return fileA, fileB, fileC, ncell, filename, display, outdir, use, switch, prim
     
 def find_supercell(cell, newcell, tol):
     
@@ -231,7 +235,7 @@ def rotate(icell,fcell):
     U,S,V = la.svd(icell.dot(fcell.T))
     return V.conj().T.dot(U.conj().T).real
 
-def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
+def p2ptrans(fileA, fileB, fileC, ncell, filename, display, outdir, use, switch, prim):
 
     on_top = None
 
@@ -312,13 +316,11 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
         fig.suptitle("Space group: " + spgList[state], fontsize=16)
         fig.legend()
 
-    def make_fig(state, save):
+    def make_fig(state):
         fig = plt.figure(figsize=[12.8,7.2])
         gs = gridspec.GridSpec(2, 2)
         gs.update(wspace=0.01, hspace=0.01)
         all_panels(fig,gs, state, True)
-        if save:
-            fig.savefig(outdir+"/Trans_%d.svg"%state)
     
     def make_anim(n_states):
         fig = plt.figure(figsize=[12.8,7.2])
@@ -373,45 +375,75 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
 
     if not os.path.exists(outdir):
         os.makedirs(outdir)
-    
-    A = read.poscar(fileA)
-    B = read.poscar(fileB)
 
-    if prim:
-        print("Making the cells primitive.")
-        A = primitive(A, tol)
-        B = primitive(B, tol)
+    # Finding the right mapping
+    transfiles = []
+    idx = []
+    for i,ff in enumerate(iglob(fileA)):
+        idx.append(int(re.findall("([0-9]+)[^/]*$",ff)[-1]))
+        transfiles.append(ff)
+
+    idx = np.argsort(idx)
+    if switch:
+        idx = idx[::-1]
+    transfiles = [transfiles[i] for i in idx]
+
+    print("Reading A from %s"%(transfiles[0]))
+    A = read.poscar(transfiles[0])
+    print("Reading B from %s"%(transfiles[-1]))
+    B = read.poscar(transfiles[-1])
+
+    mapAdjust = np.zeros((len(A),3))
     
+    for i,ff in enumerate(transfiles):
+        S = read.poscar(ff)
+        if i:
+            iScell = la.inv(S.cell)
+            iSprevcell = la.inv(Sprev.cell)
+            for j,s in enumerate(S): 
+                spos = iScell.dot(s.pos)
+                sposprev = iSprevcell.dot(Sprev[j].pos)
+                trans = -(np.round(spos)*2 - 1)
+                cond = np.argmin([abs(spos - sposprev), abs(spos + trans - sposprev)],0)
+                if any(cond):
+                    print("FOUND CROSSING")
+                    mapAdjust[j] += -cond*trans
+        Sprev = S
+
+    print("ADJUSTMENTS TO CELL:")
+    print(mapAdjust)
+
+    for i,a in enumerate(A):
+        a.pos = a.pos + A.cell.dot(mapAdjust[i]) 
+
+    C = read.poscar(fileC)
+
     print("POSCARS")
-    print(A)
-    print(B)
-
-    mul = lcm(len(A),len(B))
-    mulA = mul//len(A)
-    mulB = mul//len(B)
-
+    print("A", A)
+    print("B", B)
+    print("C", C)
+    
+    # B should be a supercell of C
+    
     Acell = A.cell*float(A.scale)
     Bcell = B.cell*float(B.scale)
-
-    if (abs(mulA*la.det(Acell)) < abs(mulB*la.det(Bcell))) != switch: # (is switched?) != switch
-        print("Transition from %s to %s"%(fileA, fileB))
-        tmp = deepcopy(B)
-        tmpmul = mulB
-        tmpcell = Bcell
-        B = deepcopy(A)
-        mulB = mulA
-        Bcell = Acell
-        A = tmp
-        mulA = tmpmul
-        Acell = tmpcell
-    else:
-        print("Transition from %s to %s"%(fileB, fileA))
     
+    if prim:
+        print("Making the original cell primitive.")
+        C = primitive(C, tol)
+    
+    Ccell = C.cell*float(C.scale)
+
+    ncell_match = 30
+
+    mulC = abs(la.det(Bcell)/la.det(Ccell))
+    print("The ratio between the final structure and the original one is:", mulC) 
+    assert abs(mulC - round(mulC)) < 1e-5
+    mulC = int(round(mulC))
+    mulB = 1
+    print("There will be %d cells of original structure"%(mulC*ncell))
     print("Initial SpaceGroup:", get_spacegroup(to_spglib(B), symprec=0.3, angle_tolerance=3.0))
     print("Final SpaceGroup:", get_spacegroup(to_spglib(A), symprec=0.3, angle_tolerance=3.0))
-
-    print("Number of Bcells in sphere:", mulB*ncell)
-    print("number of Acells in sphere:", mulA*ncell)
     
     tmat = np.eye(3)
     found = False
@@ -419,25 +451,26 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
     while (not found and rep < 1):
         rep += 1
         found = True
-        
-        # Adds atoms to A and B (for cell with different types of atoms)
-        Apos = []
+
+        # Adds atoms to C and B (for cell with different types of atoms)
+        Cpos = []
         atom_types = np.array([], np.str)
-        atomsA = np.array([], np.int)
-        for a in A:
+        atomsC = np.array([], np.int)
+        for a in C:
             if any(atom_types == a.type):
                 idx = np.where(atom_types == a.type)[0][0]
-                Apos[idx] = np.concatenate((Apos[idx], t.sphere(Acell, mulA*ncell, a.pos*float(A.scale))), axis = 1) 
+                Cpos[idx] = np.concatenate((Cpos[idx], t.sphere(Ccell, mulC*ncell_match, a.pos*float(C.scale))), axis = 1) 
 
                 # Order the atoms in terms of distance
-                Apos[idx] = Apos[idx][:,np.argsort(la.norm(Apos[idx],axis=0))] 
-                atomsA[idx] += 1
+                Cpos[idx] = Cpos[idx][:,np.argsort(la.norm(Cpos[idx],axis=0))] 
+                atomsC[idx] += 1
             else:
-                Apos.append(t.sphere(Acell, mulA*ncell, a.pos*float(A.scale)))
+                print(Ccell, mulC*ncell_match, a.pos*float(C.scale))
+                Cpos.append(t.sphere(Ccell, mulC*ncell_match, a.pos*float(C.scale)))
                 atom_types = np.append(atom_types, a.type)
-                atomsA = np.append(atomsA,1)
+                atomsC = np.append(atomsC,1)
         
-        Apos = np.concatenate(Apos, axis=1)
+        Cpos = np.concatenate(Cpos, axis=1)
         
         # Temporarly stretching Bcell, for tiling
         Bcell = tmat.dot(Bcell)
@@ -447,9 +480,9 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
         for a in B:
             idx = np.where(atom_types == a.type)[0][0]
             if atomsB[idx] == 0:
-                Bpos[idx] = t.sphere(Bcell, mulB*ncell, tmat.dot(a.pos)*float(B.scale))
+                Bpos[idx] = t.sphere(Bcell, mulB*ncell_match, tmat.dot(a.pos)*float(B.scale))
             else:
-                Bpos[idx] = np.concatenate((Bpos[idx], t.sphere(Bcell, mulB*ncell, tmat.dot(a.pos)*float(B.scale))), axis = 1) 
+                Bpos[idx] = np.concatenate((Bpos[idx], t.sphere(Bcell, mulB*ncell_match, tmat.dot(a.pos)*float(B.scale))), axis = 1) 
                 # Order the atoms in terms of distance
                 Bpos[idx] = Bpos[idx][:,np.argsort(la.norm(Bpos[idx],axis=0))]
             atomsB[idx] += 1
@@ -458,35 +491,32 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
 
         Bpos = la.inv(tmat).dot(Bpos)
         Bcell = la.inv(tmat).dot(Bcell)
-            
-        assert all(mulA*atomsA == mulB*atomsB)
-        atoms = mulA*atomsA
-        
+
+        assert all(mulC*atomsC == mulB*atomsB)
+        atoms = mulC*atomsC
+
+        oldcmC = np.mean(Cpos,axis=1)
+        oldcmB = np.mean(Bpos,axis=1)
+
+        print(oldcmC, oldcmB)
+
         if not use:
-            Apos = np.asfortranarray(Apos)
+            Cpos = np.asfortranarray(Cpos)
             Bpos = np.asfortranarray(Bpos)
             tr.center(Bpos)
             oldBpos = np.asanyarray(deepcopy(Bpos))
             t_time = time.time()
-            Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin = tr.fastoptimization(Apos, Bpos, Acell, la.inv(Acell), mulA * la.det(Acell)/(mulB * la.det(Bcell)), atoms, filename)
+            Cpos_map, Bpos, Bposst, n_map, natC, class_list, tmat, dmin, vec = tr.fastoptimization(Cpos, Bpos, Ccell, la.inv(Ccell), la.det(Ccell)/(la.det(Bcell)), atoms, "check.in")
             t_time = time.time() - t_time
             Bpos = np.asanyarray(Bpos)
-            Apos = np.asanyarray(Apos)
+            Cpos = np.asanyarray(Cpos)
+            # --------
 
-            print("Mapping time:", t_time)
-                        
-            pickle.dump((Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin), open(outdir+"/fastoptimization.dat","wb"))
-        
+            pickle.dump((Cpos_map, Bpos, Bposst, n_map, natC, class_list, tmat, dmin, vec), open(outdir+"/check.dat","wb"))
+
         else:
-            print("Using data from "+outdir+"/fastoptimization.dat")
-            Apos = np.asfortranarray(Apos)
-            Bpos = np.asfortranarray(Bpos) 
-            tr.center(Apos)
-            tr.center(Bpos)
-            oldBpos = np.asanyarray(deepcopy(Bpos))
-            Apos_map, Bpos, Bposst, n_map, natA , class_list, tmat, dmin = pickle.load(open(outdir+"/fastoptimization.dat","rb"))
-            Bpos = np.asanyarray(Bpos)
-            Apos = np.asanyarray(Apos)
+
+            Cpos_map, Bpos, Bposst, n_map, natC, class_list, tmat, dmin, vec = pickle.load(open(outdir+"/check.dat","rb"))
 
         class_list = class_list[:n_map]-1
 
@@ -494,19 +524,225 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
 
         Bpos = Bpos[:,:n_map]
         Bposst = Bposst[:,:n_map]
-        Apos_map = Apos_map[:,:n_map]
+        Cpos_map = Cpos_map[:,:n_map]
 
-        for class_type in np.unique(class_list):
-            print("Class:", class_type)
-            print("n:", np.sum(class_list == class_type))
-            id = np.where([class_list==class_type])[1][0]
-            print("value:", Apos_map[:,id] - Bposst[:,id], la.norm(Apos_map[:,id] - Bposst[:,id])) 
+        natB = n_map // np.sum(atoms)
+        nat_map = n_map // np.sum(atoms)
+        nat = np.shape(Cpos)[1] // np.sum(atoms)
+
+        if display:
+        
+            # Plotting the Cpos and Bpos overlayed
+            fig = plt.figure(22)
+            ax = fig.add_subplot(111, projection='3d')
+            ax.view_init(0,90) # TMP
+            # ax.scatter(Cpos.T[:,0],Cpos.T[:,1])
+            num_tot = 0
             
-        print("Number of mapped atoms:", n_map)
-        print("Total distance between structures:", dmin)
-        dmin = sum(np.sqrt(sum((Apos_map - Bpos)**2,0)))
-        print("Total distance between structures in python:", dmin)
+            for i,num in enumerate(atoms):
+                ax.scatter(Cpos.T[num_tot*nat:num_tot*nat+natC*num+1,0],Cpos.T[num_tot*nat:num_tot*nat+natC*num+1,1],Cpos.T[num_tot*nat:num_tot*nat+natC*num+1,2], c=colorlist[2*i])
+                ax.scatter(Cpos.T[num_tot*nat+natC*num:(num_tot + num)*nat+1,0],Cpos.T[num_tot*nat+natC*num:(num_tot + num)*nat+1,1],Cpos.T[num_tot*nat+natC*num:(num_tot + num)*nat+1,2], c=colorlist[2*i], alpha=0.1)
+                ax.scatter(Bpos.T[natB*num_tot:natB*(num_tot+num),0],Bpos.T[natB*num_tot:natB*(num_tot+num),1], Bpos.T[natB*num_tot:natB*(num_tot+num),2], c=colorlist[2*i+1])
+                num_tot = num_tot + num
+            
+            centerofmassC = np.mean(Cpos,axis=1)
+            centerofmassB = np.mean(Bpos,axis=1)
+            
+            ax.scatter(centerofmassC[0], centerofmassC[1], centerofmassC[2], s=60, c='red')
+            ax.scatter(centerofmassB[0], centerofmassB[1], centerofmassB[2], s=60, c='green')
+            
+            maxXCxis = np.max([Cpos.max(), Bpos.max()]) + 1
+            ax.set_xlim([-maxXCxis, maxXCxis])
+            ax.set_ylim([-maxXCxis, maxXCxis])
+            ax.set_zlim([-maxXCxis, maxXCxis])
+            ax.set_aspect('equal')    
+            
+            # Displacements without stretching (for plotting)
+            disps_total = Cpos_map - Bpos
+            
+            # fig = plt.figure()
+            # ax = fig.add_subplot(111, projection='3d')
+            ax.quiver(Bpos.T[:,0], Bpos.T[:,1], Bpos.T[:,2], disps_total.T[:,0], disps_total.T[:,1], disps_total.T[:,2])
+            maxXCxis = np.max([Cpos.max(), Bpos.max()]) + 1
+            ax.set_xlim([-maxXCxis, maxXCxis])
+            ax.set_ylim([-maxXCxis, maxXCxis])
+            ax.set_zlim([-maxXCxis, maxXCxis])
+            ax.set_aspect('equal')
+            fig.savefig(outdir+'/DispLattice.svg')
+            
+            plt.show()
+        
+        # --------
+        Bcell = tmat.dot(Bcell)
+        newBcell = Structure(Bcell)
+        for a in B:
+            newBcell.add_atom(*(tmat.dot(a.pos.reshape((3,1)) - oldcmB.reshape((3,1))) + oldcmC.reshape((3,1)) + vec.reshape((3,1))).T.tolist()[0], a.type)
 
+        # # TMP not sure
+        # for i,a in enumerate(newBcell):
+        #     if not i:
+        #         shift = Ccell.dot(np.round(la.inv(Ccell).dot(a.pos - tmat.dot(B[i].pos))))
+        #     a.pos = a.pos - shift
+            
+        B = deepcopy(newBcell)
+
+        tol_ch = 1e-3
+
+        adjust = []
+        # Into b with tol, adjust A in case B is actually outside the cell
+        for b in B:
+            print("Into cell:", la.inv(Bcell).dot(b.pos))
+            adjust.append(-Acell.dot(np.floor(la.inv(Bcell).dot(b.pos) + tol_ch)))
+            b.pos = Bcell.dot(np.mod(la.inv(Bcell).dot(b.pos) + tol_ch, 1) - tol_ch)
+            
+        Bnew = supercell(C,Ccell.dot(np.round(la.inv(Ccell).dot(B.cell),2)/float(C.scale)))
+        sitepos = []
+        for i, a in enumerate(deepcopy(Bnew)):
+            apos_in = Bnew.cell.dot(np.mod(la.inv(Bnew.cell).dot(a.pos) + tol_ch, 1) - tol_ch)
+            for j, b in enumerate(B):
+                if a.type == b.type and np.allclose(b.pos, apos_in*float(C.scale), atol = tol_ch):
+                    print("Found correspondance for atom %d"%i)
+                    Bnew[j] = a
+                    adjust[j] = Acell.dot(np.floor(la.inv(Bnew.cell).dot(a.pos) + tol_ch))
+                    if a.site == 0:
+                        sitepos.append((a.pos*float(C.scale)).reshape((3,1)))
+                    break
+            else:
+                raise RuntimeError("No correspondance found for atom %d!!"%i)
+
+        print("ADDITIONAL ADJUSTMENTS TO CELL")
+        print(adjust)
+
+        tol_ch = 1e-10
+            
+        B = deepcopy(Bnew)
+
+        write.poscar(B,  vasp5=True, file="POSCAR_B")
+
+        Bcell = B.cell*float(B.scale)
+
+        sitepos = [s - sitepos[0] for s in sitepos]
+
+        dminList = []
+
+        print("SITES TO TRY")
+        print(sitepos)
+        
+        for si, site in enumerate(sitepos):
+        
+            # Adds atoms to C and B (for cell with different types of atoms)
+            Cpos = []
+            Apos = []
+            atom_types = np.array([], np.str)
+            atoms = np.array([], np.int)
+            for a in C:
+                # Csph = np.array([a.pos*float(B.scale) for a in supercell(B,B.cell.dot(np.diag([2,4,2])))]).T
+                Csph = t.sphere(Ccell, ncell, a.pos*float(C.scale))
+                Bgrid = la.inv(Bcell).dot(Csph - site.dot(np.ones((1,np.shape(Csph)[1]))))
+                Asph = []
+                for pos in Bgrid.T:
+                    for ib, b in enumerate(B):
+                        if np.allclose(b.pos*float(B.scale), Bcell.dot(np.mod(pos+tol_ch,1)-tol_ch), atol = tol_ch):
+                            Asph.append(Acell.dot(np.floor(pos+tol_ch)) + adjust[ib]  + A[ib].pos*float(A.scale))
+                            break
+                    else:
+                        print(pos)
+                        raise RuntimeError("Could not find all atoms")
+            
+                Asph = np.array(Asph).T
+                if any(atom_types == a.type):
+                    idx = np.where(atom_types == a.type)[0][0]
+            
+                    Apos[idx] = np.concatenate((Apos[idx], Asph), axis = 1)
+                    Cpos[idx] = np.concatenate((Cpos[idx], Csph), axis = 1) 
+            
+                    # Order the atoms in terms of distance
+                    idx_sort = np.argsort(la.norm(Cpos[idx],axis=0))
+                    Cpos[idx] = Cpos[idx][:, idx_sort]
+                    Apos[idx] = Apos[idx][:, idx_sort]
+                    atoms[idx] += 1
+                else:
+                    Cpos.append(Csph)
+                    Apos.append(Asph)
+                    atom_types = np.append(atom_types, a.type)
+                    atoms = np.append(atoms,1)
+            
+            Bpos = np.concatenate(Cpos, axis=1)
+            Apos = np.concatenate(Apos, axis=1)
+            
+            if not False:
+
+                cma = np.mean(Apos,1).reshape((3,1))
+            
+                Apos = np.asfortranarray(Apos)
+                Bpos = np.asfortranarray(Bpos)
+                tr.center(Bpos)
+                oldBpos = np.asanyarray(deepcopy(Bpos))
+                t_time = time.time()
+                Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, vec = tr.fastoptimization(Apos, Bpos, Acell, la.inv(Acell), la.det(Acell)/(la.det(Bcell)), atoms, filename)
+                t_time = time.time() - t_time
+                Bpos = np.asanyarray(Bpos)
+                Apos = np.asanyarray(Apos)
+            
+                print("Mapping time:", t_time)
+                            
+                pickle.dump((Apos, Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, vec), open(outdir+"/check_%d.dat"%si,"wb"))
+            
+            else:
+                print("Using data from "+outdir+"/check_%d.dat"%si)
+                Apos = np.asfortranarray(Apos)
+                Bpos = np.asfortranarray(Bpos) 
+                tr.center(Apos)
+                tr.center(Bpos)
+                oldBpos = np.asanyarray(deepcopy(Bpos))
+                Apos, Apos_map, Bpos, Bposst, n_map, natA , class_list, tmat, dmin, vec = pickle.load(open(outdir+"/check_%d.dat"%si,"rb"))
+                Bpos = np.asanyarray(Bpos)
+                Apos = np.asanyarray(Apos)
+            
+            class_list = class_list[:n_map]-1
+            
+            print("Number of classes:", len(np.unique(class_list))) 
+            
+            Bpos = Bpos[:,:n_map]
+            Bposst = Bposst[:,:n_map]
+            Apos_map = Apos_map[:,:n_map]
+
+            for class_type in np.unique(class_list):
+                print("Class:", class_type)
+                print("n:", np.sum(class_list == class_type))
+                id = np.where([class_list==class_type])[1][0]
+                print("value:", Apos_map[:,id] - Bposst[:,id], la.norm(Apos_map[:,id] - Bposst[:,id])) 
+                
+            print("Number of mapped atoms:", n_map)
+            print("Total distance between structures:", dmin)
+            dmin = sum(np.sqrt(sum((Apos_map - Bpos)**2,0)))
+            print("Total distance between structures in python:", dmin)
+
+            dminList.append(dmin)
+
+        print("Getting the shortest mapping from "+outdir+"/check_%d.dat"%(np.argmin(dminList)))
+        Apos = np.asfortranarray(Apos)
+        Bpos = np.asfortranarray(Bpos) 
+        tr.center(Apos)
+        tr.center(Bpos)
+        oldBpos = np.asanyarray(deepcopy(Bpos))
+        Apos, Apos_map, Bpos, Bposst, n_map, natA , class_list, tmat, dmin, vec = pickle.load(open(outdir+"/check_%d.dat"%(np.argmin(dminList)),"rb"))
+        Bpos = np.asanyarray(Bpos)
+        Apos = np.asanyarray(Apos)
+
+        print("----------------------------------------------")
+        print(" The shortest distance is:", dmin)
+        print("----------------------------------------------")
+        
+        class_list = class_list[:n_map]-1
+            
+        print("Number of classes:", len(np.unique(class_list)))
+        print("Original number of classes:", len(B))
+            
+        Bpos = Bpos[:,:n_map]
+        Bposst = Bposst[:,:n_map]
+        Apos_map = Apos_map[:,:n_map]
+        
         natB = n_map // np.sum(atoms)
         nat_map = n_map // np.sum(atoms)
         nat = np.shape(Apos)[1] // np.sum(atoms)
@@ -514,7 +750,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
         try:
             print("Looking for periodic cell...")
             foundcell, origin = find_cell(class_list, Bposst)
-            if abs(abs(la.det(tmat)) - abs(mulA * la.det(Acell)/(mulB * la.det(Bcell)))) > tol_vol:
+            if abs(abs(la.det(tmat)) - abs(la.det(Acell)/(la.det(Bcell)))) > tol_vol:
                 found = False
                 print("The volume factor is wrong.")
                 print("_____RESTARTING_____")
@@ -539,8 +775,8 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
     centerofmassA = np.mean(Apos,axis=1)
     centerofmassB = np.mean(Bpos,axis=1)
 
-    ax.scatter(centerofmassA[0], centerofmassA[1], centerofmassA[2], s=60, c='red')
-    ax.scatter(centerofmassB[0], centerofmassB[1], centerofmassB[2], s=60, c='green')
+    #ax.scatter(centerofmassA[0], centerofmassA[1], centerofmassA[2], s=60, c='red')
+    #ax.scatter(centerofmassB[0], centerofmassB[1], centerofmassB[2], s=60, c='green')
 
     maxXAxis = np.max([Apos.max(), Bpos.max()]) + 1
     ax.set_xlim([-maxXAxis, maxXAxis])
@@ -554,10 +790,11 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
     # fig = plt.figure()
     # ax = fig.add_subplot(111, projection='3d')
     ax.quiver(Bpos.T[:,0], Bpos.T[:,1], Bpos.T[:,2], disps_total.T[:,0], disps_total.T[:,1], disps_total.T[:,2])
-    maxXAxis = np.max([Apos.max(), Bpos.max()]) + 1
-    ax.set_xlim([-maxXAxis, maxXAxis])
-    ax.set_ylim([-maxXAxis, maxXAxis])
-    ax.set_zlim([-maxXAxis, maxXAxis])
+            
+    maxXBxis = np.max([Apos.max(), Bpos.max()]) + 1
+    ax.set_xlim([-maxXBxis, maxXBxis])
+    ax.set_ylim([-maxXBxis, maxXBxis])
+    ax.set_zlim([-maxXBxis, maxXBxis])
     ax.set_aspect('equal')
     fig.savefig(outdir+'/DispLattice.svg')
     
@@ -604,6 +841,22 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
             Bposst_class = Bposst[:,class_list==i]
             ndisps = np.shape(disps_class)[1]
             ax.quiver(Bposst_class.T[:,0], Bposst_class.T[:,1], Bposst_class.T[:,2], disps_class.T[:,0], disps_class.T[:,1], disps_class.T[:,2], color=colorlist[i%10])
+        plane = Acell[:,1]
+        plane = plane/la.norm(plane)
+        angles = dir2angles(plane)
+        ax.view_init(*angles)
+
+        origin = cma
+
+        ax.scatter(*(-origin), color='g')
+            
+        for i in range(3):
+            base = np.array([np.zeros(3), Acell[:,(i+1)%3],
+                             Acell[:,(i+2)%3], 
+                             Acell[:,(i+1)%3] + Acell[:,(i+2)%3]])
+            vec = Acell[:,i:i+1].dot(np.ones((1,4)))
+            ax.quiver(base[:,0]-origin[0], base[:,1]-origin[1], base[:,2]-origin[2], vec[0,:], vec[1,:], vec[2,:], arrow_length_ratio=0, color="k", alpha=0.5)
+    
         fig.savefig(outdir+'/DispLattice_stretched.svg')
         return fig,
 
@@ -631,7 +884,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
     
     # Centers the position on the first atom    
     print("Volume stretching factor:", la.det(tmat))
-    print("Cell volume ratio (should be exactly the same):", mulA * la.det(Acell)/(mulB * la.det(Bcell)))
+    print("Cell volume ratio (should be exactly the same):", la.det(Acell)/(la.det(Bcell)))
         
     print("Showing")
 
@@ -710,8 +963,8 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
     print(la.inv(Acell).dot(dispStruc.cell))
     print(la.inv(tmat.dot(Bcell)).dot(dispStruc.cell))
 
-    print("Number of A cell in dispCell:", la.det(dispStruc.cell)/(mulA*la.det(Acell)))
-    print("Number of B cell in dispCell:", la.det(dispStruc.cell)/(mulB*la.det(tmat.dot(Bcell))))
+    print("Number of A cell in dispCell:", la.det(dispStruc.cell)/(la.det(Acell)))
+    print("Number of B cell in dispCell:", la.det(dispStruc.cell)/(la.det(tmat.dot(Bcell))))
 
     # Total displacement per unit volume a as metric
     Total_disp = 0
@@ -758,10 +1011,10 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
     os.makedirs(outdir+"/TransPOSCARS", exist_ok=True)
 
     itmat = rotate(la.inv(tmat).dot(finalStruc.cell), finalStruc.cell).dot(la.inv(tmat))
-
+    
     print("tmat", la.det(tmat), tmat)
     print("itmat", la.det(itmat), itmat)
-    
+
     spgList = []
     transStruc = []
     planes = [[1,0,0], [0,1,0], [0,0,1]]
@@ -860,12 +1113,12 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
 
 
     # Showing some of the steps
-    make_fig(0, True)
-    make_fig(int(n_steps/5), False)
-    make_fig(int(2*n_steps/5), False)
-    make_fig(int(2*n_steps/4), True)
-    make_fig(int(4*n_steps/5), False)
-    make_fig(n_steps, True)
+    make_fig(0)
+    make_fig(int(n_steps/5))
+    make_fig(int(2*n_steps/5))
+    make_fig(int(3*n_steps/5))
+    make_fig(int(4*n_steps/5))
+    make_fig(n_steps)
 
     if display:
         print("Showing")
