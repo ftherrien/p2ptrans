@@ -506,7 +506,7 @@ def p2ptrans(fileA, fileB, fileC, ncell, filename, display, outdir, use, switch,
             tr.center(Bpos)
             oldBpos = np.asanyarray(deepcopy(Bpos))
             t_time = time.time()
-            Cpos_map, Bpos, Bposst, n_map, natC, class_list, tmat, dmin, vec = tr.fastoptimization(Cpos, Bpos, Ccell, la.inv(Ccell), la.det(Ccell)/(la.det(Bcell)), atoms, "check.in")
+            Cpos_map, Bpos, Bposst, n_map, natC, class_list, tmat, dmin, vec = tr.fastoptimization(Cpos, Bpos, Ccell, la.inv(Ccell), la.det(Ccell)/(la.det(Bcell)), atoms, "./check.in")
             t_time = time.time() - t_time
             Bpos = np.asanyarray(Bpos)
             Cpos = np.asanyarray(Cpos)
@@ -603,7 +603,7 @@ def p2ptrans(fileA, fileB, fileC, ncell, filename, display, outdir, use, switch,
                 if a.type == b.type and np.allclose(b.pos, apos_in*float(C.scale), atol = tol_ch):
                     print("Found correspondance for atom %d"%i)
                     Bnew[j] = a
-                    adjust[j] = Acell.dot(np.floor(la.inv(Bnew.cell).dot(a.pos) + tol_ch))
+                    adjust[j] += Acell.dot(np.floor(la.inv(Bnew.cell).dot(a.pos) + tol_ch))
                     if a.site == 0:
                         sitepos.append((a.pos*float(C.scale)).reshape((3,1)))
                     break
@@ -733,6 +733,8 @@ def p2ptrans(fileA, fileB, fileC, ncell, filename, display, outdir, use, switch,
         print("----------------------------------------------")
         print(" The shortest distance is:", dmin)
         print("----------------------------------------------")
+
+        return #TMP
         
         class_list = class_list[:n_map]-1
             

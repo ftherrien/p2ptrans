@@ -287,9 +287,9 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
         ax = fig.add_subplot(gs[1,1], projection='3d', proj_type = 'ortho')
         ax.set_anchor('W')
         ax.set_axis_off()
-        ax.view_init(*(np.array(dir2angles(transStruc[state].cell[:,1]))+np.array([0,0])))
-        ax.dist = 4
-        maxXAxis = abs(transStruc[state].cell).max() + 1
+        ax.view_init(*(np.array(dir2angles(transStruc[state].cell[:,1]))+np.array([30,30])))
+        ax.dist = 3
+        maxXAxis = abs(np.array([s.cell for s in transStruc])).max() + 1
         ax.set_xlim([-maxXAxis, maxXAxis])
         ax.set_ylim([-maxXAxis, maxXAxis])
         ax.set_zlim([-maxXAxis, maxXAxis])
@@ -306,14 +306,18 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
                              transStruc[state].cell[:,(i+1)%3] + transStruc[state].cell[:,(i+2)%3]])
             vec = transStruc[state].cell[:,i:i+1].dot(np.ones((1,4)))
             ax.quiver(base[:,0]-origin[0], base[:,1]-origin[1], base[:,2]-origin[2], vec[0,:], vec[1,:], vec[2,:], arrow_length_ratio=0, color="k", alpha=0.5)
+        # origin2 = np.sum(transStruc[state].cell.dot(np.diag([5,5,5])),axis=1)/2
+        # for a in supercell(transStruc[state], transStruc[state].cell.dot(np.diag([5,5,5]))):
+        #     ax.scatter(a.pos[0]-origin2[0], a.pos[1]-origin2[1], a.pos[2]-origin2[2], alpha = 0.05, s=400, color=colorlist[(np.where(atom_types == a.type)[0][0])%10])
         for a in transStruc[state]:
-            ax.scatter(a.pos[0]-origin[0], a.pos[1]-origin[1], a.pos[2]-origin[2], alpha = 1, s=400, color=colorlist[(np.where(atom_types == a.type)[0][0])%10])
+            ax.scatter(a.pos[0]-origin[0], a.pos[1]-origin[1], a.pos[2]-origin[2], alpha = 1, s=200, color=colorlist[(np.where(atom_types == a.type)[0][0])%10])
 
         fig.suptitle("Space group: " + spgList[state], fontsize=16)
         fig.legend()
 
     def make_fig(state, save):
-        fig = plt.figure(figsize=[12.8,7.2])
+        fig = plt.figure(figsize=[7.2,7.2])
+        # fig = plt.figure()
         gs = gridspec.GridSpec(2, 2)
         gs.update(wspace=0.01, hspace=0.01)
         all_panels(fig,gs, state, True)
@@ -331,11 +335,11 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
     
         plt.rcParams['animation.ffmpeg_path'] = '/home/felixt/projs/bin/ffmpeg'
         # Writer = animation.writers['ffmpeg']
-        writer = animation.FFMpegWriter(fps=30,codec='prores', extra_args=['-loglevel', 'verbose','-f','mov'])
+        writer = animation.FFMpegWriter(fps=int(n_states/3.0),codec='prores', extra_args=['-loglevel', 'verbose','-f','mov'])
     
         anim = animation.FuncAnimation(fig, animate_trans,
                                    frames=n_states+1, interval=1)
-        anim.save(outdir + '/Trans.mov', writer=writer)
+        anim.save(outdir + '/Trans2.mov', writer=writer)
 
     def PCA(disps):
         # This is just kind of cool, but useless for now
@@ -411,7 +415,8 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
     print("Final SpaceGroup:", get_spacegroup(to_spglib(A), symprec=0.3, angle_tolerance=3.0))
 
     print("Number of Bcells in sphere:", mulB*ncell)
-    print("number of Acells in sphere:", mulA*ncell)
+    print("Number of Acells in sphere:", mulA*ncell)
+    print("Number of atoms in sphere:", mulA*ncell*len(A))
     
     tmat = np.eye(3)
     found = False
@@ -468,7 +473,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
             tr.center(Bpos)
             oldBpos = np.asanyarray(deepcopy(Bpos))
             t_time = time.time()
-            Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin = tr.fastoptimization(Apos, Bpos, Acell, la.inv(Acell), mulA * la.det(Acell)/(mulB * la.det(Bcell)), atoms, filename)
+            Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, vec = tr.fastoptimization(Apos, Bpos, Acell, la.inv(Acell), mulA * la.det(Acell)/(mulB * la.det(Bcell)), atoms, filename)
             t_time = time.time() - t_time
             Bpos = np.asanyarray(Bpos)
             Apos = np.asanyarray(Apos)
@@ -512,7 +517,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
         nat = np.shape(Apos)[1] // np.sum(atoms)
 
         try:
-            print("Looking for periodic cell...")
+            print("Looking for periodic cell...")        
             foundcell, origin = find_cell(class_list, Bposst)
             if abs(abs(la.det(tmat)) - abs(mulA * la.det(Acell)/(mulB * la.det(Bcell)))) > tol_vol:
                 found = False
@@ -694,6 +699,8 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
     
     stinitStruc = tmpStruc
 
+    write.poscar(stinitStruc, vasp5=True, file="POSCAR_init")
+    
     assert len(stinitStruc) == len(dispStruc)
 
     cell = dispStruc.cell
@@ -753,7 +760,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
 
     print("Producing transition!")
 
-    n_steps = 100
+    n_steps = 60
 
     os.makedirs(outdir+"/TransPOSCARS", exist_ok=True)
 
@@ -766,7 +773,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
     transStruc = []
     planes = [[1,0,0], [0,1,0], [0,0,1]]
     color_array = []
-    size = 4
+    size = 1
     Tpos = [] 
     for i in range(n_steps+1):
         curMat = (itmat-np.eye(3))*i/n_steps + np.eye(3)
@@ -775,7 +782,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
             curDisp = vec_classes[int(a.type)]*i/n_steps
             curPos = curMat.dot((finalStruc[j].pos - curDisp).reshape((3,1)))
             curStruc.add_atom(*(curPos.T.tolist()[0]),finalStruc[j].type)
-            curStruc = supercell(curStruc, curStruc.cell)
+            # curStruc = supercell(curStruc, curStruc.cell)
         write.poscar(curStruc, vasp5=True, file=outdir+"/TransPOSCARS"+"/POSCAR_%03d"%i)
         spgList.append(get_spacegroup(to_spglib(curStruc), symprec=0.3, angle_tolerance=3.0))
         transStruc.append(curStruc)
@@ -792,11 +799,13 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
         
             Tpos_tmp = []
             types = []
-            
+
+            sizes = np.round(max(la.norm(curStruc.cell,axis=0))*size/la.norm(curStruc.cell,axis=0))
+
             # Cut along the current plane
-            for l in np.arange(-size,size):
-                for j in np.arange(-size,size):
-                    for k in np.arange(-size,size):
+            for l in np.arange(-sizes[0],sizes[0]):
+                for j in np.arange(-sizes[1],sizes[1]):
+                    for k in np.arange(-sizes[2],sizes[2]):
                         for a in curStruc:
                             pos = curStruc.cell.dot(np.array([l,j,k])) + a.pos
                             if plane.dot(pos) < 0 and plane.dot(pos) > - tickness:
@@ -871,7 +880,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim):
         print("Showing")
         plt.show()
     else:
-        print("make_anim(n_steps)")
+        make_anim(n_steps)
 
 
 if __name__=='__main__':
