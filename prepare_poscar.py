@@ -34,8 +34,8 @@ cell[:2,:2] = cell[:2,:2]
 centerA = np.append(centerA,0)
 centerB = np.append(centerB,0)
 
-A = read.poscar('POSCAR_ZrO_111_1lay_3vac')
-B = read.poscar('POSCAR_Ni_111_2lay_3vac')
+A = read.poscar('POSCAR_111_2lay_10vac')
+B = read.poscar('POSCAR_111_3lay_10vac')
 
 for a in A:
     if a.type == Alabel:

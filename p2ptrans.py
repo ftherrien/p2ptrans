@@ -8,6 +8,7 @@ import time
 from pylada.crystal import Structure, primitive, gruber, supercell
 from copy import deepcopy
 import warnings
+import sys
 
 tol = 1e-2
 
@@ -154,7 +155,8 @@ output = True
 stats_on = True
 display = True
 use = True
-aff = 0
+aff = 1
+num = int(sys.argv[2])
 
 if display:
     import matplotlib.pyplot as plt
@@ -163,13 +165,21 @@ else:
     import matplotlib.pyplot as plt
 
 # Eventually this can be from pcread
-B = Structure(np.array([[3.6678788324556724,0,0],[1.8339393525882195,3.1764772365036733,0],[0,0,1]]).T) 
-#B = Structure(np.array([[7.247844507162113,0,0],[3.6239222535810565, 6.276817465881893,0],[0,0,2]]).T*0.5)
+
+if num == 1:
+    B = Structure(np.array([[3.6678788324556724,0,0],[1.8339393525882195,3.1764772365036733,0],[0,0,1]]).T)
+    A = Structure(np.array([[4.934297879818212,0,0],[-2.4670561590795694,4.273351862766654,0],[0,0,2]]).T*0.5)
+elif num == 2:
+    B = Structure(np.array([[7.247844507162113,0,0],[3.6239222535810565, 6.276817465881893,0],[0,0,2]]).T*0.5)
+    cellA = np.array([[4.97803173955,0,0],[2.48901586978,4.3111019473,0],[0,0,2]]).T*0.5
+
+    cellA[:,1] = -cellA[:,0] + cellA[:,1]
+    
+    A = Structure(cellA) # Experiemntal
+
 B.add_atom(0, 0,0,'1')
 Blabel = "Zr"
 
-A = Structure(np.array([[4.934297879818212,0,0],[-2.4670561590795694,4.273351862766654,0],[0,0,2]]).T*0.5)
-#A = Structure(np.array([[4.97803173955,0,0],[2.48901586978,4.3111019473,0],[0,0,2]]).T*0.5)
 A.add_atom(0,0,0,'1')
 Alabel = "Ni"
 
@@ -182,8 +192,7 @@ mul = lcm(len(A),len(B))
 mulA = mul//len(A)
 mulB = mul//len(B)
                 
-ncell = 550
-
+ncell = int(sys.argv[1])
 
 # Setting the unit cells of A and B
 Acell = A.cell[:2,:2]
@@ -292,47 +301,52 @@ Bpos = np.asfortranarray(Bpos)
 
 if not use:
     t_time = time.time()
-    Apos_map_list, Bpos_list, Bposst_list, n_map, class_list_list, ttrans, rtrans, dmin, stats, n_peaks = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell_tmp, la.inv(Acell_tmp), atoms, 100000, 200, 7, 2, sym, 1e-5, 1e-5) #TMP
+    Apos_map_list, Bpos_list, Bposst_list, n_map, class_list_list, ttrans, rtrans, dmin, stats, n_peaks, peak_thetas = tr.fastoptimization(Apos, Bpos, fracA, fracB, Acell_tmp, la.inv(Acell_tmp), atoms, 1000, 400, 5, 5, sym, 1e6, 1e6) #TMP
     t_time = time.time() - t_time
     Bpos = np.asanyarray(Bpos)
     Apos = np.asanyarray(Apos)
     
     print("Mapping time:", t_time)
+
+    print("HERE!")
+
+    sys.stdout.flush()    
     
-    pickle.dump((Apos_map_list, Bpos_list, Bposst_list, n_map, class_list_list, ttrans, rtrans, dmin, stats, n_peaks), open("fastoptimization.dat","wb"))
+    pickle.dump((Apos_map_list, Bpos_list, Bposst_list, n_map, class_list_list, ttrans, rtrans, dmin, stats, n_peaks, peak_thetas), open("fastoptimization%d_%s.dat"%(num, sys.argv[1]),"wb"))
 else:
     # TMP for testing only -->
     tr.center(Apos)
     tr.center(Bpos)
-    Apos_map_list, Bpos_list, Bposst_list, n_map, class_list_list, ttrans, rtrans, dmin, stats, n_peaks = pickle.load(open("fastoptimization.dat","rb"))
+    Apos_map_list, Bpos_list, Bposst_list, n_map, class_list_list, ttrans, rtrans, dmin, stats, n_peaks, peak_thetas = pickle.load(open("fastoptimization%d_%s.dat"%(num, sys.argv[1]),"rb"))
     # <--
 
     print("Number of Peaks from fastopt", n_peaks)
 
-print(dmin)
-
 if stats_on:
     angles = stats[:,0]
-    randangles = stats[:,4]
+    vol = stats[:,4]
+    
     dists = stats[:,3]
     
     angles= np.mod(angles,np.pi/3)
-    randangles= np.mod(randangles,np.pi/3)
     
     idx = np.argsort(angles)
     angles = 180*angles[idx]/np.pi
+    vol = vol[idx]
+    
+    pickle.dump((angles, dists[idx], peak_thetas[:n_peaks]), open("angle_dist%d_%s.dat"%(num, sys.argv[1]),"wb"))
     
     plt.figure()
     plt.title("Final Angle distribution")
     plt.hist(angles,100)
     
     plt.figure()
-    plt.title("Random Angle distribution")
-    plt.hist(randangles,100)
+    plt.title("Volume distribution")
+    plt.hist(vol,100)
     
     #Running std
     
-    size = 200
+    size = 100
     stdrun = np.zeros(len(angles)-size)
     for i in range(len(angles)-size):
         stdrun[i] = np.std(angles[i:i+size])
@@ -340,14 +354,16 @@ if stats_on:
     plt.figure()
     plt.title("Running STD")
     plt.semilogy(angles[size//2:-size//2],stdrun)
+
+    plt.figure()
+    plt.title("Distance vs angles")
+    plt.plot(angles, dists[idx], '.')
     
     plt.figure()
-    plt.title("Ordered angles")
-    plt.plot(angles)
-    
-    plt.figure()
-    plt.title("Distances (not ordered)")
-    plt.plot(stats[:,3])
+    plt.title("Volume vs angles")
+    iddist = np.argsort(dists[idx])[::-1]
+    plt.scatter(angles[iddist], vol[iddist], c=dists[idx][iddist])
+    plt.colorbar()
 
     meanrun = np.zeros(len(dists)-size)
     for i in range(len(dists)-size):
@@ -362,7 +378,7 @@ if stats_on:
     print(stats[idx[size//2:-size//2][peaks],0])
     print(dists[idx[size//2:-size//2][peaks]])
     print(stats[idx[size//2:-size//2][peaks],1:3])
-
+    
     plt.figure()
     plt.title('Running Mean')
     plt.plot(angles[size//2:-size//2],meanrun)
@@ -400,7 +416,8 @@ for k in range(n_peaks):
         
         # Displacements without stretching (for plotting)
         disps = Apos_map - Bpos
-
+        
+        
         #fig = plt.figure()
         #ax = fig.add_subplot(111)
         ax.quiver(Bpos.T[:,0], Bpos.T[:,1], disps.T[:,0], disps.T[:,1], scale_units='xy', scale=1)
@@ -412,7 +429,14 @@ for k in range(n_peaks):
 
     # Displacement with stretching
     disps = Apos_map - Bposst
+
+    bond = 3.5
+    print("TOTAL DISTANCE IN PYTHON", np.sum(-(np.sum(disps**2,0)/bond**2+1)**(-3)))
     
+    vec_classes = np.array([np.mean(disps[:,class_list==d_type], axis=1) for d_type in np.unique(class_list)])
+    # class_list, vec_classes = classify(disps)
+
+    print("here!")
     if k==aff:
         # Plotting the Apos and Bposst overlayed
         fig = plt.figure()
@@ -420,14 +444,26 @@ for k in range(n_peaks):
         #ax.scatter(Apos.T[:,0],Apos.T[:,1])
         for i,num in enumerate(atoms):
             for j in range(num):
+                print("JO")
                 ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,1], c="C%d"%(2*i), label=Alabel)
+                print("YO")
                 ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,1], c="C%d"%(2*i), alpha=0.5)
+                print("YA")
             ax.scatter(Bposst.T[natB*num*i:natB*num*(i+1),0],Bposst.T[natB*num*i:natB*num*(i+1),1], alpha=0.5, c="C%d"%(2*i+1), label=Blabel)
+            print("ici?")
         ax.legend()
+        print("C'est ca hein?")
+        print(Apos.max())
+        print(np.sum(np.isfinite(Bposst),1))
+        print(np.shape(Bposst))
+        print(Bposst.max())
         maxXAxis = np.max([Apos.max(), Bposst.max()]) + 1
+        print("Avoue!")
         ax.set_xlim([-maxXAxis, maxXAxis])
         ax.set_ylim([-maxXAxis, maxXAxis])
         ax.set_aspect('equal')
+
+        print("ALOOOOO")
         
         # fig = plt.figure()
         # ax = fig.add_subplot(111)
@@ -438,10 +474,8 @@ for k in range(n_peaks):
         ax.set_aspect('equal')
         fig.savefig('DispLattice_stretched.svg')
 
-    # vec_classes = np.array([np.mean(disps[:,class_list==d_type], axis=1) for d_type in np.unique(class_list)])
-    class_list, vec_classes = classify(disps)
-
     if k==aff:
+        print("here!")
         # Only the displacements
         fig = plt.figure()
         ax = fig.add_subplot(111)
@@ -463,9 +497,11 @@ for k in range(n_peaks):
 
     if display:
         plt.show()
-
+        
     print("CLASS LIST:",k, class_list)
-
+    print("Angle:")
+    print(peak_thetas[k])
+    
     try:
         cell, origin = find_cell(class_list, Bposst)
     except:
@@ -497,7 +533,7 @@ for k in range(n_peaks):
 
     for i, disp in zip(*uniqueclose(cell_coord, tol)):
         FinalStruc.add_atom(*(tuple(cell.dot(disp))+(Alabel,)))
-
+        
     # Makes sure it is the primitive cell 
     DispStruc = primitive(DispStruc, tolerance = tol)    
 
@@ -513,10 +549,10 @@ for k in range(n_peaks):
     cell = DispStruc.cell
 
     pickle.dump((Alabel, Blabel, rtrans, ttrans[k,:,:], cell, centerA, centerB), open("transformation_%d.dat"%k,"wb")) 
-
+    
     print("Displacement Lattice", k)
     print(cell)
-
+    
     print("Volume of the Displacement Lattice", k)
     print(la.det(cell))
 
