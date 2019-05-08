@@ -24,7 +24,7 @@ module transform
        analytical_gd_std, &
        gradient_descent_explore
 
-  double precision, parameter ::  bond = 2.0d0
+  double precision, parameter ::  bond = 1.0d0
   
 contains
 
@@ -492,8 +492,7 @@ contains
           ! print*, "ADJUST", std, std_prev, std_init
           tmat = tmat_prev
           vec = vec_prev
-          std = std_prev
-          std_prev = std + 1.0d0 + tol
+          std = std_prev + 1.0d0 + tol
        elseif(std_init < tol .or. std < tol) then
           std_prev = std
        else
@@ -507,6 +506,8 @@ contains
        endif
        
     enddo
+
+    print*, "END of STD", j, std, std_prev - std, std_init
 
   end subroutine analytical_gd_std
 
@@ -1882,19 +1883,19 @@ contains
     ! call gradient_descent_explore(theta, u, vec, stats, Apos, Bpos, Acell, iAcell, &
     !      fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2)
 
-    call gradient_descent_explore_free(tmat,vec,stats,tmats, Apos, Bpos, Acell, iAcell, &
-         fracA, fracB, atoms, n_atoms, n_iter, n_ana, n_conv, rate1, rate2, max_vol)
+    ! call gradient_descent_explore_free(tmat,vec,stats,tmats, Apos, Bpos, Acell, iAcell, &
+    !      fracA, fracB, atoms, n_atoms, n_iter, n_ana, n_conv, rate1, rate2, max_vol)
 
 
-    ! tmat = reshape((/-1.0290303176670532, 1.7416869875034216E-004, 0.0000000000000000, &
-    !      -1.7864702572039750E-003, -1.0303141231940767, 0.0000000000000000, &
-    !      0.0000000000000000, 0.0000000000000000, 1.0000000000000000/),(/3,3/))
+    tmat = reshape((/0.51600960391793982, -0.89233497231869008, 0.0000000000000000, &
+         0.89019796996613731, 0.51507810840580193, 0.0000000000000000, &
+         0.0000000000000000, 0.0000000000000000, 1.0000000000000000/),(/3,3/))
 
-    ! vec = (/-1.5606287554310740, 0.59602436754364840, 0.0000000000000000/)
+    vec = (/-0.30628812662975724, -0.47756853264300353, 0.0000000000000000/)
     
     ! print*, tmat, vec
 
-    if (.true.) then
+    if (.false.) then
     
        idx = sort(modulo(stats(:,1), 2.0d0*pi/dble(sym)))
        
@@ -1932,7 +1933,8 @@ contains
 
        n_peaks = 1
        ! peak_thetas(1) = theta
-       peak_vecs(1,:) = vec(1:2)    
+       peak_vecs(1,:) = vec(1:2)
+       peak_tmats(1,:,:) = tmat
 
     endif
     
@@ -2024,7 +2026,7 @@ contains
     ! ! Recenter
     ! vec = vec + sum(free_trans(Bpos_opt,rot_mat(theta,u),vec) - Apos_mapped,2) / n_out
     
-    if (.false.) then
+    if (.true.) then
        write(*,*) "/======== Classification ========\\"
 
        tol_adjust = 1.0d0
@@ -2032,7 +2034,7 @@ contains
        classes_list = 0
        classes_list_prev = 1
        j=0
-       do while ( std > tol_class .and. j < 2)
+       do while ( std > tol_class .and. j < 10)
           j = j + 1
 
           write(*,*) "-->", j
@@ -2041,6 +2043,8 @@ contains
 
           center_vec = sum(free_trans(Bpos_opt,tmat,vec) - Apos_mapped,2) / n_out
 
+          center_vec(1) = center_vec(1) - 0.1 
+          
           Apos_mapped_prev = Apos_mapped
           
           tBpos = free_trans(Bpos,tmat,vec - center_vec)
@@ -2081,7 +2085,7 @@ contains
           enddo
 
           call analytical_gd_std(std, tmat, vec, Apos_mapped, Bpos_opt, &
-               n_classes, classes_list, n_ana*1000, 1.0d-3, 1.0d-3, tol*1.0d-3)
+               n_classes, classes_list, n_ana*1000, 1.0d-3, 1.0d-3, tol)
 
           deallocate(n_classes)
 
@@ -2105,8 +2109,10 @@ contains
        write(*,"(3(F7.3,X))") tmat
 
        ! Reshift after classification
-       center_vec = sum(free_trans(Bpos_opt,tmat,vec) - Apos_mapped,2) / n_out
+       ! center_vec = sum(free_trans(Bpos_opt,tmat,vec) - Apos_mapped,2) / n_out
 
+       center_vec = 0.0d0
+       
        ! End of calssification -----------------------------------
     else
        center_vec = 0.0d0
