@@ -34,8 +34,8 @@ cell[:2,:2] = cell[:2,:2]
 centerA = np.append(centerA,0)
 centerB = np.append(centerB,0)
 
-A = read.poscar('POSCAR_111_2lay_10vac')
-B = read.poscar('POSCAR_111_3lay_10vac')
+A = read.poscar('POSCAR_111_ysz')
+B = read.poscar('POSCAR_111_Ni')
 
 for a in A:
     if a.type == Alabel:
@@ -196,7 +196,7 @@ ABcell[2,2] = B.cell[2,2] - A.cell[2,2] + spacing
 
 print("ABcell", ABcell)
 
-fig = plt.figure()
+fig = plt.figure(22)
 ax = fig.add_subplot(111)
 ax.set_aspect('equal')
 
@@ -226,12 +226,15 @@ for i, b in enumerate(B):
         print(abs(la.inv(oBcell).dot(b.pos - center) - np.round(la.inv(2*oBcell).dot(b.pos - center))))
         
         ax.scatter(b.pos[0], b.pos[1], color="blue", alpha='0.5')
-            
+
+
+print("AAAAAACCCCCEEEEEELLLLLL", A.cell[:,2], spacing)
+        
 AB = Structure(ABcell)
 for a in A:
     AB.add_atom(*(tuple(a.pos-A.cell[:,2])+(a.type,)))
 for a in B:
-    AB.add_atom(*(tuple(a.pos-A.cell[:,2]+spacing)+(a.type,)))
+    AB.add_atom(*(tuple(a.pos-A.cell[:,2]+[0,0,spacing])+(a.type,)))
 
 # print("Finding primitive cell")
 # A = primitive(supercell(A,A.cell), 1e-3)

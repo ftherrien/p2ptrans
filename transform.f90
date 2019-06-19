@@ -1883,19 +1883,19 @@ contains
     ! call gradient_descent_explore(theta, u, vec, stats, Apos, Bpos, Acell, iAcell, &
     !      fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2)
 
-    ! call gradient_descent_explore_free(tmat,vec,stats,tmats, Apos, Bpos, Acell, iAcell, &
-    !      fracA, fracB, atoms, n_atoms, n_iter, n_ana, n_conv, rate1, rate2, max_vol)
+    call gradient_descent_explore_free(tmat,vec,stats,tmats, Apos, Bpos, Acell, iAcell, &
+         fracA, fracB, atoms, n_atoms, n_iter, n_ana, n_conv, rate1, rate2, max_vol)
 
 
-    tmat = reshape((/0.51600960391793982, -0.89233497231869008, 0.0000000000000000, &
-         0.89019796996613731, 0.51507810840580193, 0.0000000000000000, &
-         0.0000000000000000, 0.0000000000000000, 1.0000000000000000/),(/3,3/))
+    ! tmat = reshape((/0.51600960391793982, -0.89233497231869008, 0.0000000000000000, &
+    !      0.89019796996613731, 0.51507810840580193, 0.0000000000000000, &
+    !      0.0000000000000000, 0.0000000000000000, 1.0000000000000000/),(/3,3/))
 
-    vec = (/-0.30628812662975724, -0.47756853264300353, 0.0000000000000000/)
+    ! vec = (/-0.30628812662975724, -0.47756853264300353, 0.0000000000000000/)
     
     ! print*, tmat, vec
 
-    if (.false.) then
+    if (.true.) then
     
        idx = sort(modulo(stats(:,1), 2.0d0*pi/dble(sym)))
        

@@ -149,13 +149,16 @@ def gcd(x, y):
 # \/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
 # Begin Program
 
+colors = ["gray", "red", "green", "blue"]
+acolors = ["navy", "orange", "gray", "red"]
+
 sym = 6
 random = False
 output = True
 stats_on = True
 display = True
 use = True
-aff = 2
+aff = 0
 num = int(sys.argv[2])
 
 if display:
@@ -433,41 +436,36 @@ for k in range(n_peaks):
     bond = 3.5
     print("TOTAL DISTANCE IN PYTHON", np.sum(-(np.sum(disps**2,0)/bond**2+1)**(-3)))
     
-    vec_classes = np.array([np.mean(disps[:,class_list==d_type], axis=1) for d_type in np.unique(class_list)])
-    # class_list, vec_classes = classify(disps)
+    # vec_classes = np.array([np.mean(disps[:,class_list==d_type], axis=1) for d_type in np.unique(class_list)])
+    class_list, vec_classes = classify(disps)
 
-    print("here!")
+    
     if k==aff:
         # Plotting the Apos and Bposst overlayed
-        fig = plt.figure()
+        fig = plt.figure(12,figsize=[10,10])
         ax = fig.add_subplot(111)
-        #ax.scatter(Apos.T[:,0],Apos.T[:,1])
+        ax.set_axis_off()
         for i,num in enumerate(atoms):
             for j in range(num):
-                print("JO")
-                ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,1], c="C%d"%(2*i), label=Alabel)
-                print("YO")
-                ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,1], c="C%d"%(2*i), alpha=0.5)
-                print("YA")
-            ax.scatter(Bposst.T[natB*num*i:natB*num*(i+1),0],Bposst.T[natB*num*i:natB*num*(i+1),1], alpha=0.5, c="C%d"%(2*i+1), label=Blabel)
-            print("ici?")
-        ax.legend()
-        print("C'est ca hein?")
-        print(Apos.max())
-        print(np.sum(np.isfinite(Bposst),1))
-        print(np.shape(Bposst))
-        print(Bposst.max())
+                ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,1], c=colors[2*i], label=Alabel, s=120)
+                ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,1], c=colors[2*i], alpha=0.5, s=120)
+            
+        # ax.legend()
         maxXAxis = np.max([Apos.max(), Bposst.max()]) + 1
-        print("Avoue!")
         ax.set_xlim([-maxXAxis, maxXAxis])
         ax.set_ylim([-maxXAxis, maxXAxis])
         ax.set_aspect('equal')
-
-        print("ALOOOOO")
         
         # fig = plt.figure()
         # ax = fig.add_subplot(111)
-        ax.quiver(Bposst.T[:,0], Bposst.T[:,1],disps.T[:,0], disps.T[:,1],scale_units='xy', scale=1)
+        for i in range(len(vec_classes)):
+            disps_class = disps[:,class_list==i]
+            Bposst_class = Bposst[:,class_list==i]
+            ndisps = np.shape(disps_class)[1]
+            ax.quiver(Bposst_class.T[:,0], Bposst_class.T[:,1], disps_class.T[:,0], disps_class.T[:,1], scale_units='xy', scale=1,  units='xy', width = 0.3, headwidth = 1, headlength = 0, color="k")
+
+        for i,num in enumerate(atoms):
+            ax.scatter(Bposst.T[natB*num*i:natB*num*(i+1),0],Bposst.T[natB*num*i:natB*num*(i+1),1], alpha=1, c=colors[2*i+1], label=Blabel, s=120)
         maxXAxis = np.max([Apos.max(), Bposst.max()]) + 1
         ax.set_xlim([-maxXAxis, maxXAxis])
         ax.set_ylim([-maxXAxis, maxXAxis])
