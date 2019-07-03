@@ -155,7 +155,7 @@ output = True
 stats_on = True
 display = True
 use = True
-aff = 2
+aff = 0
 num = int(sys.argv[2])
 
 if display:
@@ -166,10 +166,10 @@ else:
 
 # Eventually this can be from pcread
 
-if num == 1:
+if False:
     B = Structure(np.array([[3.6678788324556724,0,0],[1.8339393525882195,3.1764772365036733,0],[0,0,1]]).T)
     A = Structure(np.array([[4.934297879818212,0,0],[-2.4670561590795694,4.273351862766654,0],[0,0,2]]).T*0.5)
-elif num == 2:
+elif True:
     B = Structure(np.array([[7.247844507162113,0,0],[3.6239222535810565, 6.276817465881893,0],[0,0,2]]).T*0.5)
     cellA = np.array([[4.97803173955,0,0],[2.48901586978,4.3111019473,0],[0,0,2]]).T*0.5
 
@@ -388,7 +388,8 @@ if stats_on:
 
 for k in range(n_peaks):
     tmat = ttrans[k,:,:3]
-
+    gap = ttrans[k,2,3]
+    
     class_list = class_list_list[k,:n_map]-1
 
     Bpos = Bpos_list[k,:,:n_map]
@@ -430,8 +431,37 @@ for k in range(n_peaks):
     # Displacement with stretching
     disps = Apos_map - Bposst
 
-    bond = 3.5
-    print("TOTAL DISTANCE IN PYTHON", np.sum(-(np.sum(disps**2,0)/bond**2+1)**(-3)))
+    bond = 2.7
+    
+    import scipy.optimize as opt
+
+    def F(l):
+        eucld = np.sum(disps[:2,:]**2,0)
+        eucld = eucld + l**2*np.ones(len(eucld))
+        return np.sum(bond**12/eucld**6 - 2*bond**6/eucld**3)
+
+
+    llist = np.linspace(2,3,100)
+    flist = np.array([F(l) for l in llist])
+
+    if k == aff:
+        plt.figure('dist vs l')
+        plt.plot(llist, flist)
+    
+    res = opt.minimize(F,[2.3])
+
+    print("GAP :", gap)
+    print("lopt:", res.x)
+
+    eucld = np.sum(disps**2,0)
+    print("LJ distance (without gap):", F(res.x))
+    print('LJ distance (with gap)   :', np.sum(bond**12/eucld**6 - 2*bond**6/eucld**3))
+    bond = 1.0
+    print("1/r6 distance            :", np.sum(-(np.sum(disps[:2,:]**2,0)/bond**2+1)**(-3)))
+    bond = 2.3
+    print("1/r6 distance            :", np.sum(-(np.sum(disps[:2,:]**2,0)/bond**2+1)**(-3)))
+    bond = 1.5
+    print("1/r6 distance            :", np.sum(-(np.sum(disps[:2,:]**2,0)/bond**2+1)**(-3)))
     
     vec_classes = np.array([np.mean(disps[:,class_list==d_type], axis=1) for d_type in np.unique(class_list)])
     # class_list, vec_classes = classify(disps)
@@ -492,6 +522,7 @@ for k in range(n_peaks):
     # Centers the position on the first atom
     pos_in_struc = Bposst-Bposst[:,0:1].dot(np.ones((1,np.shape(Bposst)[1])))
 
+    print("Gap:", gap) 
     print("Volume stretching factor:", k, la.det(tmat))
     print("Cell volume ratio (should be exactly the same):",k, mulA * la.det(Acell)/(mulB * la.det(Bcell)))
 
@@ -500,7 +531,7 @@ for k in range(n_peaks):
         
     print("CLASS LIST:",k, class_list)
     print("Angle:")
-    print(peak_thetas[k])
+    print(peak_thetas[k]*180/np.pi)
     
     try:
         cell, origin = find_cell(class_list, Bposst)

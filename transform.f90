@@ -8,8 +8,7 @@ module transform
   public :: &
        trans, &
        center, &
-       fastoptimization, &
-       canonicalize
+       fastoptimization
 
   private :: &
        eye, &
@@ -24,7 +23,8 @@ module transform
        analytical_gd_std, &
        gradient_descent_explore
 
-  double precision, parameter ::  bond = 1.0d0
+  double precision, parameter ::  bond = 2.70d0
+  integer, parameter ::  dtype = 3 ! 1. Euclidean, 2. 1/r6, 3. Lennard-Jones
   
 contains
 
@@ -93,35 +93,6 @@ contains
 
   end function rot_mat
 
-  subroutine canonicalize(can_mat,tmat)
-
-    double precision, dimension(3) :: &
-         u_per     ! Vector perpendicular to the 2 first vectors
-
-    double precision, intent(out), dimension(3,3) :: &
-         can_mat ! Rotated (canonical) matrix
-
-    double precision, intent(in), dimension(3,3) :: &
-         tmat    ! Transformed matrix to rotate
-
-    can_mat(:,1) = norm(tmat(:,1))*(/1,0,0/)
-    
-    u_per = tmat(:,2) -  tmat(:,1)*dot_product(tmat(:,1), tmat(:,2))/norm(tmat(:,1))**2
-    
-    can_mat(:,2) = (/ dot_product(tmat(:,1), tmat(:,2))/norm(tmat(:,1)), &
-         norm(u_per), 0.0d0/)
-    
-    can_mat(:,3) = (/ dot_product(tmat(:,1), tmat(:,3))/norm(tmat(:,1)), &
-         dot_product(u_per, tmat(:,3))/norm(u_per), &
-         det(tmat,3)/(norm(tmat(:,1))*norm(u_per))/)
-
-    ! This is to avoid seeing an inversion in 2D as a rotation in a           
-    ! prohibited axis. This is not necessary in 3D (but not wrong)            
-    can_mat(2,:) = can_mat(3,3)/abs(can_mat(3,3))*can_mat(2,:)
-    can_mat(3,3) = abs(can_mat(3,3))
-    
-  end subroutine canonicalize  
-
   subroutine center(pos,n)
 
     integer, intent(in) :: &
@@ -168,7 +139,6 @@ contains
     do i=1,size(Apos,2)
        do j=1,size(Bpos,2)
           if (j <= n_B) then
-             !cost(i,j) = norm(Apos(:,i)-Bpos(:,j))
              cost(i,j) = distance(Apos(:,i:i),Bpos(:,j:j), eye(), (/0.0d0,0.0d0,0.0d0/))
           elseif (i <= n_A) then  
              cost(i,j) = 1000 ! TODO: Should that be a param?
@@ -285,6 +255,9 @@ contains
          Apos, &  ! position matrix
          Bpos
 
+    double precision, dimension(size(Apos,2)) :: &
+         d
+
     double precision, intent(in), dimension(3,3) :: &
          mat
 
@@ -294,29 +267,20 @@ contains
     double precision :: &
          distance
 
-    distance = sum(-(sum((Apos - free_trans(Bpos,mat,vec))**2,1)/bond**2+1.0d0)**(-3))
+    selectcase (dtype)
+    case (1) ! Euclidean distance
+       distance = sum(sqrt(sum((Apos - free_trans(Bpos,mat,vec))**2,1)))
+
+    case (2) ! -1/r^6 
+       distance = sum(-(sum((Apos - free_trans(Bpos,mat,vec))**2,1)/bond**2+1.0d0)**(-3))
+       
+    case (3) ! Lennard-Jones
+       d = sum((Apos - free_trans(Bpos,mat,vec))**2,1)
+    
+       distance = sum(bond**12/d**6 - 2*bond**6/d**3)
+    endselect
     
   end function distance
-
-  function distance_b(Apos, Bpos, mat, vec)
-
-    double precision, intent(in), dimension(:,:) :: &
-         Apos, &  ! position matrix
-         Bpos
-
-    double precision, intent(in), dimension(3,3) :: &
-         mat
-
-    double precision, intent(in), dimension(3) :: &
-         vec
-
-    double precision :: &
-         distance_b
-    
-    distance_b = sum(-(sum((Apos - free_trans(Bpos,mat,vec))**2,1)/bond**2+1.0d0)**(-3)) - &
-         minval(-(sum((Apos - free_trans(Bpos,mat,vec))**2,1)/bond**2+1.0d0)**(-3))
-    
-  end function distance_b
     
   subroutine classify(n, n_classes, classes_list, disps, tol)
 
@@ -351,11 +315,6 @@ contains
     do i=2,size(disps,2)
        classified = .false.
        do j=1,n
-          ! if (abs(norm(classes(:,j)) - &
-          !      dot_product(classes(:,j), disps(:,i)) / norm(classes(:,j))) < tol & 
-          !      .and. norm(classes(:,j))**2*norm(disps(:,i))**2 - &
-          !      dot_product(classes(:,j), disps(:,i))/norm(classes(:,j)) < tol) then
-
           if (norm(classes(:,j) - disps(:,i)) < tol) then
 
              classes(:,j) = (n_classes(j)*classes(:,j) + disps(:,i)) / (n_classes(j) + 1)
@@ -529,8 +488,11 @@ contains
          Bpos ! Bpos ordered according to the mapping
 
     double precision, dimension(3,size(Bpos,2)) :: &
-         E ! position matrix
+         E    ! position matrix
 
+    double precision, dimension(size(Bpos,2)) :: &
+         P
+    
     double precision, intent(inout), dimension(3,1) :: &         
          vec, &     ! Translation vector
          u
@@ -580,9 +542,7 @@ contains
        M = rot_mat(theta,u)
 
        dist_prev = dist
-       ! dist = sum(sqrt(sum((Apos - free_trans(Bpos,M,vec))**2,1)))
        dist = distance(Apos, Bpos, M, vec)
-!       sum(-(sum((Apos - free_trans(Bpos,M,vec))**2,1)+9.0d0)**(-3))
        
        if (j==1) then
           dist_prev = dist + 1.0d0 + tol
@@ -599,9 +559,17 @@ contains
        endif
     
        E = Apos - free_trans(Bpos,M,vec)
-       ! E = E / spread(sqrt(sum(E**2,1)),1,3)
-       E = bond**6*E / spread((sum(E**2,1) + bond**2)**4,1,3)
 
+       selectcase (dtype)
+       case (1)
+          E = E / spread(sqrt(sum(E**2,1)),1,3)
+       case (2)
+          E = bond**6*E / spread((sum(E**2,1) + bond**2)**4,1,3)
+       case (3)
+          P = bond**6/(sum(E**2,1))**7 - 1/(sum(E**2,1))**4
+          E = -E*spread(P,1,3)
+       endselect
+       
        if (verbose) then
           print*, "E", E
        endif
@@ -610,21 +578,38 @@ contains
        Qt = transpose(reshape((/0.0d0,-u(3,1),u(2,1),u(3,1),0.0d0,-u(1,1),-u(2,1),u(1,1),0.0d0/),(/3,3/)))
        Mt = - (eye() - Pt)*sin(theta) + Qt*cos(theta)
 
-       if(dist > dist_prev .or. dist > -1.0d-8) then
-          ! print*, "ADJUST", dist, dist_prev
-          scale = 1.0d0 / 10.0d0 * scale
-          theta = theta_prev
-          vec = vec_prev
+       if (dtype == 1) then
+          if(dist > dist_prev) then
+             ! print*, "ADJUST", dist, dist_prev
+             scale = 10.0d0 * scale
+             theta = theta_prev
+             vec = vec_prev
+          else
+             
+             theta_prev = theta
+             vec_prev = vec
+             
+             theta = theta + rate1 / scale * dist * sum(matmul(E,transpose(Bpos)) * Mt)
+             vec   = vec   + rate2 / scale * dist * matmul(E,ones)
+             
+          endif
        else
-
-          theta_prev = theta
-          vec_prev = vec
-       
-          theta = theta + rate1 * scale / dist * sum(matmul(E,transpose(Bpos)) * Mt)
-          vec   = vec   + rate2 * scale / dist * matmul(E,ones)
-
+          if(dist > dist_prev .or. dist > -1.0d-8) then
+             ! print*, "ADJUST", dist, dist_prev
+             scale = 1.0d0 / 10.0d0 * scale
+             theta = theta_prev
+             vec = vec_prev
+          else
+             
+             theta_prev = theta
+             vec_prev = vec
+             
+             theta = theta + rate1 * scale / dist * sum(matmul(E,transpose(Bpos)) * Mt)
+             vec   = vec   + rate2 * scale / dist * matmul(E,ones)
+             
+          endif
        endif
-
+       
        if (verbose) then
           print*,"-->", j , scale, dist, abs(dist - dist_prev), modulo(theta*180.0d0 &
                /3.14159265358d0,360.0d0), norm(vec)
@@ -777,7 +762,10 @@ contains
          Bpos ! Bpos ordered according to the mapping
 
     double precision, dimension(3,size(Bpos,2)) :: &
-         E ! position matrix
+         E    ! position matrix
+
+    double precision, dimension(size(Bpos,2)) :: &
+         P    ! Potential
 
     double precision, intent(inout), dimension(3,3) :: &         
          tmat     ! Translation vector
@@ -824,40 +812,47 @@ contains
     j=0
     do while (j < n_iter .and. abs(dist - dist_prev) > tol)
        j=j+1
-
-       dettmat = det(tmat,3)
        
        dist_prev = dist
-       ! if (abs(dettmat - 1.0d0) >= max_vol) then
-       !    dist = sum(sqrt(sum((Apos - free_trans(Bpos,tmat,vec))**2,1))) + &
-       !    importance*(abs(dettmat-1.0d0) - max_vol)**2
-       ! else
-       !D = sum(sqrt(sum((Apos - free_trans(Bpos,tmat,vec))**2,1)))
-       !dist = D * det(tmat,3)
-       !dist = sum(sqrt(sum((Apos - free_trans(Bpos,tmat,vec))**2,1)))
-       !dist = sum(-(sqrt(sum((Apos - free_trans(Bpos,tmat,vec))**2,1))+1.0d0)**(-6))
-       ! dist = sum(-(sum((Apos - free_trans(Bpos,tmat,vec))**2,1)+9.0d0)**(-3))
        dist = distance(Apos, Bpos, tmat, vec)
-       ! endif
           
        if (j==1) then
           dist_prev = dist + tol + 1.0d0
        endif
        
        E = Apos - free_trans(Bpos,tmat,vec)
-       if (.not. sq) then
-!          E = E / spread(sqrt(sum(E**2,1)),1,3)
-          ! E = -E / spread(sqrt(sum(E**2,1))*(sqrt(sum(E**2,1)) + 1.0d0)**7,1,3)
-          E = bond**6*E / spread((sum(E**2,1) + bond)**4,1,3)
-       endif
 
-       ddet(1,1) = tmat(2,2)
-       ddet(1,2) = -tmat(2,1)
-       ddet(2,1) = -tmat(1,2)
-       ddet(2,2) = tmat(1,1)
-
-       ! print*, dist, dist-dist_prev, dettmat, importance*(det(tmat,3) - max_vol)**2 
+       selectcase (dtype)
+       case (1)
+          E = E / spread(sqrt(sum(E**2,1)),1,3)
+       case (2)
+          E = bond**6*E / spread((sum(E**2,1) + bond**2)**4,1,3)
+       case (3)
+          P = bond**6/(sum(E**2,1))**7 - 1/(sum(E**2,1))**4
+          E = -E*spread(P,1,3)
+       endselect
        
+       ! print*, dist, dist-dist_prev, dettmat, importance*(det(tmat,3) - max_vol)**2 
+
+       if (dtype == 1) then
+       if(dist > dist_prev .or. dist < 1.0d-8) then
+          ! print*, "ADJUST", dist, dist_prev, scale
+          scale = 10.0d0 * scale
+          tmat = tmat_prev
+          vec = vec_prev
+       else
+
+          tmat_prev = tmat
+          vec_prev = vec
+       
+          tmat = tmat + rate1 / scale * dist * matmul(E,transpose(Bpos))          
+          tmat(:,3) = 0.0d0
+          tmat(3,:) = 0.0d0
+          tmat(3,3) = 1.0d0
+          vec  = vec  + rate2 / scale * dist * matmul(E,ones)
+          
+       endif
+    else
        if(dist > dist_prev .or. dist > -1.0d-8) then
           ! print*, "ADJUST", dist, dist_prev, scale
           scale = 1.0d0 / 10.0d0 * scale
@@ -868,18 +863,16 @@ contains
           tmat_prev = tmat
           vec_prev = vec
        
-          ! if (abs(dettmat-1.0d0) >= max_vol) then
-          !    tmat = tmat + rate1 * dist / scale * ( matmul(E,transpose(Bpos)) &
-          !         - abs(dettmat-1.0d0) / (dettmat-1.0d0) * &
-          !         importance*(abs(dettmat-1.0d0) - max_vol)*ddet)             
-          ! else
-          tmat = tmat + rate1 * scale / dist * matmul(E,transpose(Bpos))
-          ! tmat = tmat + rate1 * dist / scale * (matmul(E,transpose(Bpos))*det(tmat,3) - D*ddet) 
-          ! endif
-          
+          tmat = tmat + rate1 * scale / dist * matmul(E,transpose(Bpos))          
+          tmat(:,3) = 0.0d0
+          tmat(3,:) = 0.0d0
+          tmat(3,3) = 1.0d0
           vec  = vec  + rate2 * scale / dist * matmul(E,ones)
           
-       endif       
+       endif
+    endif
+
+       
     enddo
 
     print*, j, dist, scale_in, dist-dist_prev 
@@ -1191,7 +1184,8 @@ contains
          diag, &
          theta_local, &
          theta2_local,&
-         theta
+         theta, &
+         vol
 
     double precision, allocatable, dimension(:) :: &
          dist_min
@@ -1222,12 +1216,10 @@ contains
     mul_vec = diag*2/sqrt(2.0d0) !Only in 2D sqrt(3) in 3D
 
     call init_random_seed()
-    call random_number(shift)
-    shift = 1.0d0 + 0.03d0*shift
     
     !$omp parallel default(private) shared(dist_min, &
     !$omp tmat_min, vec_min, tmat, u, theta, vec, stats, tmats) &
-    !$omp firstprivate(n_iter, max_vol, shift, mul_vec, cell, fracA, fracB, &
+    !$omp firstprivate(n_iter, max_vol, mul_vec, cell, fracA, fracB, &
     !$omp icell, n_conv, n_ana, Apos, Bpos, rate1, rate2, atoms, n_atoms)
 
     call init_random_seed()
@@ -1247,8 +1239,8 @@ contains
     !$omp do
     do j=1, n_iter
 
-       stats(j,5) = 0
-       do while (stats(j,5) == 0)
+       vol = 0
+       do while (vol == 0)
           call random_number(theta_local)
           call random_number(tmat_local)
 
@@ -1260,7 +1252,7 @@ contains
 
           u_local =  (/0.0d0,0.0d0,1.0d0/) ! 2D only
 
-          tmat_local = (1.0d0 + 0.05d0 * tmat_local(1,1)) ** (1.0d0/2.0d0) * eye()
+          tmat_local = (1.0d0 + 0.04d0 * tmat_local(1,1)) ** (1.0d0/2.0d0) * eye()
           tmat_local(:,3) = 0
           tmat_local(3,:) = 0
           tmat_local(3,3) = 1.0d0
@@ -1286,12 +1278,14 @@ contains
              call random_number(vec_local)
 
              vec_local = vec_local - (/0.5d0,0.5d0,0.5d0/)
-             vec_local(3) = 0.0d0 ! 2D only
+             vec_local(3) = 0.0d0
 
              vec_local = vec_local*mul_vec
 
              vec_local = vec_local - matmul(cell,nint(matmul(icell,vec_local))) 
 
+             vec_local(3) = bond ! As an estimate
+             
              ! ! 3D only
              ! u_local = u_local - (/0.5d0,0.5d0,0.5d0/)
              ! u_local = u_local / norm(u_local)
@@ -1349,14 +1343,15 @@ contains
              ! dist_cur = sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt,tmat_local,vec_local))**2,1))) &
              !      * det(tmat_local,3) / size(Apos_mapped,2)
 
-             write(*,*) "Opt dist", thread, dist_cur, det(tmat_local,3)
+             write(*,*) "Opt dist", thread, dist_cur, vec_local(3), det(tmat_local,3)
 
              if (abs(det(tmat_local,3) - 1.0d0) < max_vol) then
                 if (vl == 1 .or. dist_cur < stats(j,4)) then !TMP vec
                    stats(j,1) = theta2_local
                    stats(j,2:3) = vec_local(1:2)
                    stats(j,4) = dist_cur
-                   stats(j,5) = det(tmat_local, 3)
+                   stats(j,5) = vec_local(3)
+                   vol = det(tmat_local,3)
                    tmats(j,:,:) = tmat_local
                    if (det(tmat_local, 3)==0) then
                       print*,"BIZZZZZZZARE"
@@ -1394,198 +1389,6 @@ contains
     !$omp end parallel
 
   end subroutine gradient_descent_explore_free
-  
-  ! subroutine gradient_descent_explore_free(tmat, vec, Apos, Bpos, cell, icell, &
-  !      fracA, fracB, atoms, n_atoms, n_iter, n_ana, n_conv, rate1, rate2)
-  !   ! New Gradient Descent Random
-
-  !   use omp_lib
-
-  !   integer, intent(in) :: &
-  !        n_iter, n_atoms, & ! Number of atoms
-  !        n_ana, &
-  !        n_conv
-
-  !   double precision, dimension(3,3), intent(out) :: &
-  !        tmat
-
-  !   double precision, intent(in) :: &
-  !        rate1, & ! Rate for angles
-  !        rate2, & ! Rate for disp
-  !        fracA, fracB ! Fraction of A and B to use in optimisation
-
-  !   double precision :: &
-  !        rand_rate1, & ! Rate for angles
-  !        rand_rate2 ! Rate for disp
-
-  !   integer, intent(in), dimension(n_atoms) :: &
-  !        atoms
-
-  !   double precision, intent(in), dimension(:,:) :: &
-  !        Apos, Bpos ! Centered position of the atoms
-
-  !   double precision, intent(in), dimension(3,3) :: &
-  !        cell, &  ! cell
-  !        icell ! inverse of cell
-    
-  !   double precision, dimension(3,size(Bpos,2)) :: &
-  !        postmp, & ! position matrix
-  !        tBpos
-
-  !   double precision, dimension(3,int(fracB*size(Apos,2)/sum(atoms))*sum(atoms)) :: &
-  !        Apos_mapped, & ! position matrix
-  !        Bpos_opt
-    
-  !   double precision, intent(out), dimension(3) :: &
-  !        vec      ! Translation vector
-
-  !   double precision, dimension(3) :: &
-  !        vec_local, &     ! Translation vector
-  !        u_local
-
-  !   double precision, dimension(3,3) :: &
-  !        tmat_local, &
-  !        P,Q
-
-  !   double precision, allocatable, dimension(:,:) :: &
-  !        dmat
-
-  !   integer, allocatable, dimension(:) :: &
-  !        map
-    
-
-  !   double precision :: &
-  !        dist_plus, & ! distance when adding dx
-  !        dist_minus, & ! distance when substracting dx
-  !        accept, & ! Accept step
-  !        dist_cur, &
-  !        dist_map, &
-  !        dist_stretch, &
-  !        mul_vec, &
-  !        diag, &
-  !        theta_local
-
-  !   double precision, allocatable, dimension(:) :: &
-  !        dist_min
-
-  !   double precision, allocatable, dimension(:,:) :: &
-  !        vec_min, &
-  !        tmat_min
-    
-  !   integer :: &
-  !        i,j,k,l, & ! Iterator
-  !        id, idx, &
-  !        n, & ! Size of Bpos
-  !        An_cell, Bn_cell, &
-  !        n_threads, thread, &
-  !        pos
-
-  !   double precision, parameter :: &
-  !        pi = 3.141592653589793d0
-
-  !   diag = 0
-  !   diag = max(norm(cell(:,1) + cell(:,2) + cell(:,3)),diag)
-  !   diag = max(norm(-cell(:,1) + cell(:,2) + cell(:,3)),diag)
-  !   diag = max(norm(cell(:,1) - cell(:,2) + cell(:,3)),diag)
-  !   diag = max(norm(-cell(:,1) - cell(:,2) + cell(:,3)),diag)
-
-  !   mul_vec = diag*2/sqrt(2.0d0) !Only in 2D sqrt(3) in 3D
-    
-  !   !$omp parallel default(private) shared(dist_min, &
-  !   !$omp tmat_min, vec_min, tmat, vec) &
-  !   !$omp firstprivate(n_iter, mul_vec, cell, fracA, fracB, &
-  !   !$omp icell, n_conv, n_ana, Apos, Bpos, rate1, rate2, atoms, n_atoms)
-
-  !   call init_random_seed()
-    
-  !   n_threads = OMP_get_num_threads()
-
-  !   !$omp single
-  !   allocate(dist_min(n_threads), &
-  !        tmat_min(9,n_threads), &
-  !        vec_min(3,n_threads))
-  !   !$omp end single
-
-  !   thread = OMP_get_thread_num() + 1
-    
-  !   dist_min(thread) = sum(sqrt(sum((Apos - Bpos)**2,1)))
-    
-  !   !$omp do
-  !   do j=1, n_iter
-       
-  !      call random_number(theta_local)
-  !      call random_number(u_local)
-  !      call random_number(vec_local)
-
-  !      theta_local = theta_local*2*pi
-
-  !      vec_local = vec_local - (/0.5d0,0.5d0,0.5d0/)
-  !      vec_local(3) = 0.0d0 ! 2D only
-
-  !      vec_local = vec_local*mul_vec
-       
-  !      vec_local = vec_local - matmul(cell,nint(matmul(icell,vec_local))) 
-
-  !      ! ! 3D only
-  !      ! u_local = u_local - (/0.5d0,0.5d0,0.5d0/)
-  !      ! u_local = u_local / norm(u_local)
-  !      ! u_local(3) = abs(u_local(3))
-
-  !      u_local =  (/0.0d0,0.0d0,1.0d0/) ! 2D only
-
-  !      !tmat_local = rot_mat(theta_local,u_local)
-
-  !      call random_number(tmat_local)
-
-  !      tmat_local = 3.0d0*tmat_local-1.5d0
-       
-  !      write(*,*) "New initial step", thread, j
-       
-  !      do k=1, n_conv
-
-  !         tBpos = free_trans(Bpos,tmat_local,vec_local)
-
-  !         call mapping(Apos_mapped, Bpos_opt, Apos, Bpos, tBpos, &
-  !              fracA, fracB, atoms, n_atoms)
-
-  !         if (k==1) then
-  !            dist_cur = sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt,tmat_local,vec_local))**2,1)))
-  !         endif
-
-  !         call analytical_gd_free(tmat_local, vec_local, Apos_mapped, Bpos_opt, &
-  !              .false.,n_ana*100, rate1, rate2, dist_cur*10)
-
-  !      enddo
-
-  !      dist_cur = sum(sqrt(sum((Apos_mapped - free_trans(Bpos_opt,tmat_local,vec_local))**2,1)))
-
-  !      write(*,*) "Opt dist", thread, dist_cur
-
-  !      if (dist_cur < dist_min(thread)) then
-  !         dist_min(thread) = dist_cur
-  !         tmat_min(:,thread) = reshape(tmat_local,(/9/))
-  !         vec_min(:,thread) = vec_local
-  !      endif
-
-  !   enddo
-  !   !$omp end do
-
-  !   !$omp barrier
-  !   !$omp single
-  !   pos = minloc(dist_min, 1)
-  !   tmat = reshape(tmat_min(:,pos),(/3,3/))
-  !   vec = vec_min(:,pos)
-
-  !   print*, "Shortest Distance", minval(dist_min)
-    
-  !   deallocate(dist_min, &
-  !        tmat_min, &
-  !        vec_min)
-  !   !$omp end single 
-    
-  !   !$omp end parallel
-
-  ! end subroutine gradient_descent_explore_free
 
   function sort(array) result(idx)
     
@@ -1808,7 +1611,7 @@ contains
     double precision, dimension(n_iter,3,3) :: &
          peak_tmats
 
-    double precision, dimension(n_iter,2) :: &
+    double precision, dimension(n_iter,3) :: &
          vecs, &
          peak_vecs
 
@@ -1886,13 +1689,12 @@ contains
     call gradient_descent_explore_free(tmat,vec,stats,tmats, Apos, Bpos, Acell, iAcell, &
          fracA, fracB, atoms, n_atoms, n_iter, n_ana, n_conv, rate1, rate2, max_vol)
 
-
-    ! tmat = reshape((/0.51600960391793982, -0.89233497231869008, 0.0000000000000000, &
-    !      0.89019796996613731, 0.51507810840580193, 0.0000000000000000, &
+    ! tmat = reshape((/0.51670221327377674, -0.88922647085374384, 0.0000000000000000, &
+    !      0.88404451593547595, 0.50071171148823879, 0.0000000000000000, &
     !      0.0000000000000000, 0.0000000000000000, 1.0000000000000000/),(/3,3/))
 
-    ! vec = (/-0.30628812662975724, -0.47756853264300353, 0.0000000000000000/)
-    
+    ! vec = (/0.79144975248317684, 0.26286160764791433, 2.3691071583905852/)
+      
     ! print*, tmat, vec
 
     if (.true.) then
@@ -1902,7 +1704,9 @@ contains
        do i=1,n_iter
           thetas(i) = stats(idx(i),1)
           dists(i) = stats(idx(i),4)
-          vecs(i,:) = stats(idx(i),2:3)
+          vecs(i,1:2) = stats(idx(i),2:3)
+          vecs(i,3) = stats(idx(i),5)
+          stats(idx(i),5) = det(tmats(idx(i),:,:),3)
           tmats_ordered(i,:,:) = tmats(idx(i),:,:)
        enddo
 
@@ -1933,7 +1737,7 @@ contains
 
        n_peaks = 1
        ! peak_thetas(1) = theta
-       peak_vecs(1,:) = vec(1:2)
+       peak_vecs(1,:) = vec
        peak_tmats(1,:,:) = tmat
 
     endif
@@ -1960,7 +1764,7 @@ contains
        print*, "Unperturbed tmat", modulo(theta2*180/pi, 60.0d0)
        
     vec = 0.0d0
-    vec(1:2) = peak_vecs(k,:)
+    vec = peak_vecs(k,:)
 
     do i=1,n_adjust
 
@@ -2026,13 +1830,14 @@ contains
     ! ! Recenter
     ! vec = vec + sum(free_trans(Bpos_opt,rot_mat(theta,u),vec) - Apos_mapped,2) / n_out
     
-    if (.true.) then
+    if (.false.) then
        write(*,*) "/======== Classification ========\\"
 
        tol_adjust = 1.0d0
        std = 1.0d0
        classes_list = 0
        classes_list_prev = 1
+       center_vec = 0.0d0
        j=0
        do while ( std > tol_class .and. j < 10)
           j = j + 1
@@ -2041,12 +1846,10 @@ contains
 
           ! REMAP
 
-          center_vec = sum(free_trans(Bpos_opt,tmat,vec) - Apos_mapped,2) / n_out
+          ! center_vec = sum(free_trans(Bpos_opt,tmat,vec) - Apos_mapped,2) / n_out
 
-          center_vec(1) = center_vec(1) - 0.1 
-          
           Apos_mapped_prev = Apos_mapped
-          
+
           tBpos = free_trans(Bpos,tmat,vec - center_vec)
           
           call mapping(Apos_mapped, Bpos_opt, Apos, Bpos, tBpos, &

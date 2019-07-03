@@ -8,15 +8,39 @@ from p2ptrans import tiling as t
 from copy import deepcopy
 import sys
 
+def rotate(self,a,b,c):
+    angles = [a,b,c]
+    u = np.zeros((3,1))
+    u[0,0] = np.sin(angles[1]) * np.cos(angles[2])
+    u[1,0] = np.sin(angles[2]) * np.sin(angles[2])
+    u[2,0] = np.cos(angles[2])
+
+    P = u.dot(u.T)
+    Q = np.array([[0.0, -u[2,0], u[1,0]],
+                  [u[2,0], 0.0, -u[0,0]],
+                  [-u[1,0], u[0,0], 0.0]])
+
+    R = P + (np.eye(3) - P)*np.cos(angles[0]) + Q*np.sin(angles[0])
+
+    A = deepcopy(self)
+    A.cell = R.dot(A.cell)
+    for a in A:
+        a.pos = R.dot(a.pos)
+    return A
+
+Structure.rotate = rotate
+
 la = np.linalg
 
 cut = False
-spacing = 2 # Angstrom
+spacing = 2.3688842275934747 # Angstrom
 tickness = 15
 vacuum = 10 # on each side
 substrate = "Zr"
 
 Alabel, Blabel, rtrans, ttrans, cell, centerA, centerB = pickle.load(open("transformation_%s.dat"%(sys.argv[1]),"rb"))
+
+ttrans[2,3:4] = 0.0 #TMP with a gap
 
 if Blabel == substrate:
     tmp = Alabel
@@ -29,13 +53,13 @@ if Blabel == substrate:
     centerA = centerB
     centerB = tmp
 
-cell[:2,:2] = cell[:2,:2]
+cell[:2,:2] = 2*cell[:2,:2]
 
 centerA = np.append(centerA,0)
 centerB = np.append(centerB,0)
 
 A = read.poscar('POSCAR_111_ysz')
-B = read.poscar('POSCAR_111_Ni')
+B = read.poscar('POSCAR_111_Ni').rotate(np.pi,0,0)
 
 for a in A:
     if a.type == Alabel:
@@ -248,7 +272,7 @@ print("AB:", len(AB))
 
 write.poscar(A, vasp5=True, file="POSCAR_A_%s"%(sys.argv[1]))
 write.poscar(B, vasp5=True, file="POSCAR_B_%s"%(sys.argv[1]))
-write.poscar(AB,vasp5=True, file="relaxations/poscars/POSCAR_AB_%s"%(sys.argv[1]))
+write.poscar(AB,vasp5=True, file="POSCAR_Ni-YSZ_%s"%(sys.argv[1]))
 
 plt.show()
 

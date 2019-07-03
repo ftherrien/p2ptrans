@@ -447,8 +447,8 @@ for k in range(n_peaks):
         ax.set_axis_off()
         for i,num in enumerate(atoms):
             for j in range(num):
-                ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,1], c=colors[2*i], label=Alabel, s=120)
-                ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,1], c=colors[2*i], alpha=0.5, s=120)
+                ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat:(np.sum(atoms[:i-1])+j)*nat + natA,1], c=colors[2*i], label=Alabel, s=60)
+                ax.scatter(Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,0],Apos.T[(np.sum(atoms[:i-1])+j)*nat + natA:(np.sum(atoms[:i-1])+j+1)*nat,1], c=colors[2*i], alpha=0.5, s=60)
             
         # ax.legend()
         maxXAxis = np.max([Apos.max(), Bposst.max()]) + 1
@@ -462,10 +462,10 @@ for k in range(n_peaks):
             disps_class = disps[:,class_list==i]
             Bposst_class = Bposst[:,class_list==i]
             ndisps = np.shape(disps_class)[1]
-            ax.quiver(Bposst_class.T[:,0], Bposst_class.T[:,1], disps_class.T[:,0], disps_class.T[:,1], scale_units='xy', scale=1,  units='xy', width = 0.3, headwidth = 1, headlength = 0, color="k")
+            ax.quiver(Bposst_class.T[:,0], Bposst_class.T[:,1], disps_class.T[:,0], disps_class.T[:,1], scale_units='xy', scale=1,  units='xy', width = 0.5, headwidth = 1, headlength = 0, color="k")
 
         for i,num in enumerate(atoms):
-            ax.scatter(Bposst.T[natB*num*i:natB*num*(i+1),0],Bposst.T[natB*num*i:natB*num*(i+1),1], alpha=1, c=colors[2*i+1], label=Blabel, s=120)
+            ax.scatter(Bposst.T[natB*num*i:natB*num*(i+1),0],Bposst.T[natB*num*i:natB*num*(i+1),1], alpha=1, c=colors[2*i+1], label=Blabel, s=60)
         maxXAxis = np.max([Apos.max(), Bposst.max()]) + 1
         ax.set_xlim([-maxXAxis, maxXAxis])
         ax.set_ylim([-maxXAxis, maxXAxis])
