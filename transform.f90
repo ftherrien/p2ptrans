@@ -1595,7 +1595,8 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
          remap, &
          free, &
          check, &
-         usebest
+         usebest, &
+         exist
 
     character*200 :: &
          savebest
@@ -1637,9 +1638,13 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
     savebest = trim(split(filename,"/"))//"/best.dat"
     usebest = .false.
 
-    open (unit = 11, file = filename, status = 'OLD')
-    read (11, input)
-    close (11)
+    inquire(file = filename, exist=exist)
+
+    if (exist) then
+       open (unit = 11, file = filename, status = 'OLD')
+       read (11, input)
+       close (11)
+    endif
 
     n_frac = int(fracB*size(Apos,2)/sum(atoms))
     n_A = int(fracA*size(Apos,2)/sum(atoms))
@@ -1911,9 +1916,12 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
 
     rBpos_opt = free_trans(Bpos_opt, rot_mat(angles), vec_rot)
 
+    write(*,*) "Final rmat"
+    write(*,"(3(F7.3,X))") rot_mat(angles)
+    
     classes_list_out = 0
     classes_list_out(1:n_out) = classes_list
-
+    
     write(*,*) "Final tmat"
     write(*,"(3(F7.3,X))") tmat
 
