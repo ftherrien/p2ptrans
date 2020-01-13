@@ -304,7 +304,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
         ax.set_zlim([-maxXAxis, maxXAxis])
         
         print("ROTATION", set_view(plane))
-        toplot = set_view(plane).dot(Tpos[state][p])
+        toplot = set_view(-plane).dot(Tpos[state][p])
         color_to_plot = np.array(color_array[state][p])
         # idxx = np.argsort(toplot.T.dot(transStruc[state].cell.dot(viewDirs[p]).reshape(3,1)), axis=0).T[0]
         idxx = np.argsort(toplot[2,:])
@@ -327,29 +327,29 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
         ax2d.set_ylim([-maxXAxis, maxXAxis])
         ax2d.set_aspect('equal')
         
-        # for a,ar in enumerate(viewDirs):
-        tmpdir = np.zeros((3,3))
-        tmpdir[0,0] = 0
-        tmpdir[0,2] = ratio
-        tmpdir[0,1] = -1
-        tmpdir[1,0] = 0
-        tmpdir[1,2] = 1
-        tmpdir[1,1] = ratio
-        tmpdir[2,0] = 1
-        tmpdir[2,2] = 0
-        tmpdir[2,1] = 0
-        for a,ar in enumerate(tmpdir):
-            if True: #a!=p:
+        for a,ar in enumerate(viewDirs):
+        # tmpdir = np.zeros((3,3))
+        # tmpdir[0,0] = 0
+        # tmpdir[0,2] = ratio
+        # tmpdir[0,1] = -1
+        # tmpdir[1,0] = 0
+        # tmpdir[1,2] = 1
+        # tmpdir[1,1] = ratio
+        # tmpdir[2,0] = 1
+        # tmpdir[2,2] = 0
+        # tmpdir[2,1] = 0
+        # for a,ar in enumerate(tmpdir):
+            if a!=p:
                 if isinstance(ar[0],(list, np.ndarray)): 
-                    #arrow = transStruc[state].cell.dot(ar[0] + state/n_steps*(ar[1] - ar[0]))
-                    arrow = normal(transStruc[state].cell).dot(ar[0] + state/n_steps*(ar[1] - ar[0]))
+                    arrow = transStruc[state].cell.dot(ar[0] + state/n_steps*(ar[1] - ar[0]))
+                    # arrow = normal(transStruc[state].cell).dot(ar[0] + state/n_steps*(ar[1] - ar[0]))
                 else:
-                    #arrow = transStruc[state].cell.dot(ar)
-                    arrow = normal(transStruc[state].cell).dot(ar)
-                arrow = set_view(plane).dot(arrow)
-                ax2d.quiver(*np.zeros(2), *arrow[:2], scale_units='inches', scale=6, color=reccolor[a])
+                    arrow = transStruc[state].cell.dot(ar)
+                    # arrow = normal(transStruc[state].cell).dot(ar)
+                arrow = set_view(-plane).dot(arrow)
+                ax2d.quiver(*np.zeros(2), *arrow[:2], scale_units='inches', scale=10, color=reccolor[a])
                 #ax.quiver(*np.zeros(3), *arrow, color=reccolor[a])
-        # ax.quiver(0, 0, 0, 0, viewDirs[p][2]*100, -viewDirs[p][1]*100, color="g")
+        #ax.quiver(0, 0, 0, 0, viewDirs[p][2]*100, -viewDirs[p][1]*100, color="g")
         
 
     def all_panels(fig, gs, state, label):
@@ -371,7 +371,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
         ax.set_anchor('W')
         ax.set_axis_off()
         # ax.view_init(*(np.array(dir2angles(transStruc[state].cell[:,1]))+np.array([30,30])))
-        ax.view_init(*(np.array(dir2angles(transStruc[state].cell[:,2]))+np.array([0,0])))
+        ax.view_init(*(np.array(dir2angles(transStruc[state].cell[:,0]-transStruc[state].cell[:,1])) + np.array([10,10])))
         ax.dist = 5
         maxXAxis = abs(np.array([s.cell for s in transStruc])).max() + 1
         ax.set_xlim([-maxXAxis, maxXAxis])
@@ -394,20 +394,27 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
         # for a in supercell(transStruc[state], transStruc[state].cell.dot(np.diag([5,5,5]))):
         #     ax.scatter(a.pos[0]-origin2[0], a.pos[1]-origin2[1], a.pos[2]-origin2[2], alpha = 0.05, s=400, color=colorlist[(np.where(atom_types == a.type)[0][0])%10])
         a_list = []
+        first = True
         for a in transStruc[state]:
+            if first:
+                first = False
+                apos1 = a.pos
             if a.type in a_list or not label:
-                ax.scatter(a.pos[0]-origin[0], a.pos[1]-origin[1], a.pos[2]-origin[2], alpha = 1, s=200, color=colorlist[(np.where(atom_types == a.type)[0][0])%10])
+                ax.scatter(*(a.pos-origin-apos1), alpha = 1, s=200, color=colorlist[(np.where(atom_types == a.type)[0][0])%10])
             else:
                 a_list.append(a.type)
-                ax.scatter(a.pos[0]-origin[0], a.pos[1]-origin[1], a.pos[2]-origin[2], alpha = 1, s=200, color=colorlist[(np.where(atom_types == a.type)[0][0])%10], label=a.type)
+                ax.scatter(*(a.pos-origin-apos1), alpha = 1, s=200, color=colorlist[(np.where(atom_types == a.type)[0][0])%10], label=a.type)
             
         for p,pl in enumerate(viewDirs):
             if isinstance(pl[0],(list, np.ndarray)): 
                 plane = normal(transStruc[state].cell).dot(pl[0] + state/n_steps*(pl[1] - pl[0]))
             else:
-                plane = normal(transStruc[state].cell).dot(pl)
-            plane = 5*plane/la.norm(plane)
-            ax.quiver(*np.zeros(3), *plane, pivot='tip', color=reccolor[p])
+                # plane = normal(transStruc[state].cell).dot(pl)
+                plane = transStruc[state].cell.dot(pl)
+            # plane = 5*plane/la.norm(plane)
+            print("ORIGIN", origin)
+            ax.quiver(*(-origin), *plane, color=reccolor[p])
+            # ax.quiver(*np.zeros(3), *plane, pivot='tip', color=reccolor[p])
             
         fig.suptitle("Space group: " + spgList[state], fontsize=16)
         for x in ax.get_children():
@@ -876,8 +883,10 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
     
     neweigval, P = la.eig(tmat.T.dot(tmat))
     neweigval = np.sqrt(neweigval)
-
+    
     P = normal(P)
+
+    U = P.dot(np.diag(neweigval)).dot(P.T)
     
     print("Deformation Gradient Method (FtF)")
 
@@ -894,7 +903,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
     neweigval, Q = la.eig(la.inv(tmat).T.dot(la.inv(tmat)))
     neweigval = np.sqrt(neweigval)
     idx = np.argsort(1/neweigval)
-    Q = Q[:,idx]
+    #Q = Q[:,idx]
     
     Q = normal(Q)
     
@@ -911,11 +920,13 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
     #Plane (miller indices) and direction in final frame or B coord
     useBcoord = False
     recB = la.inv(Bcell).T
-    planeDir = [1,-1,-1]
-    orDir = [1,1,0]
+    planeDir = [1,1,0]
+    orDir = [1,-1,-1]
     if useBcoord:
         planeDir = recB.dot(planeDir)
         orDir = Bcell.dot(orDir)
+
+    print("R", tmat.dot(P.T.dot(np.diag(neweigval)).dot(P)))
     
     print("Orientation Relationship for thin film")
     resPlaneDir = Q.dot(P.T).dot(planeDir)
@@ -941,7 +952,8 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
     print("Habit Plane (Closest to)")
     idv = np.argmin(abs(eigval - 1))
     idh = np.arange(3)[np.arange(3)!=idv]
-    ratio = np.sqrt(abs((eigval[idh[1]]**2 - 1)/(1 - eigval[idh[0]]**2)))
+    ratio = np.sqrt(abs((eigval[idh[1]]**2 - eigval[idv]**2)/(eigval[idv]**2 - eigval[idh[0]]**2)))
+    #ratio = np.sqrt(abs((eigval[idh[1]]**2 - 1)/(1 - eigval[idh[0]]**2)))
 
     # Only for cubic systems!
     
@@ -971,7 +983,61 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
     rhab[:,:2] = tmat.dot(vhab[:,:2])
     rhab[:,2] = np.cross(rhab[:,0], rhab[:,1])
     rhab[:,2] = rhab[:,2] / la.norm(rhab[:,2])
+
+    r2hab = np.zeros((3,3))
+    
+    r2hab[:,:2] = U.dot(vhab[:,:2])
+    r2hab[:,2] = np.cross(r2hab[:,0], r2hab[:,1])
+    r2hab[:,2] = r2hab[:,2] / la.norm(r2hab[:,2])
+
+
+    print("P", P)
+
+    print("Q", Q)
+
+    print("QQ'", Q.dot(Q.T))
+
+    print("PP'", P.dot(P.T))
+
+    print("QP'", Q.dot(P.T)) 
+
+    print('RR', tmat.dot(la.inv(U)))
+    
+    Rtest = tmat.dot(la.inv(U)).dot(r2hab.dot(la.inv(vhab)))
     R = rhab.dot(la.inv(vhab))
+    
+    def find_R_RU(mat):
+        if np.all(mat==np.eye(3)):
+            return mat
+
+        eigval, eigvec = la.eig(mat)
+        idv = np.argmin(abs(eigval - 1))
+        idh = np.arange(3)[np.arange(3)!=idv]
+        ratio = np.sqrt(abs((eigval[idh[1]]**2 - eigval[idv]**2)/(eigval[idv]**2 - eigval[idh[0]]**2)))
+
+        # Only for cubic systems!
+        
+        planeHab = np.zeros((3,2))
+        planeHab = eigvec[:,idh[0]] + ratio*eigvec[:,idh[1]]
+        
+        vhab = np.zeros((3,3))
+        rhab = np.zeros((3,3))
+        
+        vhab[:,0] = ratio*eigvec[:,idh[0]] - eigvec[:,idh[1]]
+        vhab[:,1] = -eigvec[:,idv]
+        vhab[:,2] = planeHab/la.norm(planeHab) 
+        
+        r2hab[:,:2] = mat.dot(vhab[:,:2])
+        r2hab[:,2] = np.cross(r2hab[:,0], r2hab[:,1])
+        r2hab[:,2] = r2hab[:,2] / la.norm(r2hab[:,2])
+
+        return r2hab.dot(la.inv(vhab)).T
+
+    R = Q.dot(P.T).dot(r2hab.dot(la.inv(vhab)))
+
+    print('R', R)
+    print('Rtest', Rtest)
+    
     print("test habit", R.dot(vhab), la.inv(R).dot(vhab), tmat.dot(vhab))
     resPlaneDir = R.dot(planeDir)
     print("A/B coord.")
@@ -1020,13 +1086,18 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
 
     n_steps = 60
 
-    os.makedirs(outdir+"/TransPOSCARS", exist_ok=True)
+    PoscarDirName = "/TransPOSCARS_K-S"
+    
+    os.makedirs(outdir+PoscarDirName, exist_ok=True)
 
     itmat = rotate(la.inv(tmat).dot(finalStruc.cell), finalStruc.cell).dot(la.inv(tmat))
+
+    print("ITMAT", itmat)
+    print("U-1", Q.dot(P.T).dot(la.inv(U)).dot(P.dot(Q.T)))
     
     spgList = []
     transStruc = []
-    # viewDirs = [[la.inv(finalStruc.cell).dot([0,0,1]),
+    # viewirs = [[la.inv(finalStruc.cell).dot([0,0,1]),
     #             la.inv(la.inv(tmat).dot(finalStruc.cell)).dot([1,0,0])],
     #             [1,0,0], [0,1,0]]
 
@@ -1034,7 +1105,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
 
     # viewDirs = np.eye(3).tolist()
 
-    viewDirs = np.array([[1, 0, 0], [0, 1, 0], [0, -1, ratio]])
+    viewDirs = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
     
     print("Viewing directions in units of dispCell:", viewDirs)
     # print("Choosing the right plane", la.inv(tmat).dot(finalStruc.cell).dot(la.inv(finalStruc.cell).dot([0,0,1])))
@@ -1042,14 +1113,17 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
     size = 3
     Tpos = [] 
     for i in range(n_steps+1):
+        # Pitsch
         curMat = (itmat-np.eye(3))*i/n_steps + np.eye(3)
+        # K-S
+        curMat = find_R_RU(curMat).dot(curMat) # K-S only remove this line for Pitsch
         curStruc = Structure(curMat.dot(finalStruc.cell))
         for j,a in enumerate(dispStruc):
             curDisp = vec_classes[int(a.type)]*i/n_steps
             curPos = curMat.dot((finalStruc[j].pos - curDisp).reshape((3,1)))
             curStruc.add_atom(*(curPos.T.tolist()[0]),finalStruc[j].type)
             # curStruc = supercell(curStruc, curStruc.cell)
-        write.poscar(curStruc, vasp5=True, file=outdir+"/TransPOSCARS"+"/POSCAR_%03d"%i)
+        write.poscar(curStruc, vasp5=True, file=outdir+PoscarDirName+"/POSCAR_%03d"%i)
         spgList.append(get_spacegroup(to_spglib(curStruc), symprec=0.3, angle_tolerance=3.0))
         transStruc.append(curStruc)
         
