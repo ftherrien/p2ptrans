@@ -1,10 +1,10 @@
-from p2ptrans import transform as tr
+from fmodules import transform as tr
 import numpy as np
 import numpy.linalg as la
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib
 from matplotlib import animation
-from p2ptrans import tiling as t
+from fmodules import tiling as t
 import pickle
 import time
 from pylada.crystal import Structure, primitive, gruber, read, write, supercell, space_group
@@ -14,7 +14,6 @@ import os
 import warnings
 from format_spglib import from_spglib, to_spglib
 from spglib import get_spacegroup
-
 
 colorlist=['#929591', 'r', 'k','b','#06470c','#ceb301', '#9e0168', '#26f7fd', '#f97306', '#c20078']
 reccolor=['blue','green','red']
@@ -289,6 +288,8 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
 
     import matplotlib.pyplot as plt
 
+    plt.rcParams["figure.figsize"] = [5, 5]
+    
     import matplotlib.gridspec as gridspec
     from matplotlib.patches import Rectangle
 
@@ -301,7 +302,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
         ax.set_xlim([-maxXAxis, maxXAxis])
         ax.set_ylim([-maxXAxis, maxXAxis])
         ax.set_zlim([-maxXAxis, maxXAxis])
-        ax.set_aspect('equal')
+        
         print("ROTATION", set_view(plane))
         toplot = set_view(plane).dot(Tpos[state][p])
         color_to_plot = np.array(color_array[state][p])
@@ -376,7 +377,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
         ax.set_xlim([-maxXAxis, maxXAxis])
         ax.set_ylim([-maxXAxis, maxXAxis])
         ax.set_zlim([-maxXAxis, maxXAxis])
-        ax.set_aspect('equal')
+        
         axlims = [a for b in ax.get_position().get_points() for a in b]
         rec = Rectangle((axlims[0],axlims[1]),(axlims[2]-axlims[0]),(axlims[3]-axlims[1]), transform = fig.transFigure, fill=False,lw=3, color="k")
         fig.patches.append(rec)
@@ -662,7 +663,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
     ax.set_xlim([-maxXAxis, maxXAxis])
     ax.set_ylim([-maxXAxis, maxXAxis])
     ax.set_zlim([-maxXAxis, maxXAxis])
-    ax.set_aspect('equal')    
+        
     
     # Displacements without stretching (for plotting)
     disps_total = Apos_map - Bpos
@@ -674,7 +675,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
     ax.set_xlim([-maxXAxis, maxXAxis])
     ax.set_ylim([-maxXAxis, maxXAxis])
     ax.set_zlim([-maxXAxis, maxXAxis])
-    ax.set_aspect('equal')
+    
     fig.savefig(outdir+'/DispLattice.svg')
     
     # Displacement with stretching
@@ -692,7 +693,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
     ax.set_xlim([-maxXAxis, maxXAxis])
     ax.set_ylim([-maxXAxis, maxXAxis])
     ax.set_zlim([-maxXAxis, maxXAxis])
-    ax.set_aspect('equal')
+    
 
     def animate(i):
         if i<180:
@@ -738,7 +739,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
     ax.set_xlim([-maxXAxis, maxXAxis])
     ax.set_ylim([-maxXAxis, maxXAxis])
     ax.set_zlim([-maxXAxis, maxXAxis])
-    ax.set_aspect('equal')
+    
     for i in range(len(vec_classes)):
         disps_class = disps[:,class_list==i]
         ndisps = np.shape(disps_class)[1]
@@ -1002,7 +1003,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
         ax.set_xlim([-maxXAxis, maxXAxis])
         ax.set_ylim([-maxXAxis, maxXAxis])
         ax.set_zlim([-maxXAxis, maxXAxis])
-        ax.set_aspect('equal')
+        
         fig.savefig(outdir+'/Displacement_structure.svg')
         return fig,
     
@@ -1096,7 +1097,6 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
     ax.set_xlim([-maxXAxis, maxXAxis])
     ax.set_ylim([-maxXAxis, maxXAxis])
     ax.set_zlim([-maxXAxis, maxXAxis])
-    ax.set_aspect('equal')
     fig.savefig(outdir+'/DispLattice_stretched_cell_primitive.svg')
 
     plt.show() #TMP

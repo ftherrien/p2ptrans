@@ -7,9 +7,9 @@ flags = --f90exec=gfortran --f90flags="-fopenmp" --opt=-O3 -lgomp
 
 #-I/usr/lib64/openmpi/lib/ -L/usr/lib64/openmpi/lib/ -lmpi
 
-all: p2ptrans
+all: fmodules
 
-p2ptrans: $(files) lap.f90
+fmodules: $(files) lap.f90
 	$(COMP) -c -fPIC lap.f90	
 	$(COMP2) -c $(flags) -I. lap.o -m $@ $(files) only: $(functions)
 
