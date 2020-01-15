@@ -15,15 +15,19 @@ import warnings
 from format_spglib import from_spglib, to_spglib
 from spglib import get_spacegroup
 
+# Color styles
 colorlist=['#929591', 'r', 'k','b','#06470c','#ceb301', '#9e0168', '#26f7fd', '#f97306', '#c20078']
 reccolor=['blue','green','red']
 
-pca = False
 
-# Tolerence for structure identification
+# Extra Params +++++++++++++++++++
 tol = 1e-5
 tol_vol = 2*1e-3
 tol_uvw = 1e-6
+pca = False
+nrep = 1
+# ++++++++++++++++++++++++++++++++
+
 def readOptions():
 
     parser = argparse.ArgumentParser()
@@ -32,8 +36,8 @@ def readOptions():
     parser.add_argument("-n","--ncell",dest="ncell",type=int, default=300, help="Number of cells to tile")
     parser.add_argument("-d","--display",dest="display",action="store_true", default=False, help="Unable interactive display")
     parser.add_argument("-p","--param", dest="filename", type=str, default='./p2p.in', help="Parameter file")
-    parser.add_argument("-o","--outdir",dest="outdir",type=str, default='.', help="Output directory")
-    parser.add_argument("-u","--use",dest="use",action="store_true", default=False, help="Use previously calculated data")
+    parser.add_argument("-o","--outdir",dest="outdir", type=str, default='.', help="Output directory")
+    parser.add_argument("-u","--use",dest="use", type=str, default=None, help="Use previously calculated data")
     parser.add_argument("-s","--switch",dest="switch",action="store_true", default=False, help="Map the larger cell on the smaller cell")
     parser.add_argument("-r","--noprim",dest="prim",action="store_false", default=True, help="Finds the primitive cell at the beginning") #TMP
     parser.add_argument("-a","--anim",dest="anim",action="store_true", default=False, help="Produce the animation") #TMP
@@ -47,8 +51,12 @@ def readOptions():
     ncell = options.ncell
     filename = options.filename
     display = options.display
-    outdir = options.outdir
-    use = options.use
+    if options.use == None:
+        use = False
+        outdir = options.outdir
+    else:
+        use = True
+        outdir = options.use
     switch = options.switch
     prim = options.prim
     anim = options.anim
@@ -136,14 +144,6 @@ def find_cell(class_list, positions, tol = 1e-5, frac_shell = 0.5, frac_correct 
                 maxj = len(idx)
             count = 0
 
-            # for j in range(len(pos.T)):
-            #     if abs(pos[2,idx[j]]) < 1:
-            #         print("---", pos[:,idx[j]].T)
-            #     elif abs(pos[2,idx[j]]) > 13.1:
-            #         print("+++", pos[:,idx[j]].T)
-            #     else:
-            #         print(pos[:,idx[j]].T)
-
             for j in range(minj, maxj):
                 if not loop:
                     mink = j+1
@@ -208,7 +208,6 @@ def find_cell(class_list, positions, tol = 1e-5, frac_shell = 0.5, frac_correct 
                                 genPos = genPos + origin.dot(np.ones((1,np.shape(genPos)[1])))
         
                                 if np.sum(la.norm(genPos - cm.dot(np.ones((1,np.shape(genPos)[1]))), axis = 0) < frac_shell * np.max(norms) - tol) == np.sum(norms < frac_shell * np.max(norms) - tol):
-                                    print("Found cell!")
                                     return newcell, origin
                     else:
                         continue
@@ -218,8 +217,9 @@ def find_cell(class_list, positions, tol = 1e-5, frac_shell = 0.5, frac_correct 
                 break
             print("WARNING: Could not find periodic cell using displacement %d. Increase sample size or use results with care."%i)
         print("WARNING: Could not find cell using shortest distances, trying random order") 
-    raise RuntimeError("Could not find periodic cell for any displacement. Increase sample size.")                
-
+    print("WARNING: Could not find periodic cell for any displacement. Increase sample size.")                
+    return None, None
+    
 def lcm(x, y):
    """This function takes two
    integers and returns the L.C.M."""
@@ -277,6 +277,75 @@ def set_view(p,angle=0):
     return la.inv(np.array([v1*np.cos(angle) + v2*np.sin(angle), -v1*np.sin(angle) + v2*np.cos(angle),
                      p]).T)
 
+def createStructure(A, ncell, *atom_types):
+
+    """ 
+    Creates a spherical set of atoms.
+  
+    The center of the set of point is defined by the origin of structures A.
+
+    Parameters: 
+    A (Structure): Crystal Structure from which to create the set of points  
+
+    ncell (int): Number of A unit cells in the set of point
+
+    atom_types (np.array): (optional) if provided indicates the atom type (specie) for each section of the output
+
+    Returns: 
+    np.array: 3*ncell of real number representing atomic positions. Divided into sections according to atom_types. In each section atoms are ordered from the closest to the furthest from the center of the sphere. 
+    np.array: 1*natoms array indicates the number of ncell slots for each type of atoms in each section of the first output.
+    np.array: (optional) if atom_types was no provided as an input it is provided as an output
+
+    """
+
+    Acell = A.cell*float(A.scale)
+    
+    if atom_types == ():
+
+        # Adds atoms to A and B (for cell with different types of atoms)
+        Apos = []
+        atom_types = np.array([], np.str)
+        atomsA = np.array([], np.int)
+        for a in A:
+            if any(atom_types == a.type):
+                idx = np.where(atom_types == a.type)[0][0]
+                Apos[idx] = np.concatenate((Apos[idx], t.sphere(Acell, ncell, a.pos*float(A.scale))), axis = 1) 
+
+                # Order the atoms with respect to distance
+                Apos[idx] = Apos[idx][:,np.argsort(la.norm(Apos[idx],axis=0))] 
+                atomsA[idx] += 1
+            else:
+                Apos.append(t.sphere(Acell, ncell, a.pos*float(A.scale)))
+                atom_types = np.append(atom_types, a.type)
+                atomsA = np.append(atomsA,1)
+        
+        return (np.concatenate(Apos, axis=1), atomsA, atom_types)
+
+    elif len(atom_types) == 1 and type(atom_types[0]) == np.ndarray:
+
+        atom_types = atom_types[0]
+        Apos = [None]*len(atom_types)
+        atomsA = np.zeros(len(atom_types), np.int)
+        for a in A:
+            idx = np.where(atom_types == a.type)[0][0]
+            if atomsA[idx] == 0:
+                Apos[idx] = t.sphere(Acell, ncell, a.pos*float(A.scale))
+            else:
+                Apos[idx] = np.concatenate((Apos[idx], t.sphere(Acell, ncell, a.pos*float(A.scale))), axis = 1) 
+                # Order the atoms with respect to distance
+                Apos[idx] = Apos[idx][:,np.argsort(la.norm(Apos[idx],axis=0))]
+            atomsA[idx] += 1
+        
+        return (np.concatenate(Apos, axis=1), atomsA)
+
+    else:
+        raise ValueError("The only optional argument must be atom_types")
+    
+def atCenter(pos):
+    """ Align the center of mass of any 3*n array to the origin """
+    n = np.shape(pos)[1]
+    return  pos - (np.sum(pos,axis=1).reshape((3,1))/n).dot(np.ones((1,n)))
+
 def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, anim, vol):
 
     on_top = None
@@ -303,12 +372,9 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
         ax.set_ylim([-maxXAxis, maxXAxis])
         ax.set_zlim([-maxXAxis, maxXAxis])
         
-        print("ROTATION", set_view(plane))
         toplot = set_view(-plane).dot(Tpos[state][p])
         color_to_plot = np.array(color_array[state][p])
-        # idxx = np.argsort(toplot.T.dot(transStruc[state].cell.dot(viewDirs[p]).reshape(3,1)), axis=0).T[0]
         idxx = np.argsort(toplot[2,:])
-        print("IDXX", idxx)
         toplot = toplot[:,idxx]
         color_to_plot = color_to_plot[idxx]
         ax.set_axis_off()
@@ -484,28 +550,57 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
         
         return n_class
 
-    if not os.path.exists(outdir):
-        os.makedirs(outdir)
-    
-    A = read.poscar(fileA)
-    B = read.poscar(fileB)
+    # If reusing a result load the info
+    if use:
+        
+        A, B, ncell, filecontent, switch, prim, vol = pickle.load(open(outdir+"/param.dat","rb"))
+        
+        print("==>Using results from %s<=="%(outdir))
+        print("The input for that run were:")
+        print("---------------------------------------")
+        print("A:", A)
+        print("B:", B)
+        print("ncell:", ncell)
+        print("Param file:")
+        for l in filecontent:
+            print(l.rstrip())
+        print("switch:", switch)
+        print("prim:", prim)
+        print("vol:", vol)
+        print("---------------------------------------")
 
+    else:
+
+        # Set up the output directory
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)                
+                
+        # Read the structure files
+        A = read.poscar(fileA)
+        B = read.poscar(fileB)
+
+        with open(filename, "r") as f:
+            filecontent = f.readlines()
+
+        # Save the parameters for the use function
+        pickle.dump((A, B, ncell, filecontent, switch, prim, vol), open(outdir+"/param.dat","wb"))
+                
+    # Make the structure primitive (default)
     if prim:
         print("Making the cells primitive.")
         A = primitive(A, tol)
         B = primitive(B, tol)
-    
-    print("POSCARS")
-    print(A)
-    print(B)
 
+    # Make sure they have the same number of atoms
     mul = lcm(len(A),len(B))
     mulA = mul//len(A)
     mulB = mul//len(B)
 
     Acell = A.cell*float(A.scale)
     Bcell = B.cell*float(B.scale)
-            
+    
+    # Transformations is always from A to B. Unless switch is True, the more dense structure
+    # is set as B
     if (abs(mulA*la.det(Acell)) < abs(mulB*la.det(Bcell))) != switch: # (is switched?) != switch
         print("Transition from %s to %s"%(fileB, fileA))
         tmp = deepcopy(B)
@@ -520,13 +615,15 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
     else:
         print("Transition from %s to %s"%(fileA, fileB))
 
+    # If vol is true the volumes are made equal
     if vol:
         normalize = (abs(mulA*la.det(Acell)) / abs(mulB*la.det(Bcell)))**(1./3.)
         Bcell = normalize*Bcell
         B.cell = Bcell
         for b in B:
-            b.pos = normalize*b.pos
-
+            b.pos = normalize*b.pos*float(B.scale)
+        B.scale = 1
+        
     initSpg = get_spacegroup(to_spglib(A), symprec=0.3, angle_tolerance=3.0)
     finalSpg = get_spacegroup(to_spglib(B), symprec=0.3, angle_tolerance=3.0)
             
@@ -536,117 +633,78 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
     print("Number of Bcells in sphere:", mulB*ncell)
     print("Number of Acells in sphere:", mulA*ncell)
     print("Number of atoms in sphere:", mulA*ncell*len(A))
-    
-    tmat = np.eye(3)
-    found = False
-    rep = 0
-    while (not found and rep < 1):
-        rep += 1
-        found = True
-        
-        # Adds atoms to A and B (for cell with different types of atoms)
-        Apos = []
-        atom_types = np.array([], np.str)
-        atomsA = np.array([], np.int)
-        for a in A:
-            if any(atom_types == a.type):
-                idx = np.where(atom_types == a.type)[0][0]
-                Apos[idx] = np.concatenate((Apos[idx], t.sphere(Acell, mulA*ncell, a.pos*float(A.scale))), axis = 1) 
 
-                # Order the atoms in terms of distance
-                Apos[idx] = Apos[idx][:,np.argsort(la.norm(Apos[idx],axis=0))] 
-                atomsA[idx] += 1
-            else:
-                Apos.append(t.sphere(Acell, mulA*ncell, a.pos*float(A.scale)))
-                atom_types = np.append(atom_types, a.type)
-                atomsA = np.append(atomsA,1)
-        
-        Apos = np.concatenate(Apos, axis=1)
-        
-        # Temporarly stretching Bcell, for tiling
-        Bcell = tmat.dot(Bcell)
-
-        Bpos = [None]*len(atom_types)
-        atomsB = np.zeros(len(atom_types), np.int)
-        for a in B:
-            idx = np.where(atom_types == a.type)[0][0]
-            if atomsB[idx] == 0:
-                Bpos[idx] = t.sphere(Bcell, mulB*ncell, tmat.dot(a.pos)*float(B.scale))
-            else:
-                Bpos[idx] = np.concatenate((Bpos[idx], t.sphere(Bcell, mulB*ncell, tmat.dot(a.pos)*float(B.scale))), axis = 1) 
-                # Order the atoms in terms of distance
-                Bpos[idx] = Bpos[idx][:,np.argsort(la.norm(Bpos[idx],axis=0))]
-            atomsB[idx] += 1
-        
-        Bpos = np.concatenate(Bpos, axis=1)
-
-        Bpos = la.inv(tmat).dot(Bpos)
-        Bcell = la.inv(tmat).dot(Bcell)
+    if not use:
+        # This loop will repeat the entire minimization if no periodic cell can be found
+        # the final tmat is used to retile the structures (off by default)
+        tmat = np.eye(3)
+        foundcell = None
+        rep = 0
+        while (rep < nrep and foundcell is None):
+            if rep != 0:
+                print("_____RESTARTING_____")
             
-        assert all(mulA*atomsA == mulB*atomsB)
-        atoms = mulA*atomsA
+            rep += 1
         
-        if not use:
+            Apos, atomsA, atom_types = createStructure(A, mulA*ncell) # Create Apos
+            
+            # Temporarly stretching Bcell, for tiling
+            Btmp = deepcopy(B)
+            Btmp.cell = tmat.dot(B.cell)
+            for b in Btmp:
+                b.pos = tmat.dot(b.pos)
+        
+            Bpos, atomsB = createStructure(Btmp, mulB*ncell, atom_types) # Create Bpos
+        
+            Bpos = la.inv(tmat).dot(Bpos)
+        
+            assert all(mulA*atomsA == mulB*atomsB)
+            atoms = mulA*atomsA
+            
             Apos = np.asfortranarray(Apos)
             Bpos = np.asfortranarray(Bpos)
-            tr.center(Bpos)
-            oldBpos = np.asanyarray(deepcopy(Bpos))
             t_time = time.time()
             Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, vec = tr.fastoptimization(Apos, Bpos, Acell, la.inv(Acell), mulA * la.det(Acell)/(mulB * la.det(Bcell)), atoms, filename)
             t_time = time.time() - t_time
             Bpos = np.asanyarray(Bpos)
             Apos = np.asanyarray(Apos)
-
-            print("Mapping time:", t_time)
-                        
-            pickle.dump((Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin), open(outdir+"/fastoptimization.dat","wb"))
-        
-        else:
-            print("Using data from "+outdir+"/fastoptimization.dat")
-            Apos = np.asfortranarray(Apos)
-            Bpos = np.asfortranarray(Bpos) 
-            tr.center(Apos)
-            tr.center(Bpos)
-            oldBpos = np.asanyarray(deepcopy(Bpos))
-            Apos_map, Bpos, Bposst, n_map, natA , class_list, tmat, dmin = pickle.load(open(outdir+"/fastoptimization.dat","rb"))
-            Bpos = np.asanyarray(Bpos)
-            Apos = np.asanyarray(Apos)
-
-        class_list = class_list[:n_map]-1
-
-        print("Number of classes:", len(np.unique(class_list)))
-
-        Bpos = Bpos[:,:n_map]
-        Bposst = Bposst[:,:n_map]
-        Apos_map = Apos_map[:,:n_map]
-
-        for class_type in np.unique(class_list):
-            print("Class:", class_type)
-            print("n:", np.sum(class_list == class_type))
-            id = np.where([class_list==class_type])[1][0]
-            print("value:", Apos_map[:,id] - Bposst[:,id], la.norm(Apos_map[:,id] - Bposst[:,id])) 
             
-        print("Number of mapped atoms:", n_map)
-        print("Total distance between structures:", dmin)
-        dmin = sum(np.sqrt(sum((Apos_map - Bpos)**2,0)))
-        print("Total distance between structures in python:", dmin)
-
-        natB = n_map // np.sum(atoms)
-        nat_map = n_map // np.sum(atoms)
-        nat = np.shape(Apos)[1] // np.sum(atoms)
-
-        try:
+            print("Mapping time:", t_time)
+            
+            class_list = class_list[:n_map]-class_list[:n_map].min()
+        
+            Bpos = Bpos[:,:n_map]
+            Bposst = Bposst[:,:n_map]
+            Apos_map = Apos_map[:,:n_map] 
+        
+            if abs(abs(la.det(tmat)) - abs(mulA * la.det(Acell)/(mulB * la.det(Bcell)))) > tol_vol and rep < nrep:
+                print("Warning: The volume factor is wrong.")
+                
             print("Looking for periodic cell...")        
             foundcell, origin = find_cell(class_list, Bposst)
-            if abs(abs(la.det(tmat)) - abs(mulA * la.det(Acell)/(mulB * la.det(Bcell)))) > tol_vol:
-                found = False
-                print("The volume factor is wrong.")
-                print("_____RESTARTING_____")
-        except RuntimeError:
-            print("Could not find periodic cell")
-            print("_____RESTARTING_____")
-            found = False
 
+            print(class_list)
+            
+            if foundcell is not None:
+                print("Found cell!")
+            else:
+                print("Could not find periodic cell")
+                
+        pickle.dump((Apos, Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, atoms, atom_types, foundcell, origin), open(outdir+"/fastoptimization.dat","wb"))
+
+    else:
+        Apos, Apos_map, Bpos, Bposst, n_map, natA , class_list, tmat, dmin, atoms, atom_types, foundcell, origin = pickle.load(open(outdir+"/fastoptimization.dat","rb"))
+
+    natB = n_map // np.sum(atoms)
+    nat_map = n_map // np.sum(atoms)
+    nat = np.shape(Apos)[1] // np.sum(atoms)
+
+    print("Number of classes:", len(np.unique(class_list)))
+    print("Number of mapped atoms:", n_map)
+    print("Total distance between structures:", dmin)
+    dmin = sum(np.sqrt(sum((Apos_map - Bpos)**2,0)))
+    print("Total distance between structures in python:", dmin)
+            
     # Plotting the Apos and Bpos overlayed
     fig = plt.figure(22)
     ax = fig.add_subplot(111, projection='3d')
@@ -762,7 +820,7 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
     if display:
         plt.show()
 
-    if not found:
+    if foundcell is None:
         raise RuntimeError("Could not find good displacement cell. Increase system size")
 
     cell = foundcell
