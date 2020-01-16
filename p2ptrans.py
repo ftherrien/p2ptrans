@@ -26,6 +26,7 @@ tol_vol = 2*1e-3
 tol_uvw = 1e-6
 pca = False
 nrep = 1
+gif = False
 # ++++++++++++++++++++++++++++++++
 
 def readOptions():
@@ -34,7 +35,8 @@ def readOptions():
     parser.add_argument("-I","--initial",dest="A",type=str, default='./POSCAR_A', help="Initial Structure")
     parser.add_argument("-F","--final",dest="B",type=str, default='./POSCAR_B', help="Final Structure")
     parser.add_argument("-n","--ncell",dest="ncell",type=int, default=300, help="Number of cells to tile")
-    parser.add_argument("-d","--display",dest="display",action="store_true", default=False, help="Unable interactive display")
+    parser.add_argument("-i","--interactive",dest="interactive",action="store_true", default=False, help="Enables interactive display")
+    parser.add_argument("-d","--disp",dest="savedisplay",action="store_true", default=False, help="Saves figures")
     parser.add_argument("-p","--param", dest="filename", type=str, default='./p2p.in', help="Parameter file")
     parser.add_argument("-o","--outdir",dest="outdir", type=str, default='.', help="Output directory")
     parser.add_argument("-u","--use",dest="use", type=str, default=None, help="Use previously calculated data")
@@ -50,7 +52,8 @@ def readOptions():
     fileB = options.B
     ncell = options.ncell
     filename = options.filename
-    display = options.display
+    savedisplay = options.savedisplay
+    interactive = options.interactive
     if options.use == None:
         use = False
         outdir = options.outdir
@@ -62,7 +65,7 @@ def readOptions():
     anim = options.anim
     vol = options.vol
     
-    return fileA, fileB, ncell, filename, display, outdir, use, switch, prim, anim, vol
+    return fileA, fileB, ncell, filename, interactive, savedisplay, outdir, use, switch, prim, anim, vol
 
 def normal(A):
     return A/np.ones((3,1)).dot(la.norm(A, axis=0).reshape((1,np.shape(A)[1])))
@@ -346,15 +349,124 @@ def atCenter(pos):
     n = np.shape(pos)[1]
     return  pos - (np.sum(pos,axis=1).reshape((3,1))/n).dot(np.ones((1,n)))
 
-def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, anim, vol):
+def displayOptimalResult(Apos, Bpos, Bposst, disps_total, disps, class_list,
+                         vec_classes, nat, natA, natB, atoms, savedisplay, interactive):
+    
+    fig = plt.figure("Optimal Result", figsize=(15,5))
+
+    # Left-most pannel: All atoms and connections only rigid rotation
+    ax = fig.add_subplot(131, projection='3d')
+    ax.set_title('Optimal result (rigid rotation)')
+    maxXAxis = np.max([Apos.max(), Bpos.max()]) + 1
+    ax.set_xlim([-maxXAxis, maxXAxis])
+    ax.set_ylim([-maxXAxis, maxXAxis])
+    ax.set_zlim([-maxXAxis, maxXAxis])
+    num_tot = 0
+
+    for i,num in enumerate(atoms):
+        ax.scatter(Apos.T[num_tot*nat:num_tot*nat+natA*num+1,0],Apos.T[num_tot*nat:num_tot*nat+natA*num+1,1],Apos.T[num_tot*nat:num_tot*nat+natA*num+1,2], c=colorlist[2*i])
+        ax.scatter(Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,0],Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,1],Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,2], c=colorlist[2*i], alpha=0.1)
+        ax.scatter(Bpos.T[natB*num_tot:natB*(num_tot+num),0],Bpos.T[natB*num_tot:natB*(num_tot+num),1], Bpos.T[natB*num_tot:natB*(num_tot+num),2], c=colorlist[2*i+1])
+        num_tot = num_tot + num
+
+    # # This could be useful in certain cases to know how much th structures were displaced
+    # centerofmassA = np.mean(Apos,axis=1)
+    # centerofmassB = np.mean(Bpos,axis=1)
+
+    # ax.scatter(centerofmassA[0], centerofmassA[1], centerofmassA[2], s=60, c='red')
+    # ax.scatter(centerofmassB[0], centerofmassB[1], centerofmassB[2], s=60, c='green')
+    
+    for i in range(len(vec_classes)):
+        disps_class = disps_total[:,class_list==i]
+        Bpos_class = Bpos[:,class_list==i]
+        ndisps = np.shape(disps_class)[1]
+        ax.quiver(Bpos_class.T[:,0], Bpos_class.T[:,1], Bpos_class.T[:,2], disps_class.T[:,0], disps_class.T[:,1], disps_class.T[:,2], color=colorlist[i%10])
+
+    # Middle-panel
+    ax = fig.add_subplot(132, projection='3d')
+    ax.set_title('Optimal result (stretched)')
+    maxXAxis = np.max([Apos.max(), Bposst.max()]) + 1
+    ax.set_xlim([-maxXAxis, maxXAxis])
+    ax.set_ylim([-maxXAxis, maxXAxis])
+    ax.set_zlim([-maxXAxis, maxXAxis])
+    num_tot = 0
+    for i,num in enumerate(atoms):
+        ax.scatter(Apos.T[num_tot*nat:num_tot*nat+natA*num+1,0],Apos.T[num_tot*nat:num_tot*nat+natA*num+1,1],Apos.T[num_tot*nat:num_tot*nat+natA*num+1,2], c=colorlist[2*i])
+        ax.scatter(Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,0],Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,1],Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,2], c=colorlist[2*i], alpha=0.1)
+        ax.scatter(Bposst.T[natB*num_tot:natB*(num_tot+num),0],Bposst.T[natB*num_tot:natB*(num_tot+num),1], Bposst.T[natB*num_tot:natB*(num_tot+num),2], c=colorlist[2*i+1])
+        num_tot = num_tot + num
+
+    for i in range(len(vec_classes)):
+        disps_class = disps[:,class_list==i]
+        Bposst_class = Bposst[:,class_list==i]
+        ndisps = np.shape(disps_class)[1]
+        ax.quiver(Bposst_class.T[:,0], Bposst_class.T[:,1], Bposst_class.T[:,2], disps_class.T[:,0], disps_class.T[:,1], disps_class.T[:,2], color=colorlist[i%10])
+
+    # Right-panel
+    ax = fig.add_subplot(133, projection='3d')
+    ax.set_title('Displacement Classes')
+    maxXAxis = disps.max()
+    ax.set_xlim([-maxXAxis, maxXAxis])
+    ax.set_ylim([-maxXAxis, maxXAxis])
+    ax.set_zlim([-maxXAxis, maxXAxis])
+    
+    for i in range(len(vec_classes)):
+        disps_class = disps[:,class_list==i]
+        ndisps = np.shape(disps_class)[1]
+        ax.quiver(np.zeros((1,ndisps)), np.zeros((1,ndisps)), np.zeros((1,ndisps)), disps_class.T[:,0], disps_class.T[:,1], disps_class.T[:,2], color=colorlist[i%10])
+
+    if savedisplay:
+        fig.savefig(outdir+'/optimalRes.svg')
+
+    if interactive:
+        plt.show()
+
+def makeGif(Apos, Bposst, disps, vec_classes, nat, atoms):
+    fig = plt.figure("gif")
+    ax = fig.add_subplot(111, projection='3d')
+    def animate(i):
+        if i<180:
+            ax.view_init(30,i)
+        elif i<240:
+            ax.view_init(30,360-i)
+        elif i<300:
+            ax.view_init(i-210,120)
+        else:
+            ax.view_init(390-i,120)
+        return fig,
+    
+    # Plotting the Apos and Bposst overlayed
+    def init_disps():
+        num_tot = 0
+        for i,num in enumerate(atoms):
+            ax.scatter(Apos.T[num_tot*nat:num_tot*nat+natA*num+1,0],Apos.T[num_tot*nat:num_tot*nat+natA*num+1,1],Apos.T[num_tot*nat:num_tot*nat+natA*num+1,2], c=colorlist[2*i])
+            ax.scatter(Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,0],Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,1],Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,2], c=colorlist[2*i], alpha=0.1)
+            ax.scatter(Bposst.T[natB*num_tot:natB*(num_tot+num),0],Bposst.T[natB*num_tot:natB*(num_tot+num),1], Bposst.T[natB*num_tot:natB*(num_tot+num),2], c=colorlist[2*i+1])
+            num_tot = num_tot + num
+    
+        for i in range(len(vec_classes)):
+            disps_class = disps[:,class_list==i]
+            Bposst_class = Bposst[:,class_list==i]
+            ndisps = np.shape(disps_class)[1]
+            ax.quiver(Bposst_class.T[:,0], Bposst_class.T[:,1], Bposst_class.T[:,2], disps_class.T[:,0], disps_class.T[:,1], disps_class.T[:,2], color=colorlist[i%10])
+        fig.savefig(outdir+'/DispLattice_stretched.svg')
+        return fig,
+    
+    anim = animation.FuncAnimation(fig, animate, init_func=init_disps,
+                                   frames=490, interval=30)
+    anim.save(outdir+'/Crystal+Disps.gif', fps=30, codec='gif')
+
+def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay, outdir, use, switch, prim, anim, vol):
 
     on_top = None
 
     os.makedirs(outdir, exist_ok=True)
 
-    if not display:
+    if not interactive:
         matplotlib.use('Agg')
 
+    global plt
+        
     import matplotlib.pyplot as plt
 
     plt.rcParams["figure.figsize"] = [5, 5]
@@ -550,16 +662,32 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
         
         return n_class
 
+    # START
+    print(" ________    _______  ________   ")   
+    print("|\\   __  \\  /  ___  \\|\\   __  \\  ")
+    print("\\ \\  \\|\\  \\/__/|_/  /\\ \\  \\|\\  \\ ")
+    print(" \\ \\   ____\\__|//  / /\\ \\   ____\\")
+    print("  \\ \\  \\___|   /  /_/__\\ \\  \\___|")
+    print("   \\ \\__\\     |\\________\\ \\__\\   ")
+    print("    \\|__|      \\|_______|\\|__|   ")
+    print()
+    print("__________TRANSFORMATIONS__________")
+    print()
+    
     # If reusing a result load the info
     if use:
+
+        fileA = "File 1"
+        fileB = "File 2"
         
         A, B, ncell, filecontent, switch, prim, vol = pickle.load(open(outdir+"/param.dat","rb"))
-        
-        print("==>Using results from %s<=="%(outdir))
-        print("The input for that run were:")
-        print("---------------------------------------")
-        print("A:", A)
-        print("B:", B)
+
+        print("==>Using information from %s<=="%(outdir))
+        print()
+        print("The inputs for that run were:")
+        print("-----------------------------------")
+        print("File 1:", A)
+        print("File 2:", B)
         print("ncell:", ncell)
         print("Param file:")
         for l in filecontent:
@@ -567,7 +695,8 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
         print("switch:", switch)
         print("prim:", prim)
         print("vol:", vol)
-        print("---------------------------------------")
+        print("-----------------------------------")
+        print()
 
     else:
 
@@ -587,10 +716,21 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
                 
     # Make the structure primitive (default)
     if prim:
+        lenA = len(A)
+        lenB = len(B)
         print("Making the cells primitive.")
         A = primitive(A, tol)
         B = primitive(B, tol)
-
+        if len(A) == lenA:
+            print("%s (%s) did not change."%(A.name, fileA))
+        else:
+            print("The size of %s (%s) changed from %d to %d."%(A.name, fileA, lenA, len(A)))
+        if len(B) == lenB:
+            print("%s (%s) did not change."%(B.name, fileB))
+        else:
+            print("The size of %s (%s) changed from %d to %d."%(B.name, fileB, lenB, len(B)))
+        print()
+            
     # Make sure they have the same number of atoms
     mul = lcm(len(A),len(B))
     mulA = mul//len(A)
@@ -602,18 +742,8 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
     # Transformations is always from A to B. Unless switch is True, the more dense structure
     # is set as B
     if (abs(mulA*la.det(Acell)) < abs(mulB*la.det(Bcell))) != switch: # (is switched?) != switch
-        print("Transition from %s to %s"%(fileB, fileA))
-        tmp = deepcopy(B)
-        tmpmul = mulB
-        tmpcell = Bcell
-        B = deepcopy(A)
-        mulB = mulA
-        Bcell = Acell
-        A = tmp
-        mulA = tmpmul
-        Acell = tmpcell
-    else:
-        print("Transition from %s to %s"%(fileA, fileB))
+        A, mulA, Acell, fileA, B, mulB, Bcell, fileB = B, mulB, Bcell, fileB, A, mulA, Acell, fileA
+    print("Transition from %s (%s) to %s (%s)"%(A.name, fileA, B.name, fileB))
 
     # If vol is true the volumes are made equal
     if vol:
@@ -630,11 +760,13 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
     print("Initial SpaceGroup:", initSpg)
     print("Final SpaceGroup:", finalSpg)
 
-    print("Number of Bcells in sphere:", mulB*ncell)
-    print("Number of Acells in sphere:", mulA*ncell)
-    print("Number of atoms in sphere:", mulA*ncell*len(A))
+    print("Number of %s (%s) cells in sphere"%(A.name, fileA), mulA*ncell)
+    print("Number of %s (%s) cells in sphere:"%(B.name, fileB), mulB*ncell)
+    print("Total number of atoms in each sphere:", mulA*ncell*len(A))
 
+    print()
     if not use:
+        print("==>Ready to start optimmization<==") 
         # This loop will repeat the entire minimization if no periodic cell can be found
         # the final tmat is used to retile the structures (off by default)
         tmat = np.eye(3)
@@ -693,136 +825,46 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
         pickle.dump((Apos, Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, atoms, atom_types, foundcell, origin), open(outdir+"/fastoptimization.dat","wb"))
 
     else:
+        print("==>Gathering optimization data from %s<=="%(outdir))
         Apos, Apos_map, Bpos, Bposst, n_map, natA , class_list, tmat, dmin, atoms, atom_types, foundcell, origin = pickle.load(open(outdir+"/fastoptimization.dat","rb"))
 
     natB = n_map // np.sum(atoms)
     nat_map = n_map // np.sum(atoms)
     nat = np.shape(Apos)[1] // np.sum(atoms)
 
+    print()
+    print("-------OPTIMIZATION RESULTS--------")
+    print()
     print("Number of classes:", len(np.unique(class_list)))
     print("Number of mapped atoms:", n_map)
     print("Total distance between structures:", dmin)
-    dmin = sum(np.sqrt(sum((Apos_map - Bpos)**2,0)))
-    print("Total distance between structures in python:", dmin)
-            
-    # Plotting the Apos and Bpos overlayed
-    fig = plt.figure(22)
-    ax = fig.add_subplot(111, projection='3d')
-    ax.view_init(0,90) # TMP
-    # ax.scatter(Apos.T[:,0],Apos.T[:,1])
-    num_tot = 0
+    # Centers the position on the first atom    
+    print("Volume stretching factor:", la.det(tmat))
+    print("Cell volume ratio (should be exactly the same):", mulA * la.det(Acell)/(mulB * la.det(Bcell)))
 
-    for i,num in enumerate(atoms):
-        ax.scatter(Apos.T[num_tot*nat:num_tot*nat+natA*num+1,0],Apos.T[num_tot*nat:num_tot*nat+natA*num+1,1],Apos.T[num_tot*nat:num_tot*nat+natA*num+1,2], c=colorlist[2*i])
-        ax.scatter(Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,0],Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,1],Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,2], c=colorlist[2*i], alpha=0.1)
-        ax.scatter(Bpos.T[natB*num_tot:natB*(num_tot+num),0],Bpos.T[natB*num_tot:natB*(num_tot+num),1], Bpos.T[natB*num_tot:natB*(num_tot+num),2], c=colorlist[2*i+1])
-        num_tot = num_tot + num
-    
-    centerofmassA = np.mean(Apos,axis=1)
-    centerofmassB = np.mean(Bpos,axis=1)
-
-    ax.scatter(centerofmassA[0], centerofmassA[1], centerofmassA[2], s=60, c='red')
-    ax.scatter(centerofmassB[0], centerofmassB[1], centerofmassB[2], s=60, c='green')
-
-    maxXAxis = np.max([Apos.max(), Bpos.max()]) + 1
-    ax.set_xlim([-maxXAxis, maxXAxis])
-    ax.set_ylim([-maxXAxis, maxXAxis])
-    ax.set_zlim([-maxXAxis, maxXAxis])
-        
-    
     # Displacements without stretching (for plotting)
     disps_total = Apos_map - Bpos
-    
-    # fig = plt.figure()
-    # ax = fig.add_subplot(111, projection='3d')
-    ax.quiver(Bpos.T[:,0], Bpos.T[:,1], Bpos.T[:,2], disps_total.T[:,0], disps_total.T[:,1], disps_total.T[:,2])
-    maxXAxis = np.max([Apos.max(), Bpos.max()]) + 1
-    ax.set_xlim([-maxXAxis, maxXAxis])
-    ax.set_ylim([-maxXAxis, maxXAxis])
-    ax.set_zlim([-maxXAxis, maxXAxis])
-    
-    fig.savefig(outdir+'/DispLattice.svg')
-    
+
     # Displacement with stretching
     disps = Apos_map - Bposst
 
     vec_classes = np.array([np.mean(disps[:,class_list==d_type], axis=1) for d_type in np.unique(class_list)])
-
+    
     if pca:
         print("PCA found %d classes"%PCA(disps))
     
-    fig = plt.figure()
-    ax = Axes3D(fig)
-    ax.view_init(0,90) # TMP
-    maxXAxis = np.max([Apos.max(), Bposst.max()]) + 1
-    ax.set_xlim([-maxXAxis, maxXAxis])
-    ax.set_ylim([-maxXAxis, maxXAxis])
-    ax.set_zlim([-maxXAxis, maxXAxis])
-    
+    print("Displaying Optimal Connections...")
+    print("(Close the display window to continue)")
 
-    def animate(i):
-        if i<180:
-            ax.view_init(30,i)
-        elif i<240:
-            ax.view_init(30,360-i)
-        elif i<300:
-            ax.view_init(i-210,120)
-        else:
-            ax.view_init(390-i,120)
-        return fig,
-
-    # Plotting the Apos and Bposst overlayed
-    def init_disps():
-        #ax.scatter(Apos.T[:,0],Apos.T[:,1])
-        num_tot = 0
-        for i,num in enumerate(atoms):
-            ax.scatter(Apos.T[num_tot*nat:num_tot*nat+natA*num+1,0],Apos.T[num_tot*nat:num_tot*nat+natA*num+1,1],Apos.T[num_tot*nat:num_tot*nat+natA*num+1,2], c=colorlist[2*i])
-            ax.scatter(Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,0],Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,1],Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,2], c=colorlist[2*i], alpha=0.1)
-            ax.scatter(Bposst.T[natB*num_tot:natB*(num_tot+num),0],Bposst.T[natB*num_tot:natB*(num_tot+num),1], Bposst.T[natB*num_tot:natB*(num_tot+num),2], c=colorlist[2*i+1])
-            num_tot = num_tot + num
-
-        for i in range(len(vec_classes)):
-            disps_class = disps[:,class_list==i]
-            Bposst_class = Bposst[:,class_list==i]
-            ndisps = np.shape(disps_class)[1]
-            ax.quiver(Bposst_class.T[:,0], Bposst_class.T[:,1], Bposst_class.T[:,2], disps_class.T[:,0], disps_class.T[:,1], disps_class.T[:,2], color=colorlist[i%10])
-        fig.savefig(outdir+'/DispLattice_stretched.svg')
-        return fig,
-
-    if anim:
-        anim = animation.FuncAnimation(fig, animate, init_func=init_disps,
-                                       frames=490, interval=30)
-        anim.save(outdir+'/Crystal+Disps.gif', fps=30, codec='gif')
-    else:
-        init_disps()
-    
-
-    # Plotting just the displacements
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    maxXAxis = disps.max()
-    ax.set_xlim([-maxXAxis, maxXAxis])
-    ax.set_ylim([-maxXAxis, maxXAxis])
-    ax.set_zlim([-maxXAxis, maxXAxis])
-    
-    for i in range(len(vec_classes)):
-        disps_class = disps[:,class_list==i]
-        ndisps = np.shape(disps_class)[1]
-        ax.quiver(np.zeros((1,ndisps)), np.zeros((1,ndisps)), np.zeros((1,ndisps)), disps_class.T[:,0], disps_class.T[:,1], disps_class.T[:,2], color=colorlist[i%10])
-    fig.savefig(outdir+'/DispOverlayed.svg')
-    
-    # Centers the position on the first atom    
-    print("Volume stretching factor:", la.det(tmat))
-    print("Cell volume ratio (should be exactly the same):", mulA * la.det(Acell)/(mulB * la.det(Bcell)))
-        
-    print("Showing")
-
-    if display:
-        plt.show()
+    if savedisplay or interactive: 
+        displayOptimalResult(Apos, Bpos, Bposst, disps_total, disps, class_list,
+                             vec_classes, nat, natA, natB, atoms, savedisplay, interactive)
+    if gif:
+        makeGif(Apos, Bposst, disps, vec_classes, nat, atoms)
 
     if foundcell is None:
         raise RuntimeError("Could not find good displacement cell. Increase system size")
-
+    
     cell = foundcell
     
     pos_in_struc = Bposst - origin.dot(np.ones((1,np.shape(Bposst)[1])))
@@ -862,12 +904,10 @@ def p2ptrans(fileA, fileB, ncell, filename, display, outdir, use, switch, prim, 
 
     dispStruc = supercell(dispStruc, cell)
 
-    print("LEN1", len(dispStruc))
-
     # Makes sure it is the primitive cell 
     dispStruc = primitive(dispStruc, tolerance = tol)
 
-    print("LEN2", len(dispStruc))
+    print("Size of the transformation cell:", len(dispStruc))
 
     tmpStruc = Structure(dispStruc.cell)
     to_add = [np.mod(la.inv(dispStruc.cell).dot(a.pos)+tol,1)-tol for a in stinitStruc]

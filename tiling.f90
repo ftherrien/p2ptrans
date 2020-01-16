@@ -153,7 +153,7 @@ module tiling
     nnx = abs(int(rad*norm(Acell(:,2))/area))+1
     nny = abs(int(rad*norm(Acell(:,1))/area))+1
 
-    print*, 'Square cell dimensions:',nnx ,nny
+    ! print*, 'Square cell dimensions:',nnx ,nny
 
     l = 0
     dists = -1
