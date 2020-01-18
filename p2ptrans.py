@@ -15,19 +15,29 @@ import warnings
 from format_spglib import from_spglib, to_spglib
 from spglib import get_spacegroup
 
-# Color styles
+# Default color styles
 colorlist=['#929591', 'r', 'k','b','#06470c','#ceb301', '#9e0168', '#26f7fd', '#f97306', '#c20078']
 reccolor=['blue','green','red']
 
-
-# Extra Params +++++++++++++++++++
+# Default extra parameters +++++++
 tol = 1e-5
 tol_vol = 2*1e-3
 tol_uvw = 1e-6
 pca = False
 nrep = 1
 gif = False
+ftf = True
+ccell1 = np.eye(3)
+ccell2 = np.eye(3)
+planeDir = [1,1,0]
+orDir = [1,-1,-1]
 # ++++++++++++++++++++++++++++++++
+
+
+try:
+    from config import *
+except ModuleNotFoundError:
+    pass
 
 def readOptions():
 
@@ -84,7 +94,7 @@ def find_uvw(stretch_dir, basis = np.eye(3)):
                         cur_dist = la.norm(unit_vec-vec)
                         if cur_dist < min_dist[l]:
                             min_dist[l] = cur_dist
-                            min_uvw[:,l] = np.array([i,j,k]).T
+                            min_uvw[:,l] = np.array([i,j,k], np.int).T
 
         gcd3 = gcd(min_uvw[0,l],gcd(min_uvw[1,l], min_uvw[2,l]))
         min_uvw[:,l] = min_uvw[:,l]/gcd3
@@ -280,7 +290,7 @@ def set_view(p,angle=0):
     return la.inv(np.array([v1*np.cos(angle) + v2*np.sin(angle), -v1*np.sin(angle) + v2*np.cos(angle),
                      p]).T)
 
-def createStructure(A, ncell, *atom_types):
+def makeSphere(A, ncell, *atom_types):
 
     """ 
     Creates a spherical set of atoms.
@@ -349,8 +359,67 @@ def atCenter(pos):
     n = np.shape(pos)[1]
     return  pos - (np.sum(pos,axis=1).reshape((3,1))/n).dot(np.ones((1,n)))
 
-def displayOptimalResult(Apos, Bpos, Bposst, disps_total, disps, class_list,
-                         vec_classes, nat, natA, natB, atoms, savedisplay, interactive):
+def makeStructures(cell, atoms, atom_types, natB, pos_in_struc, class_list, vec_classes):
+    """Make the displacement structure from the repeating unit cell"""
+    
+    # Small function to determine type
+    def whattype(pos, nat):
+
+        pos = pos//nat + 1
+
+        atom_tot = np.sum(np.triu(atoms.reshape((len(atoms),1)).dot(np.ones((1,len(atoms))))), axis=0)
+        
+        return atom_types[np.nonzero(atom_tot >= pos)[0][0]]
+    
+    # Make a pylada structure
+    cell_coord = np.mod(la.inv(cell).dot(pos_in_struc)+tol,1)-tol
+    dispStruc = Structure(cell)
+    stinitStruc = Structure(cell)
+    incell = []
+
+    for idx, disp in zip(*uniqueclose(cell_coord, tol)):
+        for i in idx:
+            if np.allclose(pos_in_struc[:,i], cell.dot(disp), atol=tol):
+                incell.append((i,pos_in_struc[:,i]))
+                break
+        else:
+            i = np.argmin(la.norm(np.array([pos_in_struc[:,j] for j in idx]),axis=1))
+            incell.append((i,cell.dot(disp)))
+        
+    for i, disp in incell:
+        dispStruc.add_atom(*(tuple(disp)+(str(class_list[i]),)))
+        stinitStruc.add_atom(*(tuple(disp)+(whattype(i, natB),)))
+        
+    if la.det(cell) < 0:
+       cell[:,2] = -cell[:,2] 
+
+    # Finds a squarer cell
+    cell = gruber(cell)
+
+    dispStruc = supercell(dispStruc, cell)
+
+    # Makes sure it is the primitive cell 
+    dispStruc = primitive(dispStruc, tolerance = tol)
+
+    tmpStruc = Structure(dispStruc.cell)
+    to_add = [np.mod(la.inv(dispStruc.cell).dot(a.pos)+tol,1)-tol for a in stinitStruc]
+    for idx, pos in zip(*uniqueclose(np.array(to_add).T, tol)):
+        tmpStruc.add_atom(*dispStruc.cell.dot(pos),stinitStruc[idx[0]].type)
+    
+    stinitStruc = tmpStruc
+
+    write.poscar(stinitStruc, vasp5=True, file="POSCAR_init")
+
+    finalStruc = Structure(dispStruc.cell)
+    for i,a in enumerate(dispStruc):
+        finalStruc.add_atom(*(a.pos+vec_classes[int(a.type)]),stinitStruc[i].type)
+
+    return dispStruc, stinitStruc, finalStruc
+    
+def displayOptimalResult(Apos, Bpos, Bposst, disps_total, disps, class_list, vec_classes,
+                         nat, natA, natB, atoms, outdir, savedisplay, interactive):
+
+    """Displays or saves pictures of the optimal result"""
     
     fig = plt.figure("Optimal Result", figsize=(15,5))
 
@@ -417,7 +486,8 @@ def displayOptimalResult(Apos, Bpos, Bposst, disps_total, disps, class_list,
 
     if savedisplay:
         fig.savefig(outdir+'/optimalRes.svg')
-
+        print("Saved display in %s"%(outdir+'/optimalRes.svg'))
+        
     if interactive:
         plt.show()
 
@@ -456,8 +526,46 @@ def makeGif(Apos, Bposst, disps, vec_classes, nat, atoms):
                                    frames=490, interval=30)
     anim.save(outdir+'/Crystal+Disps.gif', fps=30, codec='gif')
 
-def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay, outdir, use, switch, prim, anim, vol):
+def printMatAndDir(A,B):
+    print("--------Matrix--------|------Directions------")
+    print("    v1    v2    v3    |    d1    d2    d3    ")
+    for i, rowA in enumerate(A):
+          rowB = B[i]
+          print(' '.join(["% 5.3f"%(val) for val in rowA]), " |", ' '.join(["%5d"%(val) for val in rowB]))
 
+def strainDirs(tmat):
+
+    if ftf:
+        eigval, P = la.eig(tmat.T.dot(tmat))
+        eigval = np.sqrt(eigval)
+
+        U = P.dot(np.diag(eigval)).dot(P.T)
+
+        invEigval, Q = la.eig(la.inv(tmat).T.dot(la.inv(tmat)))
+        invEigval = np.sqrt(invEigval)
+        idx = np.argsort(1/invEigval)
+        Q = Q[:,idx]
+        
+    else:
+        U = rotate(tmat, np.eye(3)).dot(tmat)
+
+        eigval, P = la.eig(U)
+
+        iU = rotate(la.inv(tmat), np.eye(3)).dot(la.inv(tmat))
+        
+        invEigval, Q = la.eig(iU)
+        invEigval = np.sqrt(invEigval)
+        idx = np.argsort(1/invEigval)
+        Q = Q[:,idx]
+        
+    P = normal(P)
+    
+    Q = normal(Q)
+
+    return eigval, U, P, Q
+    
+def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay, outdir, use, switch, prim, anim, vol):
+    
     on_top = None
 
     os.makedirs(outdir, exist_ok=True)
@@ -713,7 +821,7 @@ def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay, outdir, us
 
         # Save the parameters for the use function
         pickle.dump((A, B, ncell, filecontent, switch, prim, vol), open(outdir+"/param.dat","wb"))
-                
+        
     # Make the structure primitive (default)
     if prim:
         lenA = len(A)
@@ -738,13 +846,17 @@ def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay, outdir, us
 
     Acell = A.cell*float(A.scale)
     Bcell = B.cell*float(B.scale)
+
+    ccellA = ccell1
+    ccellB = ccell2
     
     # Transformations is always from A to B. Unless switch is True, the more dense structure
     # is set as B
     if (abs(mulA*la.det(Acell)) < abs(mulB*la.det(Bcell))) != switch: # (is switched?) != switch
-        A, mulA, Acell, fileA, B, mulB, Bcell, fileB = B, mulB, Bcell, fileB, A, mulA, Acell, fileA
+        A, mulA, Acell, fileA, ccellA, B, mulB, Bcell, fileB, ccellB = B, mulB, Bcell, fileB, ccellB, A, mulA, Acell, fileA, ccellA
     print("Transition from %s (%s) to %s (%s)"%(A.name, fileA, B.name, fileB))
-
+    
+    
     # If vol is true the volumes are made equal
     if vol:
         normalize = (abs(mulA*la.det(Acell)) / abs(mulB*la.det(Bcell)))**(1./3.)
@@ -778,7 +890,7 @@ def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay, outdir, us
             
             rep += 1
         
-            Apos, atomsA, atom_types = createStructure(A, mulA*ncell) # Create Apos
+            Apos, atomsA, atom_types = makeSphere(A, mulA*ncell) # Create Apos
             
             # Temporarly stretching Bcell, for tiling
             Btmp = deepcopy(B)
@@ -786,7 +898,7 @@ def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay, outdir, us
             for b in Btmp:
                 b.pos = tmat.dot(b.pos)
         
-            Bpos, atomsB = createStructure(Btmp, mulB*ncell, atom_types) # Create Bpos
+            Bpos, atomsB = makeSphere(Btmp, mulB*ncell, atom_types) # Create Bpos
         
             Bpos = la.inv(tmat).dot(Bpos)
         
@@ -837,121 +949,53 @@ def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay, outdir, us
     print()
     print("Number of classes:", len(np.unique(class_list)))
     print("Number of mapped atoms:", n_map)
-    print("Total distance between structures:", dmin)
-    # Centers the position on the first atom    
+    print("Total distance between structures:", dmin) 
     print("Volume stretching factor:", la.det(tmat))
     print("Cell volume ratio (should be exactly the same):", mulA * la.det(Acell)/(mulB * la.det(Bcell)))
 
+    print()
+    print("-----------PERIODIC CELL-----------")
+    print()
     # Displacements without stretching (for plotting)
     disps_total = Apos_map - Bpos
 
     # Displacement with stretching
     disps = Apos_map - Bposst
 
+    # Classes of vectors and their value
     vec_classes = np.array([np.mean(disps[:,class_list==d_type], axis=1) for d_type in np.unique(class_list)])
-    
+
+    # Run the PCA analysis if turned on
     if pca:
         print("PCA found %d classes"%PCA(disps))
-    
-    print("Displaying Optimal Connections...")
-    print("(Close the display window to continue)")
 
-    if savedisplay or interactive: 
-        displayOptimalResult(Apos, Bpos, Bposst, disps_total, disps, class_list,
-                             vec_classes, nat, natA, natB, atoms, savedisplay, interactive)
+    # Show and/or save interactive display of optimal result
+    if savedisplay or interactive:
+        print("Displaying Optimal Connections...")
+        if interactive:
+            print("(Close the display window to continue)")
+        displayOptimalResult(Apos, Bpos, Bposst, disps_total, disps, class_list, vec_classes,
+                             nat, natA, natB, atoms, outdir, savedisplay, interactive)
+
+    # Create gif if turned on
     if gif:
         makeGif(Apos, Bposst, disps, vec_classes, nat, atoms)
 
+    # End program if a periodic cell couldn't be found earlier
     if foundcell is None:
         raise RuntimeError("Could not find good displacement cell. Increase system size")
     
-    cell = foundcell
-    
     pos_in_struc = Bposst - origin.dot(np.ones((1,np.shape(Bposst)[1])))
 
-    def whattype(pos, nat):
+    dispStruc, stinitStruc, finalStruc = makeStructures(foundcell, atoms, atom_types,
+                                                        natB, pos_in_struc, class_list, vec_classes)
 
-        pos = pos//nat + 1
-
-        atom_tot = np.sum(np.triu(atoms.reshape((len(atoms),1)).dot(np.ones((1,len(atoms))))), axis=0)
-        
-        return atom_types[np.nonzero(atom_tot >= pos)[0][0]]
+    print("Size of the transformation cell (TC):", len(dispStruc))
     
-    # Make a pylada structure
-    cell_coord = np.mod(la.inv(cell).dot(pos_in_struc)+tol,1)-tol
-    dispStruc = Structure(cell)
-    stinitStruc = Structure(cell)
-    incell = []
-
-    for idx, disp in zip(*uniqueclose(cell_coord, tol)):
-        for i in idx:
-            if np.allclose(pos_in_struc[:,i], cell.dot(disp), atol=tol):
-                incell.append((i,pos_in_struc[:,i]))
-                break
-        else:
-            i = np.argmin(la.norm(np.array([pos_in_struc[:,j] for j in idx]),axis=1))
-            incell.append((i,cell.dot(disp)))
-        
-    for i, disp in incell:
-        dispStruc.add_atom(*(tuple(disp)+(str(class_list[i]),)))
-        stinitStruc.add_atom(*(tuple(disp)+(whattype(i, natB),)))
-        
-    if la.det(cell) < 0:
-       cell[:,2] = -cell[:,2] 
-
-    # Finds a squarer cell
-    cell = gruber(cell)
-
-    dispStruc = supercell(dispStruc, cell)
-
-    # Makes sure it is the primitive cell 
-    dispStruc = primitive(dispStruc, tolerance = tol)
-
-    print("Size of the transformation cell:", len(dispStruc))
-
-    tmpStruc = Structure(dispStruc.cell)
-    to_add = [np.mod(la.inv(dispStruc.cell).dot(a.pos)+tol,1)-tol for a in stinitStruc]
-    for idx, pos in zip(*uniqueclose(np.array(to_add).T, tol)):
-        tmpStruc.add_atom(*dispStruc.cell.dot(pos),stinitStruc[idx[0]].type)
-    
-    stinitStruc = tmpStruc
-
-    write.poscar(stinitStruc, vasp5=True, file="POSCAR_init")
-    
-    assert len(stinitStruc) == len(dispStruc)
-
     cell = dispStruc.cell
 
-    print("VOLUME", la.det(dispStruc.cell))
-    
-    finalStruc = Structure(dispStruc.cell)
-    for i,a in enumerate(dispStruc):
-        print("1", a)
-        print("2", a.pos+vec_classes[int(a.type)])
-        finalStruc.add_atom(*(a.pos+vec_classes[int(a.type)]),stinitStruc[i].type)
-
-    print("Is it a supercell?")
-    print(la.inv(Acell).dot(dispStruc.cell))
-    print(la.inv(tmat.dot(Bcell)).dot(dispStruc.cell))
-
-    print("Number of A cell in dispCell:", la.det(dispStruc.cell)/(mulA*la.det(Acell)))
-    print("Number of B cell in dispCell:", la.det(dispStruc.cell)/(mulB*la.det(tmat.dot(Bcell))))
-
-    print("dispCell in A frame:")
-    print("A coord")
-    print(la.inv(Acell).dot(dispStruc.cell))
-    print(find_uvw(la.inv(Acell).dot(dispStruc.cell)))
-    print("Cartesian Coord.")
-    print(dispStruc.cell)
-    print(find_uvw(dispStruc.cell))
-    print("dispCell in B frame:")
-    print("B coord.")
-    print(la.inv(Bcell).dot(la.inv(tmat).dot(dispStruc.cell)))
-    print(find_uvw(la.inv(Bcell).dot(la.inv(tmat).dot(dispStruc.cell))))
-    print("Cartesian Coord.")
-    print(la.inv(tmat).dot(dispStruc.cell))
-    print(find_uvw(la.inv(tmat).dot(dispStruc.cell)))
-    
+    print("Number of %s (%s) cells in TC:"%(A.name, fileA), abs(la.det(dispStruc.cell)/(mulA*la.det(Acell))))
+    print("Number of %s (%s) cells in TC:"%(B.name, fileB), abs(la.det(dispStruc.cell)/(mulB*la.det(tmat.dot(Bcell)))))
     # Total displacement per unit volume a as metric
     Total_disp = 0
     for disp in dispStruc:
@@ -959,72 +1003,35 @@ def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay, outdir, us
     
     Total_disp = Total_disp / la.det(dispStruc.cell)
     
-    print("Total displacement stretched cell:", Total_disp)
+    print("Total displacement in stretched cell:", Total_disp)
 
-    # Growth directions
+    print()
+    print("TC in %s (%s) coordinates:"%(B.name, fileB))
+    printMatAndDir(la.inv(ccellB).dot(la.inv(tmat).dot(dispStruc.cell)), find_uvw(la.inv(ccellB).dot(la.inv(tmat).dot(dispStruc.cell))))
+    print()
+    print("TC in %s (%s) coordinates:"%(A.name, fileA))
+    printMatAndDir(la.inv(ccellA).dot(dispStruc.cell),find_uvw(la.inv(ccellA).dot(dispStruc.cell)))
+    print()    
+                   
+    eigval, U, P, Q = strainDirs(tmat)
 
-    stMat = rotate(tmat, np.eye(3)).dot(tmat)
+    print("Strain Directions in %s (%s) coordinates:"%(B.name, fileB))
+    print("    d1    d2    d3    ")
+    for i, row in enumerate(find_uvw(la.inv(ccellA).dot(P))):
+      print(' '.join(["%5d"%(val) for val in row]))
+    print()
+    print("Strain Directions in %s (%s) coordinates:"%(A.name, fileA))
+    print("    d1    d2    d3    ")
+    for i, row in enumerate(find_uvw(la.inv(ccellA).dot(Q))):
+      print(' '.join(["%5d"%(val) for val in row]))
+    print()
+    print("Strains + 1 (eigenvalues)"):
+    print("    e1    e2    e3    ")
+    print(' '.join(["% 5.3f"%(val) for val in eigval])) 
 
-    eigval, eigvec = la.eig(stMat)
+    print("----------------------------------------------------")
 
-    # closest uvw for -10 to 10
-
-    print("Exact directions of stretching in B frame")
-    print("B  coord.")
-    print(la.inv(Bcell).dot(eigvec))
-    print(find_uvw(la.inv(Bcell).dot(eigvec)))
-    print("Cartesian  coord.")
-    print(eigvec)         
-    print(find_uvw(eigvec))
-    print("Amount of stretching")
-    print(eigval)    
-    
-    neweigval, P = la.eig(tmat.T.dot(tmat))
-    neweigval = np.sqrt(neweigval)
-    
-    P = normal(P)
-
-    U = P.dot(np.diag(neweigval)).dot(P.T)
-    
-    print("Deformation Gradient Method (FtF)")
-
-    print("Exact directions of stretching in final frame (%s) coord."%finalSpg)
-    print("B  coord.")
-    print(la.inv(Bcell).dot(P))
-    print(find_uvw(la.inv(Bcell).dot(P)))
-    print("Cartesian  coord.")
-    print(P)
-    print(find_uvw(P))
-    print("Amount of stretching")
-    print(neweigval)
-
-    neweigval, Q = la.eig(la.inv(tmat).T.dot(la.inv(tmat)))
-    neweigval = np.sqrt(neweigval)
-    idx = np.argsort(1/neweigval)
-    #Q = Q[:,idx]
-    
-    Q = normal(Q)
-    
-    print("Exact directions of stretching in intial frame (%s) coord."%initSpg)
-    print("A coord.")
-    print(la.inv(Acell).dot(Q))
-    print(find_uvw(la.inv(Acell).dot(Q)))
-    print("cartesian coord.")
-    print(Q)
-    print(find_uvw(Q))
-    print("Amount of stretching 1/lmabda")
-    print(1/neweigval)
-
-    #Plane (miller indices) and direction in final frame or B coord
-    useBcoord = False
-    recB = la.inv(Bcell).T
-    planeDir = [1,1,0]
-    orDir = [1,-1,-1]
-    if useBcoord:
-        planeDir = recB.dot(planeDir)
-        orDir = Bcell.dot(orDir)
-
-    print("R", tmat.dot(P.T.dot(np.diag(neweigval)).dot(P)))
+    # TODO
     
     print("Orientation Relationship for thin film")
     resPlaneDir = Q.dot(P.T).dot(planeDir)
