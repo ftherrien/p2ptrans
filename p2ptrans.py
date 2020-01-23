@@ -65,7 +65,7 @@ def readOptions():
     parser.add_argument("-r","--noprim",dest="prim",action="store_false", default=True, help="Finds the primitive cell at the beginning") #TMP
     parser.add_argument("-a","--anim",dest="anim",action="store_true", default=False, help="Produce the animation") #TMP
     parser.add_argument("-v","--vol",dest="vol",action="store_true", default=False, help="Make the two (stochiometric) cells equal in volume")
-    
+    parser.add_argument("-t","--test",dest="test",action="store_true", default=False, help="Tests the input file and prepares the run, you can continue this run with the -u [directory] -r option")
 
     options = parser.parse_args()
     
@@ -87,8 +87,9 @@ def readOptions():
     prim = options.prim
     anim = options.anim
     vol = options.vol
+    test = option.test
     
-    return fileA, fileB, ncell, filename, interactive, savedisplay, outdir, use, switch, prim, anim, vol, minimize
+    return fileA, fileB, ncell, filename, interactive, savedisplay, outdir, use, switch, prim, anim, vol, minimize, test
 
 def normal(A):
     return A/np.ones((3,1)).dot(la.norm(A, axis=0).reshape((1,np.shape(A)[1])))
@@ -1045,7 +1046,7 @@ def optimizationLoop(A, Acell, mulA, B, Bcell, mulB, ncell, filename):
             
             
 def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay,
-             outdir, use, switch, prim, anim, vol, minimize):
+             outdir, use, switch, prim, anim, vol, minimize, test):
     
     on_top = None
 
@@ -1166,6 +1167,9 @@ def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay,
     print("Number of %s (%s) cells in sphere:"%(B.name, fileB), mulB*ncell)
     print("Total number of atoms in each sphere:", mulA*ncell*len(A))
     print()
+
+    if test:
+        return
     
     if minimize:
         print("==>Ready to start optimmization<==")
