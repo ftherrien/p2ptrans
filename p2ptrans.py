@@ -26,11 +26,21 @@ tol_uvw = 1e-6
 pca = False
 nrep = 1
 gif = False
+
+# Crystal
 ftf = True
 ccell1 = np.eye(3)
 ccell2 = np.eye(3)
-planeDir = [1,1,0]
-orDir = [1,-1,-1]
+planehkl = [1,1,0]
+diruvw = [1,-1,-1]
+
+# Steps
+PoscarDirName = "/TransPOSCARS_K-S"
+n_steps = 60
+viewDirs = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+size = 3
+habit = False
+n_frames = 5
 # ++++++++++++++++++++++++++++++++
 
 
@@ -50,6 +60,7 @@ def readOptions():
     parser.add_argument("-p","--param", dest="filename", type=str, default='./p2p.in', help="Parameter file")
     parser.add_argument("-o","--outdir",dest="outdir", type=str, default='.', help="Output directory")
     parser.add_argument("-u","--use",dest="use", type=str, default=None, help="Use previously calculated data")
+    parser.add_argument("-m","--minimize",dest="minimize",action="store_true", default=False, help="Rerun minimization using the parameters stored in the folder provided with the -u option")
     parser.add_argument("-s","--switch",dest="switch",action="store_true", default=False, help="Map the larger cell on the smaller cell")
     parser.add_argument("-r","--noprim",dest="prim",action="store_false", default=True, help="Finds the primitive cell at the beginning") #TMP
     parser.add_argument("-a","--anim",dest="anim",action="store_true", default=False, help="Produce the animation") #TMP
@@ -66,16 +77,18 @@ def readOptions():
     interactive = options.interactive
     if options.use == None:
         use = False
+        minimize = True
         outdir = options.outdir
     else:
         use = True
+        minimize = options.minimize
         outdir = options.use
     switch = options.switch
     prim = options.prim
     anim = options.anim
     vol = options.vol
     
-    return fileA, fileB, ncell, filename, interactive, savedisplay, outdir, use, switch, prim, anim, vol
+    return fileA, fileB, ncell, filename, interactive, savedisplay, outdir, use, switch, prim, anim, vol, minimize
 
 def normal(A):
     return A/np.ones((3,1)).dot(la.norm(A, axis=0).reshape((1,np.shape(A)[1])))
@@ -485,7 +498,7 @@ def displayOptimalResult(Apos, Bpos, Bposst, disps_total, disps, class_list, vec
         ax.quiver(np.zeros((1,ndisps)), np.zeros((1,ndisps)), np.zeros((1,ndisps)), disps_class.T[:,0], disps_class.T[:,1], disps_class.T[:,2], color=colorlist[i%10])
 
     if savedisplay:
-        fig.savefig(outdir+'/optimalRes.svg')
+        fig.savefig(outdir+'/optimal_result.svg')
         print("Saved display in %s"%(outdir+'/optimalRes.svg'))
         
     if interactive:
@@ -519,16 +532,57 @@ def makeGif(Apos, Bposst, disps, vec_classes, nat, atoms):
             Bposst_class = Bposst[:,class_list==i]
             ndisps = np.shape(disps_class)[1]
             ax.quiver(Bposst_class.T[:,0], Bposst_class.T[:,1], Bposst_class.T[:,2], disps_class.T[:,0], disps_class.T[:,1], disps_class.T[:,2], color=colorlist[i%10])
-        fig.savefig(outdir+'/DispLattice_stretched.svg')
         return fig,
     
     anim = animation.FuncAnimation(fig, animate, init_func=init_disps,
                                    frames=490, interval=30)
     anim.save(outdir+'/Crystal+Disps.gif', fps=30, codec='gif')
 
-def printMatAndDir(A,B):
-    print("--------Matrix--------|------Directions------")
+def displayTransCell(disps, dispStruc, finalStruc, foundcell,
+                     pos_in_struc, vec_classes, interactive, savedisplay):   
+
+    cell = dispStruc.cell
+    
+    # Displays only the cell and the displacements in it
+    fig = plt.figure("Transformation Cell", figsize = [10,5])
+    
+    ax = fig.add_subplot(121, projection='3d')
+    ax.set_title('Transformation cell with displacements\n and atomic positions')
+    for i,disp in enumerate(dispStruc):
+        ax.quiver(disp.pos[0], disp.pos[1], disp.pos[2], vec_classes[int(disp.type)][0],vec_classes[int(disp.type)][1], vec_classes[int(disp.type)][2], color=colorlist[i%10])
+        ax.scatter(disp.pos[0], disp.pos[1], disp.pos[2], alpha = 0.5, s=10, color=colorlist[i%10])
+        ax.scatter(finalStruc[i].pos[0], finalStruc[i].pos[1], finalStruc[i].pos[2], alpha = 1, s=10, color=colorlist[i%10])
+    ax.quiver(np.zeros(3), np.zeros(3), np.zeros(3), cell[0,:], cell[1,:], cell[2,:], color = "red", alpha = 0.3)
+    # ax.quiver(np.zeros(3), np.zeros(3), np.zeros(3), Acell[0,:], Acell[1,:], Acell[2,:], color = "blue", alpha = 0.3)
+    maxXAxis = abs(cell).max() + 1
+    ax.set_xlim([-maxXAxis, maxXAxis])
+    ax.set_ylim([-maxXAxis, maxXAxis])
+    ax.set_zlim([-maxXAxis, maxXAxis])
+
+    # Displays displacement with the disp cell overlayed
+    ax = fig.add_subplot(122, projection='3d')
+    ax.set_title('Transformation cell in displacement crystal \n as found (red), primitive (green)')
+    ax.quiver(pos_in_struc.T[:,0], pos_in_struc.T[:,1], pos_in_struc.T[:,2], disps.T[:,0], disps.T[:,1], disps.T[:,2], color = "C0")
+    ax.scatter(pos_in_struc.T[:,0], pos_in_struc.T[:,1], pos_in_struc.T[:,2], s=10, color = "C0")
+    ax.quiver(np.zeros(3), np.zeros(3), np.zeros(3), foundcell[0,:], foundcell[1,:], foundcell[2,:], color = "red")
+    ax.quiver(np.zeros(3), np.zeros(3), np.zeros(3), cell[0,:], cell[1,:], cell[2,:], color = "green")
+    maxXAxis = pos_in_struc.max() + 1
+    ax.set_xlim([-maxXAxis, maxXAxis])
+    ax.set_ylim([-maxXAxis, maxXAxis])
+    ax.set_zlim([-maxXAxis, maxXAxis])
+    
+    if savedisplay:
+        fig.savefig(outdir+'/transformation_cell.svg')
+
+    if interactive:
+        print("(Close the display window to continue)")
+        plt.show()
+    
+def printMatAndDir(A,ccell):
+    print("--------Matrix--------|-----Closest uvw------")
     print("    v1    v2    v3    |    d1    d2    d3    ")
+    B = find_uvw(A, basis=ccell)
+    A = la.inv(ccell).dot(A)
     for i, rowA in enumerate(A):
           rowB = B[i]
           print(' '.join(["% 5.3f"%(val) for val in rowA]), " |", ' '.join(["%5d"%(val) for val in rowB]))
@@ -539,6 +593,10 @@ def strainDirs(tmat):
         eigval, P = la.eig(tmat.T.dot(tmat))
         eigval = np.sqrt(eigval)
 
+        idx = np.argsort(eigval)
+        eigval = eigval[idx]
+        P = P[:,idx]
+        
         U = P.dot(np.diag(eigval)).dot(P.T)
 
         invEigval, Q = la.eig(la.inv(tmat).T.dot(la.inv(tmat)))
@@ -551,6 +609,10 @@ def strainDirs(tmat):
 
         eigval, P = la.eig(U)
 
+        idx = np.argsort(eigval)
+        eigval = eigval[idx]
+        P = P[:,idx]
+        
         iU = rotate(la.inv(tmat), np.eye(3)).dot(la.inv(tmat))
         
         invEigval, Q = la.eig(iU)
@@ -563,8 +625,427 @@ def strainDirs(tmat):
     Q = normal(Q)
 
     return eigval, U, P, Q
+
+def findHabit(U, P, eigval):
     
-def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay, outdir, use, switch, prim, anim, vol):
+    # Using uniformly strained plane
+    ratio = np.sqrt(abs((eigval[2]**2 - eigval[1]**2)/(eigval[1]**2 - eigval[0]**2)))
+    
+    # uvw direction of normal in cartesian coord
+    planeHab = np.zeros((3,2))
+    planeHab[:,0] = P[:,0] + ratio*P[:,2]
+    planeHab[:,1] = P[:,0] - ratio*P[:,2]
+    return planeHab, ratio
+
+def findR(U, P=None, planeHab=None, ratio=None):
+
+    if planeHab is None or ratio is None or P is None:
+        eigval, P = la.eig(mat)
+        planeHab, ratio = findHabit(U, P, eigval)
+    
+    V = np.zeros((2,3,3))
+    M = np.zeros((2,3,3))
+    R = np.zeros((2,3,3))
+    
+    for i in range(2):
+        V[i,:,0] = ratio*P[:,0] + (1-2*i)*P[:,2]
+        V[i,:,1] = P[:,1]
+        V[i,:,2] = planeHab[:,i]/la.norm(planeHab[:,i]) 
+    
+        M[i,:,:2] = U.dot(V[i,:,:2])
+        M[i,:,2] = np.cross(M[i,:,0], M[i,:,1])
+        M[i,:,2] = M[i,:,2] / la.norm(M[i,:,2])
+
+        R[i,:,:] = M[i,:,:].dot(M[i,:,:].T)
+        
+    return R
+
+def crystallography(tmat, A, B, fileA, fileB, ccellA, ccellB):
+    print("----------CRYSTALLOGRAPHY----------")
+    print()
+    eigval, U, P, Q = strainDirs(tmat)
+
+    print("Strain Directions in %s (%s) coordinates:"%(B.name, fileB))
+    print("    d1    d2    d3    ")
+    printMatAndDir(P, ccellA)
+    print()
+    print("Strain Directions in %s (%s) coordinates:"%(A.name, fileA))
+    print("    d1    d2    d3    ")
+    printMatAndDir(Q, ccellB)
+    print()
+    print("Strains + 1 (eigenvalues)")
+    print("    e1    e2    e3    ")
+    print(' '.join(["% 5.3f"%(val) for val in eigval])) 
+    print()
+
+    rcellA = la.inv(ccellA) #Reciprocal cell
+    rcellB = la.inv(ccellB) #Reciprocal cell
+
+    planeHab, ratio = findHabit(U, P, eigval)
+        
+    print("Uniformly strained planes:")
+    print()
+    print("Exact plane in %s (%s) coordinates:"%(B.name, fileB))
+    print("(+): (% 6.4f, % 6.4f, % 6.4f)"%(*ccellB.dot(planeHab[:,0]),))
+    print("(-): (% 6.4f, % 6.4f, % 6.4f)"%(*ccellB.dot(planeHab[:,1]),))
+    print()
+    print("Closest uvw:")
+    print("(+): (% d, % d, % d)"%(*find_uvw(planeHab[:,1:2], rcellB),))
+    print("(-): (% d, % d, % d)"%(*find_uvw(planeHab[:,0:1], rcellB),))
+    print()
+
+    R = findR(U, P=P, planeHab=planeHab, ratio=ratio)
+    
+    print("Orientation Relationship with habit plane:")
+    print()
+    orMat = np.zeros((2,3,3))
+    resPlanehkl = np.zeros((2,3))
+    resDiruvw = np.zeros((2,3))
+    for i in range(2):
+        orMat[i,:,:] = Q.dot(P.T).dot(R[i,:,:].T)
+        resPlanehkl[i,:] = ccellB.dot(orMat[i,:,:].dot(rcellA.dot(planehkl)))
+        resDiruvw[i,:] = la.inv(ccellB).dot(orMat[i,:,:].dot(ccellA.dot(diruvw)))
+    print("%s (%s) // %s (%s)"%(B.name, fileB, A.name, fileA))
+    print("(+): (% 2d, % 2d, % 2d) [% 2d, % 2d, % 2d] // (% 6.4f, % 6.4f, % 6.4f) [% 6.4f, % 6.4f, % 6.4f]"%(*planehkl, *diruvw, *resPlanehkl[0,:], *resDiruvw[0,:]))
+    print("(-): (% 2d, % 2d, % 2d) [% 2d, % 2d, % 2d] // (% 6.4f, % 6.4f, % 6.4f) [% 6.4f, % 6.4f, % 6.4f]"%(*planehkl, *diruvw, *resPlanehkl[1,:], *resDiruvw[1,:]))
+    print()
+    print("Approximate low index OR")
+    resPlanehklClose = np.zeros((2,3))
+    resDiruvwClose = np.zeros((2,3))
+    for i in range(2):
+        resPlanehklClose[i,:] = find_uvw(rcellB.dot(resPlanehkl[i,:].reshape((3,1))), rcellB).T[0]
+        resDiruvwClose[i,:] = find_uvw(ccellB.dot(resDiruvw[i,:].reshape((3,1))), ccellB).T[0]
+    print("(+): (% 2d, % 2d, % 2d) [% 2d, % 2d, % 2d] //  (% d, % d, % d) [% d, % d, % d]"%(*planehkl, *diruvw, *resPlanehklClose[0,:], *resDiruvwClose[0,:]))
+    print("(-): (% 2d, % 2d, % 2d) [% 2d, % 2d, % 2d] //  (% d, % d, % d) [% d, % d, % d]"%(*planehkl, *diruvw, *resPlanehklClose[1,:], *resDiruvwClose[1,:]))
+    print()
+    
+    print("Orientation Relationship in thin films:")
+    print()
+    orMat = Q.dot(P.T)
+    resPlanehkl = ccellB.dot(orMat.dot(rcellA.dot(planehkl)))
+    resDiruvw = la.inv(ccellB).dot(orMat.dot(ccellA.dot(diruvw)))
+    print("%s (%s) // %s (%s)"%(B.name, fileB, A.name, fileA))
+    print("(% 2d, % 2d, % 2d) [% 2d, % 2d, % 2d] // (% 6.4f, % 6.4f, % 6.4f) [% 6.4f, % 6.4f, % 6.4f]"%(*planehkl, *diruvw, *resPlanehkl, *resDiruvw))
+    print()
+    print("Approximate low index OR")
+    resPlanehklClose = find_uvw(rcellB.dot(resPlanehkl.reshape((3,1))), rcellB).T[0]
+    resDiruvwClose = find_uvw(ccellB.dot(resDiruvw.reshape((3,1))), ccellB).T[0]
+    print("(% 2d, % 2d, % 2d) [% 2d, % 2d, % 2d] //  (% d, % d, % d) [% d, % d, % d]"%(*planehkl, *diruvw, *resPlanehklClose, *resDiruvwClose))
+    print()
+
+    return eigval, U, P, Q, planeHab 
+
+def produceTransition(tmat, dispStruc, finalStruc, vec_classes, outdir, atom_types,
+                      anim, savedisplay, interactive):
+
+    os.makedirs(outdir+PoscarDirName, exist_ok=True)
+
+    itmat = rotate(la.inv(tmat).dot(finalStruc.cell), finalStruc.cell).dot(la.inv(tmat))
+
+    spgList = []
+    transStruc = []
+    color_array = []
+    Tpos = [] 
+    for i in range(n_steps+1):
+        if habit:
+            curMat = find_R_RU(curMat).dot(curMat)
+        else:
+            curMat = (itmat-np.eye(3))*i/n_steps + np.eye(3)
+        curStruc = Structure(curMat.dot(finalStruc.cell))
+        for j,a in enumerate(dispStruc):
+            curDisp = vec_classes[int(a.type)]*i/n_steps
+            curPos = curMat.dot((finalStruc[j].pos - curDisp).reshape((3,1)))
+            curStruc.add_atom(*(curPos.T.tolist()[0]),finalStruc[j].type)
+            # curStruc = supercell(curStruc, curStruc.cell)
+        write.poscar(curStruc, vasp5=True, file=outdir+PoscarDirName+"/POSCAR_%03d"%i) # Write resulting structure in POSCAR
+        spgList.append(get_spacegroup(to_spglib(curStruc), symprec=0.3, angle_tolerance=3.0))
+        transStruc.append(curStruc)
+
+        if savedisplay or anim or interactive:
+            color_array.append([])
+            Tpos.append([])
+            for l,pl in enumerate(viewDirs):
+            
+                if isinstance(pl[0],(list, np.ndarray)): 
+                    plane = normal(curStruc.cell).dot(pl[0] + i/n_steps*(pl[1] - pl[0]))
+                else:
+                    plane = normal(curStruc.cell).dot(pl)
+                tickness = 5 * la.norm(plane)
+                plane = plane/tickness
+                
+                lattices = []
+            
+                Tpos_tmp = []
+                types = []
+            
+                sizes = np.round(max(la.norm(curStruc.cell,axis=0))*size/la.norm(curStruc.cell,axis=0))
+            
+                # Cut along the current plane
+                for l in np.arange(-sizes[0],sizes[0]):
+                    for j in np.arange(-sizes[1],sizes[1]):
+                        for k in np.arange(-sizes[2],sizes[2]):
+                            for a in curStruc:
+                                pos = curStruc.cell.dot(np.array([l,j,k])) + a.pos
+                                if plane.dot(pos) < 0 and plane.dot(pos) > - tickness:
+                                    Tpos_tmp.append(pos)
+                                    types.append(np.where(atom_types == a.type)[0][0])
+                                    
+                Tpos[-1].append(np.array(Tpos_tmp).T)
+                color_array[-1].append(types)
+                
+    return transStruc, spgList, Tpos, color_array
+
+def add_panel(fig,g,plane, state, p, anchor, Tpos, color_array, transStruc):
+    Rectangle = matplotlib.patches.Rectangle
+    
+    ax = fig.add_subplot(g, projection='3d', proj_type = 'ortho')
+    ax.set_anchor(anchor)
+    # ax.view_init(*angles)
+    ax.view_init(azim=-90, elev=90) # x-y plane view
+    maxXAxis = np.abs([c for a in Tpos for b in a for c in b.flatten()]).max() + 1
+    ax.set_xlim([-maxXAxis, maxXAxis])
+    ax.set_ylim([-maxXAxis, maxXAxis])
+    ax.set_zlim([-maxXAxis, maxXAxis])
+    
+    toplot = set_view(-plane).dot(Tpos[state][p])
+    color_to_plot = np.array(color_array[state][p])
+    idxx = np.argsort(toplot[2,:])
+    toplot = toplot[:,idxx]
+    color_to_plot = color_to_plot[idxx]
+    ax.set_axis_off()
+    ax.dist = 2
+    axlims = [a for b in ax.get_position().get_points() for a in b]
+    rec = Rectangle((axlims[0],axlims[1]),(axlims[2]-axlims[0]),(axlims[3]-axlims[1]), transform = fig.transFigure, fill=False,lw=3, color=reccolor[p])
+    fig.patches.append(rec)
+    for i,point in enumerate(toplot.T):
+        ax.scatter(*point, c=colorlist[color_to_plot[i]], s=40, depthshade=False, alpha = float(i)/len(toplot.T))
+
+    ax2d = fig.add_subplot(g)
+    ax2d.set_axis_off()
+    ax2d.patch.set_alpha(0)
+    ax2d.set_anchor(anchor)
+    ax2d.set_xlim([-maxXAxis, maxXAxis])
+    ax2d.set_ylim([-maxXAxis, maxXAxis])
+    ax2d.set_aspect('equal')
+    
+    for a,ar in enumerate(viewDirs):
+    # tmpdir = np.zeros((3,3))
+    # tmpdir[0,0] = 0
+    # tmpdir[0,2] = ratio
+    # tmpdir[0,1] = -1
+    # tmpdir[1,0] = 0
+    # tmpdir[1,2] = 1
+    # tmpdir[1,1] = ratio
+    # tmpdir[2,0] = 1
+    # tmpdir[2,2] = 0
+    # tmpdir[2,1] = 0
+    # for a,ar in enumerate(tmpdir):
+        if a!=p:
+            if isinstance(ar[0],(list, np.ndarray)): 
+                arrow = transStruc[state].cell.dot(ar[0] + state/n_steps*(ar[1] - ar[0]))
+                # arrow = normal(transStruc[state].cell).dot(ar[0] + state/n_steps*(ar[1] - ar[0]))
+            else:
+                arrow = transStruc[state].cell.dot(ar)
+                # arrow = normal(transStruc[state].cell).dot(ar)
+            arrow = set_view(-plane).dot(arrow)
+            ax2d.quiver(*np.zeros(2), *arrow[:2], scale_units='inches', scale=10, color=reccolor[a])
+            #ax.quiver(*np.zeros(3), *arrow, color=reccolor[a])
+    #ax.quiver(0, 0, 0, 0, viewDirs[p][2]*100, -viewDirs[p][1]*100, color="g")
+    
+
+def all_panels(fig, gs, state, label, Tpos, color_array, transStruc, atom_types, spgList):
+    Rectangle = matplotlib.patches.Rectangle
+    
+    for p,pl in enumerate(viewDirs):
+        if isinstance(pl[0],(list, np.ndarray)): 
+            plane = normal(transStruc[state].cell).dot(pl[0] + state/n_steps*(pl[1] - pl[0]))
+        else:
+            plane = normal(transStruc[state].cell).dot(pl)
+        plane = plane/la.norm(plane)
+        #angles = dir2angles(plane)
+        if p ==0:
+            add_panel(fig,gs[0,0], plane, state, p, 'E', Tpos, color_array, transStruc)
+        elif p == 1:
+            add_panel(fig,gs[0,1], plane, state, p, 'W', Tpos, color_array, transStruc)
+        else:
+            add_panel(fig,gs[1,0], plane, state, p, 'E', Tpos, color_array, transStruc)
+        
+    ax = fig.add_subplot(gs[1,1], projection='3d', proj_type = 'ortho')
+    ax.set_anchor('W')
+    ax.set_axis_off()
+    # ax.view_init(*(np.array(dir2angles(transStruc[state].cell[:,1]))+np.array([30,30])))
+    ax.view_init(*(np.array(dir2angles(transStruc[state].cell[:,0]-transStruc[state].cell[:,1])) + np.array([10,10])))
+    ax.dist = 5
+    maxXAxis = abs(np.array([s.cell for s in transStruc])).max() + 1
+    ax.set_xlim([-maxXAxis, maxXAxis])
+    ax.set_ylim([-maxXAxis, maxXAxis])
+    ax.set_zlim([-maxXAxis, maxXAxis])
+    
+    axlims = [a for b in ax.get_position().get_points() for a in b]
+    rec = Rectangle((axlims[0],axlims[1]),(axlims[2]-axlims[0]),(axlims[3]-axlims[1]), transform = fig.transFigure, fill=False,lw=3, color="k")
+    fig.patches.append(rec)
+
+    origin = np.sum(transStruc[state].cell, axis=1)/2
+
+    for i in range(3):
+        base = np.array([np.zeros(3), transStruc[state].cell[:,(i+1)%3],
+                         transStruc[state].cell[:,(i+2)%3], 
+                         transStruc[state].cell[:,(i+1)%3] + transStruc[state].cell[:,(i+2)%3]])
+        vec = transStruc[state].cell[:,i:i+1].dot(np.ones((1,4)))
+        ax.quiver(base[:,0]-origin[0], base[:,1]-origin[1], base[:,2]-origin[2], vec[0,:], vec[1,:], vec[2,:], arrow_length_ratio=0, color="k", alpha=0.5)
+    # origin2 = np.sum(transStruc[state].cell.dot(np.diag([5,5,5])),axis=1)/2
+    # for a in supercell(transStruc[state], transStruc[state].cell.dot(np.diag([5,5,5]))):
+    #     ax.scatter(a.pos[0]-origin2[0], a.pos[1]-origin2[1], a.pos[2]-origin2[2], alpha = 0.05, s=400, color=colorlist[(np.where(atom_types == a.type)[0][0])%10])
+    a_list = []
+    first = True
+    for a in transStruc[state]:
+        if first:
+            first = False
+            apos1 = a.pos
+        if a.type in a_list or not label:
+            ax.scatter(*(a.pos-origin-apos1), alpha = 1, s=200, color=colorlist[(np.where(atom_types == a.type)[0][0])%10])
+        else:
+            a_list.append(a.type)
+            ax.scatter(*(a.pos-origin-apos1), alpha = 1, s=200, color=colorlist[(np.where(atom_types == a.type)[0][0])%10], label=a.type)
+        
+    for p,pl in enumerate(viewDirs):
+        if isinstance(pl[0],(list, np.ndarray)): 
+            plane = normal(transStruc[state].cell).dot(pl[0] + state/n_steps*(pl[1] - pl[0]))
+        else:
+            # plane = normal(transStruc[state].cell).dot(pl)
+            plane = transStruc[state].cell.dot(pl)
+        # plane = 5*plane/la.norm(plane)
+        ax.quiver(*(-origin), *plane, color=reccolor[p])
+        # ax.quiver(*np.zeros(3), *plane, pivot='tip', color=reccolor[p])
+        
+    fig.suptitle("Space group: " + spgList[state], fontsize=16)
+    for x in ax.get_children():
+        if isinstance(x, matplotlib.legend.Legend):
+            break
+    else:
+        fig.legend()
+
+def make_fig(state, Tpos, color_array, transStruc, atom_types, spgList, outdir, savedisplay):
+    fig = plt.figure(figsize=[7.2,7.2])
+    gs = matplotlib.gridspec.GridSpec(2, 2)
+    gs.update(wspace=0.03, hspace=0.03)
+    all_panels(fig,gs, state, True, Tpos, color_array, transStruc, atom_types, spgList)
+    if savedisplay:
+        fig.savefig(outdir+"/Trans_%d.svg"%state)
+
+def make_anim(n_states, Tpos, color_array, transStruc, atom_types, spgList, outdir):
+    fig = plt.figure(figsize=[12.8,7.2])
+    gs = matplotlib.gridspec.GridSpec(2, 2)
+    gs.update(wspace=0.03, hspace=0.03)
+    def animate_trans(state):
+        all_panels(fig,gs, state, state==0, Tpos, color_array, transStruc, atom_types, spgList)
+
+    # animation.verbose.set_level('debug')
+
+    plt.rcParams['animation.ffmpeg_path'] = '/home/felixt/projs/bin/ffmpeg'
+    # Writer = animation.writers['ffmpeg']
+    
+    writer = animation.FFMpegWriter(fps=int(n_states/6.0),codec='prores', extra_args=['-loglevel', 'verbose','-f','mov'])
+
+    anim = animation.FuncAnimation(fig, animate_trans,
+                               frames=n_states+1, interval=1)
+    anim.save(outdir + '/Trans3.mov', writer=writer)
+
+def PCA(disps):
+    # This is just kind of cool, but useless for now
+    n = np.shape(disps)[1]
+    M = np.zeros((n,n))
+    for i in range(n):
+        for j in range(n):
+            # M[i,j] = disps[:,i].dot(disps[:,j])
+            M[i,j] = la.norm(disps[:,i]-disps[:,j])
+
+    M = np.exp(-M/(1 - M/M.max()))
+    # M = np.exp(M.max() - M) - 1
+
+    eigval,eigvec = la.eig(M)
+    
+    idx = np.argsort(-eigval)
+
+    eigval = eigval[idx]
+    eigvec = eigvec[:,idx]
+
+    logdiffs = np.log(eigval[:-1]) - np.log(eigval[1:])
+
+    n_class = np.argmax(logdiffs)+1
+
+    plt.figure()
+    plt.plot(eigval,".")
+    
+    plt.figure()
+    plt.semilogy(eigval,".")
+
+    plt.figure()
+    plt.plot(logdiffs,".-")
+    
+    return n_class
+
+def optimizationLoop(A, Acell, mulA, B, Bcell, mulB, ncell, filename): 
+    """ This loop will repeat the entire minimization if no periodic cell can be found
+        the final tmat is used to retile the structures (off by default) """
+    tmat = np.eye(3)
+    foundcell = None
+    rep = 0
+    while (rep < nrep and foundcell is None):
+        if rep != 0:
+            print("_____RESTARTING_____")
+        
+        rep += 1
+    
+        Apos, atomsA, atom_types = makeSphere(A, mulA*ncell) # Create Apos
+        
+        # Temporarly stretching Bcell, for tiling
+        Btmp = deepcopy(B)
+        Btmp.cell = tmat.dot(B.cell)
+        for b in Btmp:
+            b.pos = tmat.dot(b.pos)
+    
+        Bpos, atomsB = makeSphere(Btmp, mulB*ncell, atom_types) # Create Bpos
+    
+        Bpos = la.inv(tmat).dot(Bpos)
+    
+        assert all(mulA*atomsA == mulB*atomsB)
+        atoms = mulA*atomsA
+        
+        Apos = np.asfortranarray(Apos)
+        Bpos = np.asfortranarray(Bpos)
+        t_time = time.time()
+        Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, vec = tr.fastoptimization(Apos, Bpos, Acell, la.inv(Acell), mulA * la.det(Acell)/(mulB * la.det(Bcell)), atoms, filename)
+        t_time = time.time() - t_time
+        Bpos = np.asanyarray(Bpos)
+        Apos = np.asanyarray(Apos)
+        
+        print("Mapping time:", t_time)
+        
+        class_list = class_list[:n_map]-class_list[:n_map].min()
+    
+        Bpos = Bpos[:,:n_map]
+        Bposst = Bposst[:,:n_map]
+        Apos_map = Apos_map[:,:n_map] 
+    
+        if abs(abs(la.det(tmat)) - abs(mulA * la.det(Acell)/(mulB * la.det(Bcell)))) > tol_vol and rep < nrep:
+            print("Warning: The volume factor is wrong.")
+            
+        print("Looking for periodic cell...")        
+        foundcell, origin = find_cell(class_list, Bposst)
+
+        print(class_list)
+        
+        if foundcell is not None:
+            print("Found cell!")
+        else:
+            print("Could not find periodic cell")
+
+    return Apos, Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, atoms, atom_types, foundcell, origin
+            
+            
+def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay,
+             outdir, use, switch, prim, anim, vol, minimize):
     
     on_top = None
 
@@ -578,197 +1059,6 @@ def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay, outdir, us
     import matplotlib.pyplot as plt
 
     plt.rcParams["figure.figsize"] = [5, 5]
-    
-    import matplotlib.gridspec as gridspec
-    from matplotlib.patches import Rectangle
-
-    def add_panel(fig,g,plane, state, p, anchor):
-        ax = fig.add_subplot(g, projection='3d', proj_type = 'ortho')
-        ax.set_anchor(anchor)
-        # ax.view_init(*angles)
-        ax.view_init(azim=-90, elev=90) # x-y plane view
-        maxXAxis = np.abs([c for a in Tpos for b in a for c in b.flatten()]).max() + 1
-        ax.set_xlim([-maxXAxis, maxXAxis])
-        ax.set_ylim([-maxXAxis, maxXAxis])
-        ax.set_zlim([-maxXAxis, maxXAxis])
-        
-        toplot = set_view(-plane).dot(Tpos[state][p])
-        color_to_plot = np.array(color_array[state][p])
-        idxx = np.argsort(toplot[2,:])
-        toplot = toplot[:,idxx]
-        color_to_plot = color_to_plot[idxx]
-        ax.set_axis_off()
-        ax.dist = 2
-        axlims = [a for b in ax.get_position().get_points() for a in b]
-        rec = Rectangle((axlims[0],axlims[1]),(axlims[2]-axlims[0]),(axlims[3]-axlims[1]), transform = fig.transFigure, fill=False,lw=3, color=reccolor[p])
-        fig.patches.append(rec)
-        for i,point in enumerate(toplot.T):
-            ax.scatter(*point, c=colorlist[color_to_plot[i]], s=40, depthshade=False, alpha = float(i)/len(toplot.T))
-
-        ax2d = fig.add_subplot(g)
-        ax2d.set_axis_off()
-        ax2d.patch.set_alpha(0)
-        ax2d.set_anchor(anchor)
-        ax2d.set_xlim([-maxXAxis, maxXAxis])
-        ax2d.set_ylim([-maxXAxis, maxXAxis])
-        ax2d.set_aspect('equal')
-        
-        for a,ar in enumerate(viewDirs):
-        # tmpdir = np.zeros((3,3))
-        # tmpdir[0,0] = 0
-        # tmpdir[0,2] = ratio
-        # tmpdir[0,1] = -1
-        # tmpdir[1,0] = 0
-        # tmpdir[1,2] = 1
-        # tmpdir[1,1] = ratio
-        # tmpdir[2,0] = 1
-        # tmpdir[2,2] = 0
-        # tmpdir[2,1] = 0
-        # for a,ar in enumerate(tmpdir):
-            if a!=p:
-                if isinstance(ar[0],(list, np.ndarray)): 
-                    arrow = transStruc[state].cell.dot(ar[0] + state/n_steps*(ar[1] - ar[0]))
-                    # arrow = normal(transStruc[state].cell).dot(ar[0] + state/n_steps*(ar[1] - ar[0]))
-                else:
-                    arrow = transStruc[state].cell.dot(ar)
-                    # arrow = normal(transStruc[state].cell).dot(ar)
-                arrow = set_view(-plane).dot(arrow)
-                ax2d.quiver(*np.zeros(2), *arrow[:2], scale_units='inches', scale=10, color=reccolor[a])
-                #ax.quiver(*np.zeros(3), *arrow, color=reccolor[a])
-        #ax.quiver(0, 0, 0, 0, viewDirs[p][2]*100, -viewDirs[p][1]*100, color="g")
-        
-
-    def all_panels(fig, gs, state, label):
-        for p,pl in enumerate(viewDirs):
-            if isinstance(pl[0],(list, np.ndarray)): 
-                plane = normal(transStruc[state].cell).dot(pl[0] + state/n_steps*(pl[1] - pl[0]))
-            else:
-                plane = normal(transStruc[state].cell).dot(pl)
-            plane = plane/la.norm(plane)
-            #angles = dir2angles(plane)
-            if p ==0:
-                add_panel(fig,gs[0,0], plane, state, p, 'E')
-            elif p == 1:
-                add_panel(fig,gs[0,1], plane, state, p, 'W')
-            else:
-                add_panel(fig,gs[1,0], plane, state, p, 'E')
-            
-        ax = fig.add_subplot(gs[1,1], projection='3d', proj_type = 'ortho')
-        ax.set_anchor('W')
-        ax.set_axis_off()
-        # ax.view_init(*(np.array(dir2angles(transStruc[state].cell[:,1]))+np.array([30,30])))
-        ax.view_init(*(np.array(dir2angles(transStruc[state].cell[:,0]-transStruc[state].cell[:,1])) + np.array([10,10])))
-        ax.dist = 5
-        maxXAxis = abs(np.array([s.cell for s in transStruc])).max() + 1
-        ax.set_xlim([-maxXAxis, maxXAxis])
-        ax.set_ylim([-maxXAxis, maxXAxis])
-        ax.set_zlim([-maxXAxis, maxXAxis])
-        
-        axlims = [a for b in ax.get_position().get_points() for a in b]
-        rec = Rectangle((axlims[0],axlims[1]),(axlims[2]-axlims[0]),(axlims[3]-axlims[1]), transform = fig.transFigure, fill=False,lw=3, color="k")
-        fig.patches.append(rec)
-
-        origin = np.sum(transStruc[state].cell, axis=1)/2
-
-        for i in range(3):
-            base = np.array([np.zeros(3), transStruc[state].cell[:,(i+1)%3],
-                             transStruc[state].cell[:,(i+2)%3], 
-                             transStruc[state].cell[:,(i+1)%3] + transStruc[state].cell[:,(i+2)%3]])
-            vec = transStruc[state].cell[:,i:i+1].dot(np.ones((1,4)))
-            ax.quiver(base[:,0]-origin[0], base[:,1]-origin[1], base[:,2]-origin[2], vec[0,:], vec[1,:], vec[2,:], arrow_length_ratio=0, color="k", alpha=0.5)
-        # origin2 = np.sum(transStruc[state].cell.dot(np.diag([5,5,5])),axis=1)/2
-        # for a in supercell(transStruc[state], transStruc[state].cell.dot(np.diag([5,5,5]))):
-        #     ax.scatter(a.pos[0]-origin2[0], a.pos[1]-origin2[1], a.pos[2]-origin2[2], alpha = 0.05, s=400, color=colorlist[(np.where(atom_types == a.type)[0][0])%10])
-        a_list = []
-        first = True
-        for a in transStruc[state]:
-            if first:
-                first = False
-                apos1 = a.pos
-            if a.type in a_list or not label:
-                ax.scatter(*(a.pos-origin-apos1), alpha = 1, s=200, color=colorlist[(np.where(atom_types == a.type)[0][0])%10])
-            else:
-                a_list.append(a.type)
-                ax.scatter(*(a.pos-origin-apos1), alpha = 1, s=200, color=colorlist[(np.where(atom_types == a.type)[0][0])%10], label=a.type)
-            
-        for p,pl in enumerate(viewDirs):
-            if isinstance(pl[0],(list, np.ndarray)): 
-                plane = normal(transStruc[state].cell).dot(pl[0] + state/n_steps*(pl[1] - pl[0]))
-            else:
-                # plane = normal(transStruc[state].cell).dot(pl)
-                plane = transStruc[state].cell.dot(pl)
-            # plane = 5*plane/la.norm(plane)
-            print("ORIGIN", origin)
-            ax.quiver(*(-origin), *plane, color=reccolor[p])
-            # ax.quiver(*np.zeros(3), *plane, pivot='tip', color=reccolor[p])
-            
-        fig.suptitle("Space group: " + spgList[state], fontsize=16)
-        for x in ax.get_children():
-            if isinstance(x, matplotlib.legend.Legend):
-                break
-        else:
-            fig.legend()
-
-    def make_fig(state, save):
-        fig = plt.figure(figsize=[7.2,7.2])
-        # fig = plt.figure()
-        gs = gridspec.GridSpec(2, 2)
-        gs.update(wspace=0.03, hspace=0.03)
-        all_panels(fig,gs, state, True)
-        if save:
-            fig.savefig(outdir+"/Trans_%d.svg"%state)
-    
-    def make_anim(n_states):
-        fig = plt.figure(figsize=[12.8,7.2])
-        gs = gridspec.GridSpec(2, 2)
-        gs.update(wspace=0.03, hspace=0.03)
-        def animate_trans(state):
-            all_panels(fig,gs, state, state==0)
-
-        # animation.verbose.set_level('debug')
-    
-        plt.rcParams['animation.ffmpeg_path'] = '/home/felixt/projs/bin/ffmpeg'
-        # Writer = animation.writers['ffmpeg']
-        
-        writer = animation.FFMpegWriter(fps=int(n_states/6.0),codec='prores', extra_args=['-loglevel', 'verbose','-f','mov'])
-    
-        anim = animation.FuncAnimation(fig, animate_trans,
-                                   frames=n_states+1, interval=1)
-        anim.save(outdir + '/Trans3.mov', writer=writer)
-
-    def PCA(disps):
-        # This is just kind of cool, but useless for now
-        n = np.shape(disps)[1]
-        M = np.zeros((n,n))
-        for i in range(n):
-            for j in range(n):
-                # M[i,j] = disps[:,i].dot(disps[:,j])
-                M[i,j] = la.norm(disps[:,i]-disps[:,j])
-
-        M = np.exp(-M/(1 - M/M.max()))
-        # M = np.exp(M.max() - M) - 1
-
-        eigval,eigvec = la.eig(M)
-        
-        idx = np.argsort(-eigval)
-
-        eigval = eigval[idx]
-        eigvec = eigvec[:,idx]
-
-        logdiffs = np.log(eigval[:-1]) - np.log(eigval[1:])
-
-        n_class = np.argmax(logdiffs)+1
-
-        plt.figure()
-        plt.plot(eigval,".")
-        
-        plt.figure()
-        plt.semilogy(eigval,".")
-
-        plt.figure()
-        plt.plot(logdiffs,".-")
-        
-        return n_class
 
     # START
     print(" ________    _______  ________   ")   
@@ -875,71 +1165,20 @@ def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay, outdir, us
     print("Number of %s (%s) cells in sphere"%(A.name, fileA), mulA*ncell)
     print("Number of %s (%s) cells in sphere:"%(B.name, fileB), mulB*ncell)
     print("Total number of atoms in each sphere:", mulA*ncell*len(A))
-
     print()
-    if not use:
-        print("==>Ready to start optimmization<==") 
-        # This loop will repeat the entire minimization if no periodic cell can be found
-        # the final tmat is used to retile the structures (off by default)
-        tmat = np.eye(3)
-        foundcell = None
-        rep = 0
-        while (rep < nrep and foundcell is None):
-            if rep != 0:
-                print("_____RESTARTING_____")
-            
-            rep += 1
-        
-            Apos, atomsA, atom_types = makeSphere(A, mulA*ncell) # Create Apos
-            
-            # Temporarly stretching Bcell, for tiling
-            Btmp = deepcopy(B)
-            Btmp.cell = tmat.dot(B.cell)
-            for b in Btmp:
-                b.pos = tmat.dot(b.pos)
-        
-            Bpos, atomsB = makeSphere(Btmp, mulB*ncell, atom_types) # Create Bpos
-        
-            Bpos = la.inv(tmat).dot(Bpos)
-        
-            assert all(mulA*atomsA == mulB*atomsB)
-            atoms = mulA*atomsA
-            
-            Apos = np.asfortranarray(Apos)
-            Bpos = np.asfortranarray(Bpos)
-            t_time = time.time()
-            Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, vec = tr.fastoptimization(Apos, Bpos, Acell, la.inv(Acell), mulA * la.det(Acell)/(mulB * la.det(Bcell)), atoms, filename)
-            t_time = time.time() - t_time
-            Bpos = np.asanyarray(Bpos)
-            Apos = np.asanyarray(Apos)
-            
-            print("Mapping time:", t_time)
-            
-            class_list = class_list[:n_map]-class_list[:n_map].min()
-        
-            Bpos = Bpos[:,:n_map]
-            Bposst = Bposst[:,:n_map]
-            Apos_map = Apos_map[:,:n_map] 
-        
-            if abs(abs(la.det(tmat)) - abs(mulA * la.det(Acell)/(mulB * la.det(Bcell)))) > tol_vol and rep < nrep:
-                print("Warning: The volume factor is wrong.")
-                
-            print("Looking for periodic cell...")        
-            foundcell, origin = find_cell(class_list, Bposst)
+    
+    if minimize:
+        print("==>Ready to start optimmization<==")
 
-            print(class_list)
-            
-            if foundcell is not None:
-                print("Found cell!")
-            else:
-                print("Could not find periodic cell")
-                
-        pickle.dump((Apos, Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, atoms, atom_types, foundcell, origin), open(outdir+"/fastoptimization.dat","wb"))
-
+        result = optimizationLoop(A, Acell, mulA, B, Bcell, mulB, ncell, filename)
+        pickle.dump(result, open(outdir+"/fastoptimization.dat","wb"))
+        
     else:
         print("==>Gathering optimization data from %s<=="%(outdir))
-        Apos, Apos_map, Bpos, Bposst, n_map, natA , class_list, tmat, dmin, atoms, atom_types, foundcell, origin = pickle.load(open(outdir+"/fastoptimization.dat","rb"))
+        result = pickle.load(open(outdir+"/fastoptimization.dat","rb"))
 
+    Apos, Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, atoms, atom_types, foundcell, origin = result
+        
     natB = n_map // np.sum(atoms)
     nat_map = n_map // np.sum(atoms)
     nat = np.shape(Apos)[1] // np.sum(atoms)
@@ -975,7 +1214,8 @@ def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay, outdir, us
         if interactive:
             print("(Close the display window to continue)")
         displayOptimalResult(Apos, Bpos, Bposst, disps_total, disps, class_list, vec_classes,
-                             nat, natA, natB, atoms, outdir, savedisplay, interactive)
+                                 nat, natA, natB, atoms, outdir, savedisplay, interactive)
+        print()
 
     # Create gif if turned on
     if gif:
@@ -991,8 +1231,6 @@ def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay, outdir, us
                                                         natB, pos_in_struc, class_list, vec_classes)
 
     print("Size of the transformation cell (TC):", len(dispStruc))
-    
-    cell = dispStruc.cell
 
     print("Number of %s (%s) cells in TC:"%(A.name, fileA), abs(la.det(dispStruc.cell)/(mulA*la.det(Acell))))
     print("Number of %s (%s) cells in TC:"%(B.name, fileB), abs(la.det(dispStruc.cell)/(mulB*la.det(tmat.dot(Bcell)))))
@@ -1007,294 +1245,47 @@ def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay, outdir, us
 
     print()
     print("TC in %s (%s) coordinates:"%(B.name, fileB))
-    printMatAndDir(la.inv(ccellB).dot(la.inv(tmat).dot(dispStruc.cell)), find_uvw(la.inv(ccellB).dot(la.inv(tmat).dot(dispStruc.cell))))
+    printMatAndDir(la.inv(tmat).dot(dispStruc.cell), ccellB)
     print()
     print("TC in %s (%s) coordinates:"%(A.name, fileA))
-    printMatAndDir(la.inv(ccellA).dot(dispStruc.cell),find_uvw(la.inv(ccellA).dot(dispStruc.cell)))
+    printMatAndDir(dispStruc.cell, ccellA)
     print()    
-                   
-    eigval, U, P, Q = strainDirs(tmat)
 
-    print("Strain Directions in %s (%s) coordinates:"%(B.name, fileB))
-    print("    d1    d2    d3    ")
-    for i, row in enumerate(find_uvw(la.inv(ccellA).dot(P))):
-      print(' '.join(["%5d"%(val) for val in row]))
+    if interactive or savedisplay:
+        print("Displaying the Transition cell...")
+        displayTransCell(disps, dispStruc, finalStruc, foundcell,
+                         pos_in_struc, vec_classes, interactive, savedisplay)
+        print()
+    
+    eigval, U, P, Q, planeHab = crystallography(tmat, A, B, fileA, fileB, ccellA, ccellB)
+
+    print("=>Producing the steps along the transition<=")
+    transStruc, spgList, Tpos, color_array = produceTransition(tmat, dispStruc, finalStruc,
+                                                               vec_classes, outdir, atom_types,
+                                                               anim, savedisplay, interactive)
+                
+    print("Spacegroups along the transition:")
+    print(" -> ".join([e for i,e in enumerate(spgList) if i==len(spgList)-1 or e!=spgList[i+1]])) #This will remove repetitions that are next to each other
     print()
-    print("Strain Directions in %s (%s) coordinates:"%(A.name, fileA))
-    print("    d1    d2    d3    ")
-    for i, row in enumerate(find_uvw(la.inv(ccellA).dot(Q))):
-      print(' '.join(["%5d"%(val) for val in row]))
-    print()
-    print("Strains + 1 (eigenvalues)"):
-    print("    e1    e2    e3    ")
-    print(' '.join(["% 5.3f"%(val) for val in eigval])) 
-
-    print("----------------------------------------------------")
-
-    # TODO
-    
-    print("Orientation Relationship for thin film")
-    resPlaneDir = Q.dot(P.T).dot(planeDir)
-    print("A/B coord.")
-    print("Planes:", la.inv(Bcell).dot(planeDir), la.inv(Acell).dot(resPlaneDir))
-    print("Planes:", la.inv(Bcell).dot(planeDir), find_uvw(la.inv(Acell).dot(resPlaneDir.reshape((3,1)))).T[0])
-    resOrDir = Q.dot(P.T).dot(orDir)
-    print("Directions:", la.inv(Bcell).dot(orDir), la.inv(Acell).dot(resOrDir))
-    print("Directions:", la.inv(Bcell).dot(orDir), find_uvw(la.inv(Acell).dot(resOrDir.reshape((3,1)))).T[0])
-    print("Cartesian coord.")
-    print("Planes:", planeDir, resPlaneDir)
-    print("Planes:", planeDir, find_uvw(resPlaneDir.reshape((3,1))).T[0])
-    resOrDir = Q.dot(P.T).dot(orDir)
-    print("Directions:", orDir, resOrDir)
-    print("Directions:", orDir, find_uvw(resOrDir.reshape((3,1))).T[0])
-
-    twin = Q.dot(np.diag((1,-1,1))).dot(Q.T)
-    
-    print("Plus twinning")
-    print("Plane:", la.inv(Acell).dot(twin.dot(resPlaneDir)))
-    print("Directions:", la.inv(Acell).dot(twin.dot(resOrDir)))
-
-    print("Habit Plane (Closest to)")
-    idv = np.argmin(abs(eigval - 1))
-    idh = np.arange(3)[np.arange(3)!=idv]
-    ratio = np.sqrt(abs((eigval[idh[1]]**2 - eigval[idv]**2)/(eigval[idv]**2 - eigval[idh[0]]**2)))
-    #ratio = np.sqrt(abs((eigval[idh[1]]**2 - 1)/(1 - eigval[idh[0]]**2)))
-
-    # Only for cubic systems!
-    
-    planeHab = np.zeros((3,2))
-    planeHab[:,0] = eigvec[:,idh[0]] + ratio*eigvec[:,idh[1]]
-    planeHab[:,1] = eigvec[:,idh[0]] - ratio*eigvec[:,idh[1]]
-    
-    if useBcoord:
-        print("Exact Habit plane:", la.inv(Bcell).dot(planeHab))
-        print("Closest uvw:", find_uvw(la.inv(Bcell).dot(planeHab)))
-    else:
-        print("Exact Habit plane:", planeHab)
-        print("Closest uvw:", find_uvw(planeHab))
-
-    planeHab=planeHab[:,0]
-
-    vhab = np.zeros((3,3))
-    rhab = np.zeros((3,3))
-    
-    vhab[:,0] = ratio*eigvec[:,idh[0]] - eigvec[:,idh[1]]
-    vhab[:,1] = eigvec[:,idv]
-    vhab[:,2] = planeHab/la.norm(planeHab) 
-    
-    print("test 1", la.norm(vhab,axis=0), la.norm(tmat.dot(vhab), axis=0)) 
-    
-    print("Orientation relationship with Habit Plane")
-    rhab[:,:2] = tmat.dot(vhab[:,:2])
-    rhab[:,2] = np.cross(rhab[:,0], rhab[:,1])
-    rhab[:,2] = rhab[:,2] / la.norm(rhab[:,2])
-
-    r2hab = np.zeros((3,3))
-    
-    r2hab[:,:2] = U.dot(vhab[:,:2])
-    r2hab[:,2] = np.cross(r2hab[:,0], r2hab[:,1])
-    r2hab[:,2] = r2hab[:,2] / la.norm(r2hab[:,2])
-
-
-    print("P", P)
-
-    print("Q", Q)
-
-    print("QQ'", Q.dot(Q.T))
-
-    print("PP'", P.dot(P.T))
-
-    print("QP'", Q.dot(P.T)) 
-
-    print('RR', tmat.dot(la.inv(U)))
-    
-    Rtest = tmat.dot(la.inv(U)).dot(r2hab.dot(la.inv(vhab)))
-    R = rhab.dot(la.inv(vhab))
-    
-    def find_R_RU(mat):
-        if np.all(mat==np.eye(3)):
-            return mat
-
-        eigval, eigvec = la.eig(mat)
-        idv = np.argmin(abs(eigval - 1))
-        idh = np.arange(3)[np.arange(3)!=idv]
-        ratio = np.sqrt(abs((eigval[idh[1]]**2 - eigval[idv]**2)/(eigval[idv]**2 - eigval[idh[0]]**2)))
-
-        # Only for cubic systems!
-        
-        planeHab = np.zeros((3,2))
-        planeHab = eigvec[:,idh[0]] + ratio*eigvec[:,idh[1]]
-        
-        vhab = np.zeros((3,3))
-        rhab = np.zeros((3,3))
-        
-        vhab[:,0] = ratio*eigvec[:,idh[0]] - eigvec[:,idh[1]]
-        vhab[:,1] = -eigvec[:,idv]
-        vhab[:,2] = planeHab/la.norm(planeHab) 
-        
-        r2hab[:,:2] = mat.dot(vhab[:,:2])
-        r2hab[:,2] = np.cross(r2hab[:,0], r2hab[:,1])
-        r2hab[:,2] = r2hab[:,2] / la.norm(r2hab[:,2])
-
-        return r2hab.dot(la.inv(vhab)).T
-
-    R = Q.dot(P.T).dot(r2hab.dot(la.inv(vhab)))
-
-    print('R', R)
-    print('Rtest', Rtest)
-    
-    print("test habit", R.dot(vhab), la.inv(R).dot(vhab), tmat.dot(vhab))
-    resPlaneDir = R.dot(planeDir)
-    print("A/B coord.")
-    print("Planes:", la.inv(Bcell).dot(planeDir), la.inv(Acell).dot(resPlaneDir))
-    print("Planes:", la.inv(Bcell).dot(planeDir), find_uvw(la.inv(Acell).dot(resPlaneDir.reshape((3,1)))).T[0])
-    resOrDir = R.dot(orDir)
-    print("Directions:", la.inv(Bcell).dot(orDir), la.inv(Acell).dot(resOrDir))
-    print("Directions:", la.inv(Bcell).dot(orDir), find_uvw(la.inv(Acell).dot(resOrDir.reshape((3,1)))).T[0])
-    print("Cartesian coord.")
-    print("Planes:", planeDir, resPlaneDir)
-    print("Planes:", planeDir, find_uvw(resPlaneDir.reshape((3,1))).T[0])
-    resOrDir = R.dot(orDir)
-    print("Directions:", orDir, resOrDir)
-    print("Directions:", orDir, find_uvw(resOrDir.reshape((3,1))).T[0])
-    
-    # Displays only the cell and the displacements in it
-    fig = plt.figure()
-    ax = Axes3D(fig)
-    #ax = fig.add_subplot(111, projection='3d')
-    
-    def init_struc():
-        for i,disp in enumerate(dispStruc):
-            ax.quiver(disp.pos[0], disp.pos[1], disp.pos[2], vec_classes[int(disp.type)][0],vec_classes[int(disp.type)][1], vec_classes[int(disp.type)][2], color=colorlist[i%10])
-            ax.scatter(disp.pos[0], disp.pos[1], disp.pos[2], alpha = 0.5, s=10, color=colorlist[i%10])
-            ax.scatter(finalStruc[i].pos[0], finalStruc[i].pos[1], finalStruc[i].pos[2], alpha = 1, s=10, color=colorlist[i%10])
-        ax.quiver(np.zeros(3), np.zeros(3), np.zeros(3), cell[0,:], cell[1,:], cell[2,:], color = "red", alpha = 0.3)
-        ax.quiver(np.zeros(3), np.zeros(3), np.zeros(3), Acell[0,:], Acell[1,:], Acell[2,:], color = "blue", alpha = 0.3)
-        maxXAxis = abs(cell).max() + 1
-        ax.set_xlim([-maxXAxis, maxXAxis])
-        ax.set_ylim([-maxXAxis, maxXAxis])
-        ax.set_zlim([-maxXAxis, maxXAxis])
-        
-        fig.savefig(outdir+'/Displacement_structure.svg')
-        return fig,
-    
-    if anim:
-        anim = animation.FuncAnimation(fig, animate, init_func=init_struc,
-                                       frames=490, interval=30)
-        anim.save(outdir+'/DispStruc.gif', fps=30, codec='gif')
-    else:
-        init_struc()
-
-    # Produce transition
-
-    print("Producing transition!")
-
-    n_steps = 60
-
-    PoscarDirName = "/TransPOSCARS_K-S"
-    
-    os.makedirs(outdir+PoscarDirName, exist_ok=True)
-
-    itmat = rotate(la.inv(tmat).dot(finalStruc.cell), finalStruc.cell).dot(la.inv(tmat))
-
-    print("ITMAT", itmat)
-    print("U-1", Q.dot(P.T).dot(la.inv(U)).dot(P.dot(Q.T)))
-    
-    spgList = []
-    transStruc = []
-    # viewirs = [[la.inv(finalStruc.cell).dot([0,0,1]),
-    #             la.inv(la.inv(tmat).dot(finalStruc.cell)).dot([1,0,0])],
-    #             [1,0,0], [0,1,0]]
-
-    # viewDirs = [[0, np.sqrt(3), 3], [1,0,0], [0, np.sqrt(3), -1]]
-
-    # viewDirs = np.eye(3).tolist()
-
-    viewDirs = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-    
-    print("Viewing directions in units of dispCell:", viewDirs)
-    # print("Choosing the right plane", la.inv(tmat).dot(finalStruc.cell).dot(la.inv(finalStruc.cell).dot([0,0,1])))
-    color_array = []
-    size = 3
-    Tpos = [] 
-    for i in range(n_steps+1):
-        # Pitsch
-        curMat = (itmat-np.eye(3))*i/n_steps + np.eye(3)
-        # K-S
-        curMat = find_R_RU(curMat).dot(curMat) # K-S only remove this line for Pitsch
-        curStruc = Structure(curMat.dot(finalStruc.cell))
-        for j,a in enumerate(dispStruc):
-            curDisp = vec_classes[int(a.type)]*i/n_steps
-            curPos = curMat.dot((finalStruc[j].pos - curDisp).reshape((3,1)))
-            curStruc.add_atom(*(curPos.T.tolist()[0]),finalStruc[j].type)
-            # curStruc = supercell(curStruc, curStruc.cell)
-        write.poscar(curStruc, vasp5=True, file=outdir+PoscarDirName+"/POSCAR_%03d"%i)
-        spgList.append(get_spacegroup(to_spglib(curStruc), symprec=0.3, angle_tolerance=3.0))
-        transStruc.append(curStruc)
-        
-        color_array.append([])
-        Tpos.append([])
-        for l,pl in enumerate(viewDirs):
-
-            if isinstance(pl[0],(list, np.ndarray)): 
-                plane = normal(curStruc.cell).dot(pl[0] + i/n_steps*(pl[1] - pl[0]))
-            else:
-                plane = normal(curStruc.cell).dot(pl)
-            tickness = 5 * la.norm(plane)
-            plane = plane/tickness
-            
-            lattices = []
-        
-            Tpos_tmp = []
-            types = []
-
-            sizes = np.round(max(la.norm(curStruc.cell,axis=0))*size/la.norm(curStruc.cell,axis=0))
-
-            # Cut along the current plane
-            for l in np.arange(-sizes[0],sizes[0]):
-                for j in np.arange(-sizes[1],sizes[1]):
-                    for k in np.arange(-sizes[2],sizes[2]):
-                        for a in curStruc:
-                            pos = curStruc.cell.dot(np.array([l,j,k])) + a.pos
-                            if plane.dot(pos) < 0 and plane.dot(pos) > - tickness:
-                                Tpos_tmp.append(pos)
-                                types.append(np.where(atom_types == a.type)[0][0])
-                                
-            Tpos[-1].append(np.array(Tpos_tmp).T)
-            color_array[-1].append(types)
-
-    print("Spacegroups along the transition:", spgList)
-    
-    # Displays displacement with the disp cell overlayed
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    ax.quiver(pos_in_struc.T[:,0], pos_in_struc.T[:,1], pos_in_struc.T[:,2], disps.T[:,0], disps.T[:,1], disps.T[:,2], color = "C0")
-    ax.scatter(pos_in_struc.T[:,0], pos_in_struc.T[:,1], pos_in_struc.T[:,2], s=10, color = "C0")
-    ax.quiver(np.zeros(3), np.zeros(3), np.zeros(3), foundcell[0,:], foundcell[1,:], foundcell[2,:], color = "red")
-    ax.quiver(np.zeros(3), np.zeros(3), np.zeros(3), cell[0,:], cell[1,:], cell[2,:], color = "green")
-    maxXAxis = pos_in_struc.max() + 1
-    ax.set_xlim([-maxXAxis, maxXAxis])
-    ax.set_ylim([-maxXAxis, maxXAxis])
-    ax.set_zlim([-maxXAxis, maxXAxis])
-    fig.savefig(outdir+'/DispLattice_stretched_cell_primitive.svg')
-
-    plt.show() #TMP
-
         
     # Showing some of the steps
-    make_fig(0, True)
-    make_fig(int(n_steps/4), True)
-    make_fig(int(2*n_steps/4), True)
-    make_fig(int(3*n_steps/4), True)
-    make_fig(n_steps, True)
-
-    if display:
-        print("Showing")
-        plt.show()
+    if interactive or savedisplay:
+        print("Displaying Frames...")
+        for i in range(n_frames):
+            make_fig(int(i*n_steps/n_frames-1), Tpos, color_array,
+                     transStruc, atom_types, spgList, outdir, savedisplay)
+            
+        if interactive:
+            print("(Close the display windows to continue)")
+            plt.show()
+            print()
 
     if anim:
-        make_anim(n_steps)
-
+        print("Producing the animation...(this may take several hours)")
+        make_anim(n_steps, Tpos, color_array, transStruc, atom_types, spgList, outdir)
+        print()
+        
+    print("p2ptrans finished successfully")
 
 if __name__=='__main__':
     p2ptrans(*readOptions())
