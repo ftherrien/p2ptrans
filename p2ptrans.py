@@ -35,7 +35,7 @@ planehkl = [1,1,0]
 diruvw = [1,-1,-1]
 
 # Steps
-PoscarDirName = "/TransPOSCARS_K-S"
+PoscarDirName = "/TransPOSCARS"
 n_steps = 60
 viewDirs = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 size = 3
@@ -87,7 +87,7 @@ def readOptions():
     prim = options.prim
     anim = options.anim
     vol = options.vol
-    test = option.test
+    test = options.test
     
     return fileA, fileB, ncell, filename, interactive, savedisplay, outdir, use, switch, prim, anim, vol, minimize, test
 
@@ -262,6 +262,8 @@ def gcd(x, y):
     return x
 
 def uniqueclose(closest, tol):
+    """ For a 3xn matrix of coordinates returns an array of unique cooridnates and their
+    index in the original matrix"""
     unique = []
     idx = []
     for i,line in enumerate(closest.T):
@@ -391,6 +393,7 @@ def makeStructures(cell, atoms, atom_types, natB, pos_in_struc, class_list, vec_
     stinitStruc = Structure(cell)
     incell = []
 
+    # Goes thtough the unique atomic positions found in 1 cell
     for idx, disp in zip(*uniqueclose(cell_coord, tol)):
         for i in idx:
             if np.allclose(pos_in_struc[:,i], cell.dot(disp), atol=tol):
@@ -398,7 +401,7 @@ def makeStructures(cell, atoms, atom_types, natB, pos_in_struc, class_list, vec_
                 break
         else:
             i = np.argmin(la.norm(np.array([pos_in_struc[:,j] for j in idx]),axis=1))
-            incell.append((i,cell.dot(disp)))
+            incell.append((idx[i],cell.dot(disp)))
         
     for i, disp in incell:
         dispStruc.add_atom(*(tuple(disp)+(str(class_list[i]),)))
@@ -540,7 +543,7 @@ def makeGif(Apos, Bposst, disps, vec_classes, nat, atoms):
     anim.save(outdir+'/Crystal+Disps.gif', fps=30, codec='gif')
 
 def displayTransCell(disps, dispStruc, finalStruc, foundcell,
-                     pos_in_struc, vec_classes, interactive, savedisplay):   
+                     pos_in_struc, vec_classes, outdir, interactive, savedisplay):   
 
     cell = dispStruc.cell
     
@@ -897,12 +900,10 @@ def all_panels(fig, gs, state, label, Tpos, color_array, transStruc, atom_types,
     # origin2 = np.sum(transStruc[state].cell.dot(np.diag([5,5,5])),axis=1)/2
     # for a in supercell(transStruc[state], transStruc[state].cell.dot(np.diag([5,5,5]))):
     #     ax.scatter(a.pos[0]-origin2[0], a.pos[1]-origin2[1], a.pos[2]-origin2[2], alpha = 0.05, s=400, color=colorlist[(np.where(atom_types == a.type)[0][0])%10])
+
+    apos1 = transStruc[state][np.argmin([la.norm(a.pos) for a in transStruc[state]])].pos
     a_list = []
-    first = True
     for a in transStruc[state]:
-        if first:
-            first = False
-            apos1 = a.pos
         if a.type in a_list or not label:
             ax.scatter(*(a.pos-origin-apos1), alpha = 1, s=200, color=colorlist[(np.where(atom_types == a.type)[0][0])%10])
         else:
@@ -932,7 +933,7 @@ def make_fig(state, Tpos, color_array, transStruc, atom_types, spgList, outdir, 
     gs.update(wspace=0.03, hspace=0.03)
     all_panels(fig,gs, state, True, Tpos, color_array, transStruc, atom_types, spgList)
     if savedisplay:
-        fig.savefig(outdir+"/Trans_%d.svg"%state)
+        fig.savefig(outdir+"/Trans_%d.png"%state)
 
 def make_anim(n_states, Tpos, color_array, transStruc, atom_types, spgList, outdir):
     fig = plt.figure(figsize=[12.8,7.2])
@@ -1121,15 +1122,15 @@ def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay,
         A = primitive(A, tol)
         B = primitive(B, tol)
         if len(A) == lenA:
-            print("%s (%s) did not change."%(A.name, fileA))
+            print("%s (%s) did not change. It has %d atoms."%(A.name, fileA, len(A)))
         else:
             print("The size of %s (%s) changed from %d to %d."%(A.name, fileA, lenA, len(A)))
         if len(B) == lenB:
-            print("%s (%s) did not change."%(B.name, fileB))
+            print("%s (%s) did not change. It has %d atoms."%(B.name, fileB, len(B)))
         else:
             print("The size of %s (%s) changed from %d to %d."%(B.name, fileB, lenB, len(B)))
         print()
-            
+        
     # Make sure they have the same number of atoms
     mul = lcm(len(A),len(B))
     mulA = mul//len(A)
@@ -1233,11 +1234,11 @@ def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay,
 
     dispStruc, stinitStruc, finalStruc = makeStructures(foundcell, atoms, atom_types,
                                                         natB, pos_in_struc, class_list, vec_classes)
-
+    
     print("Size of the transformation cell (TC):", len(dispStruc))
 
-    print("Number of %s (%s) cells in TC:"%(A.name, fileA), abs(la.det(dispStruc.cell)/(mulA*la.det(Acell))))
-    print("Number of %s (%s) cells in TC:"%(B.name, fileB), abs(la.det(dispStruc.cell)/(mulB*la.det(tmat.dot(Bcell)))))
+    print("Number of %s (%s) cells in TC:"%(A.name, fileA), abs(la.det(dispStruc.cell)/(la.det(Acell))))
+    print("Number of %s (%s) cells in TC:"%(B.name, fileB), abs(la.det(dispStruc.cell)/(la.det(tmat.dot(Bcell)))))
     # Total displacement per unit volume a as metric
     Total_disp = 0
     for disp in dispStruc:
@@ -1247,6 +1248,9 @@ def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay,
     
     print("Total displacement in stretched cell:", Total_disp)
 
+    ccellA = A.cell
+    ccellB = B.cell
+    
     print()
     print("TC in %s (%s) coordinates:"%(B.name, fileB))
     printMatAndDir(la.inv(tmat).dot(dispStruc.cell), ccellB)
@@ -1258,7 +1262,7 @@ def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay,
     if interactive or savedisplay:
         print("Displaying the Transition cell...")
         displayTransCell(disps, dispStruc, finalStruc, foundcell,
-                         pos_in_struc, vec_classes, interactive, savedisplay)
+                         pos_in_struc, vec_classes, outdir, interactive, savedisplay)
         print()
     
     eigval, U, P, Q, planeHab = crystallography(tmat, A, B, fileA, fileB, ccellA, ccellB)
@@ -1276,7 +1280,7 @@ def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay,
     if interactive or savedisplay:
         print("Displaying Frames...")
         for i in range(n_frames):
-            make_fig(int(i*n_steps/n_frames-1), Tpos, color_array,
+            make_fig(int(i*n_steps/(n_frames-1)), Tpos, color_array,
                      transStruc, atom_types, spgList, outdir, savedisplay)
             
         if interactive:
