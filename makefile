@@ -2,7 +2,7 @@ COMP = gfortran
 COMP2 = python3 -m numpy.f2py
 
 files = tiling.f90 transform.f90
-functions = sphere parallelepiped circle trans center fastoptimization canonicalize
+functions = sphere parallelepiped circle center fastoptimization
 flags = --f90exec=gfortran --f90flags="-fopenmp" --opt=-O3 -lgomp 
 
 #-I/usr/lib64/openmpi/lib/ -L/usr/lib64/openmpi/lib/ -lmpi

@@ -43,7 +43,6 @@ habit = False
 n_frames = 5
 # ++++++++++++++++++++++++++++++++
 
-
 try:
     from config import *
 except ModuleNotFoundError:
@@ -987,7 +986,7 @@ def PCA(disps):
     
     return n_class
 
-def optimizationLoop(A, Acell, mulA, B, Bcell, mulB, ncell, filename): 
+def optimizationLoop(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir): 
     """ This loop will repeat the entire minimization if no periodic cell can be found
         the final tmat is used to retile the structures (off by default) """
     tmat = np.eye(3)
@@ -1017,7 +1016,10 @@ def optimizationLoop(A, Acell, mulA, B, Bcell, mulB, ncell, filename):
         Apos = np.asfortranarray(Apos)
         Bpos = np.asfortranarray(Bpos)
         t_time = time.time()
-        Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, vec = tr.fastoptimization(Apos, Bpos, Acell, la.inv(Acell), mulA * la.det(Acell)/(mulB * la.det(Bcell)), atoms, filename)
+        result = tr.fastoptimization(Apos, Bpos, Acell, la.inv(Acell),
+                                     mulA * la.det(Acell)/(mulB * la.det(Bcell)),
+                                     atoms, filename, outdir)
+        Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, vec = result
         t_time = time.time() - t_time
         Bpos = np.asanyarray(Bpos)
         Apos = np.asanyarray(Apos)
@@ -1035,8 +1037,6 @@ def optimizationLoop(A, Acell, mulA, B, Bcell, mulB, ncell, filename):
             
         print("Looking for periodic cell...")        
         foundcell, origin = find_cell(class_list, Bposst)
-
-        print(class_list)
         
         if foundcell is not None:
             print("Found cell!")
@@ -1175,7 +1175,7 @@ def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay,
     if minimize:
         print("==>Ready to start optimmization<==")
 
-        result = optimizationLoop(A, Acell, mulA, B, Bcell, mulB, ncell, filename)
+        result = optimizationLoop(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir)
         pickle.dump(result, open(outdir+"/fastoptimization.dat","wb"))
         
     else:

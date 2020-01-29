@@ -85,7 +85,7 @@ module tiling
     nny = abs(int(2*rad*norm(cross(Acell(:,3),Acell(:,1)))/(2*dot_product(Acell(:,2),cross(Acell(:,3),Acell(:,1))))))+1
     nnx = abs(int(2*rad*norm(cross(Acell(:,2),Acell(:,3)))/(2*dot_product(Acell(:,1),cross(Acell(:,2),Acell(:,3))))))+1
 
-    write(*,*) 'Square cell dimensions:',nnx, nny, nnz
+    ! write(*,*) 'Square cell dimensions:',nnx, nny, nnz
 
     l = 0
     dists = -1.0d0
