@@ -43,11 +43,27 @@ habit = False
 n_frames = 5
 # ++++++++++++++++++++++++++++++++
 
+isset = False
+
 try:
     from config import *
 except ModuleNotFoundError:
     pass
 
+def setplt(interactive):
+    global isset
+    if not isset:
+        if not interactive:
+            matplotlib.use('Agg')
+        
+        global plt
+            
+        import matplotlib.pyplot as plt
+        
+        plt.rcParams["figure.figsize"] = [5, 5]
+
+        isset = True
+        
 def readOptions():
 
     parser = argparse.ArgumentParser()
@@ -374,6 +390,12 @@ def atCenter(pos):
     n = np.shape(pos)[1]
     return  pos - (np.sum(pos,axis=1).reshape((3,1))/n).dot(np.ones((1,n)))
 
+def makeInitStruc(dispStruc, vec_classes):
+    initStruc = Structure(dispStruc.cell)
+    for a in dispStruc:
+        initStruc.add_atom(*(a.pos+vec_classes[int(a.type)]),a.atom)
+    return initStruc
+
 def makeStructures(cell, atoms, atom_types, natB, pos_in_struc, class_list, vec_classes):
     """Make the displacement structure from the repeating unit cell"""
     
@@ -389,7 +411,6 @@ def makeStructures(cell, atoms, atom_types, natB, pos_in_struc, class_list, vec_
     # Make a pylada structure
     cell_coord = np.mod(la.inv(cell).dot(pos_in_struc)+tol,1)-tol
     dispStruc = Structure(cell)
-    stinitStruc = Structure(cell)
     incell = []
 
     # Goes thtough the unique atomic positions found in 1 cell
@@ -401,10 +422,16 @@ def makeStructures(cell, atoms, atom_types, natB, pos_in_struc, class_list, vec_
         else:
             i = np.argmin(la.norm(np.array([pos_in_struc[:,j] for j in idx]),axis=1))
             incell.append((idx[i],cell.dot(disp)))
-        
+
+    # Adds the atoms to the structure
+    atom_list = []
     for i, disp in incell:
         dispStruc.add_atom(*(tuple(disp)+(str(class_list[i]),)))
-        stinitStruc.add_atom(*(tuple(disp)+(whattype(i, natB),)))
+        atom_list.append(whattype(i, natB))
+
+    # Adds a new label to each displacement called atom
+    for i,a in enumerate(dispStruc):
+        a.atom = atom_list[i]
         
     if la.det(cell) < 0:
        cell[:,2] = -cell[:,2] 
@@ -417,20 +444,7 @@ def makeStructures(cell, atoms, atom_types, natB, pos_in_struc, class_list, vec_
     # Makes sure it is the primitive cell 
     dispStruc = primitive(dispStruc, tolerance = tol)
 
-    tmpStruc = Structure(dispStruc.cell)
-    to_add = [np.mod(la.inv(dispStruc.cell).dot(a.pos)+tol,1)-tol for a in stinitStruc]
-    for idx, pos in zip(*uniqueclose(np.array(to_add).T, tol)):
-        tmpStruc.add_atom(*dispStruc.cell.dot(pos),stinitStruc[idx[0]].type)
-    
-    stinitStruc = tmpStruc
-
-    write.poscar(stinitStruc, vasp5=True, file="POSCAR_init")
-
-    finalStruc = Structure(dispStruc.cell)
-    for i,a in enumerate(dispStruc):
-        finalStruc.add_atom(*(a.pos+vec_classes[int(a.type)]),stinitStruc[i].type)
-
-    return dispStruc, stinitStruc, finalStruc
+    return dispStruc
     
 def displayOptimalResult(Apos, Bpos, Bposst, disps_total, disps, class_list, vec_classes,
                          nat, natA, natB, atoms, outdir, savedisplay, interactive):
@@ -541,9 +555,11 @@ def makeGif(Apos, Bposst, disps, vec_classes, nat, atoms):
                                    frames=490, interval=30)
     anim.save(outdir+'/Crystal+Disps.gif', fps=30, codec='gif')
 
-def displayTransCell(disps, dispStruc, finalStruc, foundcell,
+def displayTransCell(disps, dispStruc, foundcell,
                      pos_in_struc, vec_classes, outdir, interactive, savedisplay):   
 
+    initStruc = makeInitStruc(dispStruc, vec_classes)
+    
     cell = dispStruc.cell
     
     # Displays only the cell and the displacements in it
@@ -554,7 +570,7 @@ def displayTransCell(disps, dispStruc, finalStruc, foundcell,
     for i,disp in enumerate(dispStruc):
         ax.quiver(disp.pos[0], disp.pos[1], disp.pos[2], vec_classes[int(disp.type)][0],vec_classes[int(disp.type)][1], vec_classes[int(disp.type)][2], color=colorlist[i%10])
         ax.scatter(disp.pos[0], disp.pos[1], disp.pos[2], alpha = 0.5, s=10, color=colorlist[i%10])
-        ax.scatter(finalStruc[i].pos[0], finalStruc[i].pos[1], finalStruc[i].pos[2], alpha = 1, s=10, color=colorlist[i%10])
+        ax.scatter(initStruc[i].pos[0], initStruc[i].pos[1], initStruc[i].pos[2], alpha = 1, s=10, color=colorlist[i%10])
     ax.quiver(np.zeros(3), np.zeros(3), np.zeros(3), cell[0,:], cell[1,:], cell[2,:], color = "red", alpha = 0.3)
     # ax.quiver(np.zeros(3), np.zeros(3), np.zeros(3), Acell[0,:], Acell[1,:], Acell[2,:], color = "blue", alpha = 0.3)
     maxXAxis = abs(cell).max() + 1
@@ -663,7 +679,7 @@ def findR(U, P=None, planeHab=None, ratio=None):
         
     return R
 
-def crystallography(tmat, A, B, fileA, fileB, ccellA, ccellB):
+def crystallography(tmat, A, B, ccellA, ccellB, fileA="input 1", fileB="input 2"):
     print("----------CRYSTALLOGRAPHY----------")
     print()
     eigval, U, P, Q = strainDirs(tmat)
@@ -738,33 +754,42 @@ def crystallography(tmat, A, B, fileA, fileB, ccellA, ccellB):
 
     return eigval, U, P, Q, planeHab 
 
-def produceTransition(tmat, dispStruc, finalStruc, vec_classes, outdir, atom_types,
-                      anim, savedisplay, interactive):
+def produceTransition(n_steps, tmat, dispStruc, vec_classes, outdir,
+                      display):
 
+    initStruc = makeInitStruc(dispStruc, vec_classes)
+
+    if display:
+        atom_types = np.array(list(set([a.type for a in initStruc])),np.str)
+        color_array = []
+        Tpos = []
+    else:
+        atom_types = None
+        color_array = None
+        Tpos = None
+    
     os.makedirs(outdir+PoscarDirName, exist_ok=True)
 
-    itmat = rotate(la.inv(tmat).dot(finalStruc.cell), finalStruc.cell).dot(la.inv(tmat))
-
+    itmat = rotate(la.inv(tmat).dot(initStruc.cell), initStruc.cell).dot(la.inv(tmat))
+    
     spgList = []
-    transStruc = []
-    color_array = []
-    Tpos = [] 
+    transStruc = [] 
     for i in range(n_steps+1):
         if habit:
             curMat = find_R_RU(curMat).dot(curMat)
         else:
             curMat = (itmat-np.eye(3))*i/n_steps + np.eye(3)
-        curStruc = Structure(curMat.dot(finalStruc.cell))
+        curStruc = Structure(curMat.dot(initStruc.cell))
         for j,a in enumerate(dispStruc):
             curDisp = vec_classes[int(a.type)]*i/n_steps
-            curPos = curMat.dot((finalStruc[j].pos - curDisp).reshape((3,1)))
-            curStruc.add_atom(*(curPos.T.tolist()[0]),finalStruc[j].type)
+            curPos = curMat.dot((initStruc[j].pos - curDisp).reshape((3,1)))
+            curStruc.add_atom(*(curPos.T.tolist()[0]),initStruc[j].type)
             # curStruc = supercell(curStruc, curStruc.cell)
         write.poscar(curStruc, vasp5=True, file=outdir+PoscarDirName+"/POSCAR_%03d"%i) # Write resulting structure in POSCAR
         spgList.append(get_spacegroup(to_spglib(curStruc), symprec=0.3, angle_tolerance=3.0))
         transStruc.append(curStruc)
 
-        if savedisplay or anim or interactive:
+        if display:
             color_array.append([])
             Tpos.append([])
             for l,pl in enumerate(viewDirs):
@@ -796,8 +821,8 @@ def produceTransition(tmat, dispStruc, finalStruc, vec_classes, outdir, atom_typ
                 Tpos[-1].append(np.array(Tpos_tmp).T)
                 color_array[-1].append(types)
                 
-    return transStruc, spgList, Tpos, color_array
-
+    return transStruc, spgList, Tpos, color_array, atom_types
+        
 def add_panel(fig,g,plane, state, p, anchor, Tpos, color_array, transStruc):
     Rectangle = matplotlib.patches.Rectangle
     
@@ -925,16 +950,21 @@ def all_panels(fig, gs, state, label, Tpos, color_array, transStruc, atom_types,
             break
     else:
         fig.legend()
-
-def make_fig(state, Tpos, color_array, transStruc, atom_types, spgList, outdir, savedisplay):
+        
+def make_fig(state, Tpos, color_array, transStruc, atom_types, spgList, outdir, savedisplay,
+             interactive):
+    setplt(interactive)
     fig = plt.figure(figsize=[7.2,7.2])
     gs = matplotlib.gridspec.GridSpec(2, 2)
     gs.update(wspace=0.03, hspace=0.03)
     all_panels(fig,gs, state, True, Tpos, color_array, transStruc, atom_types, spgList)
     if savedisplay:
         fig.savefig(outdir+"/Trans_%d.png"%state)
-
+    if interactive:
+        plt.show
+        
 def make_anim(n_states, Tpos, color_array, transStruc, atom_types, spgList, outdir):
+    setplt(interactive)
     fig = plt.figure(figsize=[12.8,7.2])
     gs = matplotlib.gridspec.GridSpec(2, 2)
     gs.update(wspace=0.03, hspace=0.03)
@@ -1046,74 +1076,18 @@ def optimizationLoop(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir):
     return Apos, Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, atoms, atom_types, foundcell, origin
             
             
-def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay,
-             outdir, use, switch, prim, anim, vol, minimize, test):
-    
-    on_top = None
+def p2ptrans(A, B, ncell,
+             fileA='Input 1', fileB='Input 2',
+             filename='p2p.in',
+             interactive=False, savedisplay=False,
+             outdir='output',
+             use=False, switch= False, prim=True,
+             vol=False, minimize=True, test= False):
 
     os.makedirs(outdir, exist_ok=True)
 
-    if not interactive:
-        matplotlib.use('Agg')
-
-    global plt
-        
-    import matplotlib.pyplot as plt
-
-    plt.rcParams["figure.figsize"] = [5, 5]
-
-    # START
-    print(" ________    _______  ________   ")   
-    print("|\\   __  \\  /  ___  \\|\\   __  \\  ")
-    print("\\ \\  \\|\\  \\/__/|_/  /\\ \\  \\|\\  \\ ")
-    print(" \\ \\   ____\\__|//  / /\\ \\   ____\\")
-    print("  \\ \\  \\___|   /  /_/__\\ \\  \\___|")
-    print("   \\ \\__\\     |\\________\\ \\__\\   ")
-    print("    \\|__|      \\|_______|\\|__|   ")
-    print()
-    print("__________TRANSFORMATIONS__________")
-    print()
+    setplt(interactive)
     
-    # If reusing a result load the info
-    if use:
-
-        fileA = "File 1"
-        fileB = "File 2"
-        
-        A, B, ncell, filecontent, switch, prim, vol = pickle.load(open(outdir+"/param.dat","rb"))
-
-        print("==>Using information from %s<=="%(outdir))
-        print()
-        print("The inputs for that run were:")
-        print("-----------------------------------")
-        print("File 1:", A)
-        print("File 2:", B)
-        print("ncell:", ncell)
-        print("Param file:")
-        for l in filecontent:
-            print(l.rstrip())
-        print("switch:", switch)
-        print("prim:", prim)
-        print("vol:", vol)
-        print("-----------------------------------")
-        print()
-
-    else:
-
-        # Set up the output directory
-        if not os.path.exists(outdir):
-            os.makedirs(outdir)                
-                
-        # Read the structure files
-        A = read.poscar(fileA)
-        B = read.poscar(fileB)
-
-        with open(filename, "r") as f:
-            filecontent = f.readlines()
-
-        # Save the parameters for the use function
-        pickle.dump((A, B, ncell, filecontent, switch, prim, vol), open(outdir+"/param.dat","wb"))
-        
     # Make the structure primitive (default)
     if prim:
         lenA = len(A)
@@ -1144,8 +1118,10 @@ def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay,
     
     # Transformations is always from A to B. Unless switch is True, the more dense structure
     # is set as B
+    switched = False
     if (abs(mulA*la.det(Acell)) < abs(mulB*la.det(Bcell))) != switch: # (is switched?) != switch
         A, mulA, Acell, fileA, ccellA, B, mulB, Bcell, fileB, ccellB = B, mulB, Bcell, fileB, ccellB, A, mulA, Acell, fileA, ccellA
+        switched = True
     print("Transition from %s (%s) to %s (%s)"%(A.name, fileA, B.name, fileB))
     
     
@@ -1164,7 +1140,7 @@ def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay,
     print("Initial SpaceGroup:", initSpg)
     print("Final SpaceGroup:", finalSpg)
 
-    print("Number of %s (%s) cells in sphere"%(A.name, fileA), mulA*ncell)
+    print("Number of %s (%s) cells in sphere:"%(A.name, fileA), mulA*ncell)
     print("Number of %s (%s) cells in sphere:"%(B.name, fileB), mulB*ncell)
     print("Total number of atoms in each sphere:", mulA*ncell*len(A))
     print()
@@ -1232,13 +1208,14 @@ def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay,
     
     pos_in_struc = Bposst - origin.dot(np.ones((1,np.shape(Bposst)[1])))
 
-    dispStruc, stinitStruc, finalStruc = makeStructures(foundcell, atoms, atom_types,
-                                                        natB, pos_in_struc, class_list, vec_classes)
+    dispStruc = makeStructures(foundcell, atoms, atom_types,
+                               natB, pos_in_struc, class_list, vec_classes)
     
     print("Size of the transformation cell (TC):", len(dispStruc))
 
     print("Number of %s (%s) cells in TC:"%(A.name, fileA), abs(la.det(dispStruc.cell)/(la.det(Acell))))
     print("Number of %s (%s) cells in TC:"%(B.name, fileB), abs(la.det(dispStruc.cell)/(la.det(tmat.dot(Bcell)))))
+    
     # Total displacement per unit volume a as metric
     Total_disp = 0
     for disp in dispStruc:
@@ -1247,9 +1224,6 @@ def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay,
     Total_disp = Total_disp / la.det(dispStruc.cell)
     
     print("Total displacement in stretched cell:", Total_disp)
-
-    ccellA = A.cell
-    ccellB = B.cell
     
     print()
     print("TC in %s (%s) coordinates:"%(B.name, fileB))
@@ -1261,39 +1235,110 @@ def p2ptrans(fileA, fileB, ncell, filename, interactive, savedisplay,
 
     if interactive or savedisplay:
         print("Displaying the Transition cell...")
-        displayTransCell(disps, dispStruc, finalStruc, foundcell,
+        displayTransCell(disps, dispStruc, foundcell,
                          pos_in_struc, vec_classes, outdir, interactive, savedisplay)
         print()
-    
-    eigval, U, P, Q, planeHab = crystallography(tmat, A, B, fileA, fileB, ccellA, ccellB)
 
-    print("=>Producing the steps along the transition<=")
-    transStruc, spgList, Tpos, color_array = produceTransition(tmat, dispStruc, finalStruc,
-                                                               vec_classes, outdir, atom_types,
-                                                               anim, savedisplay, interactive)
-                
-    print("Spacegroups along the transition:")
-    print(" -> ".join([e for i,e in enumerate(spgList) if i==len(spgList)-1 or e!=spgList[i+1]])) #This will remove repetitions that are next to each other
-    print()
+    return switched, tmat, dispStruc, vec_classes
         
-    # Showing some of the steps
-    if interactive or savedisplay:
-        print("Displaying Frames...")
-        for i in range(n_frames):
-            make_fig(int(i*n_steps/(n_frames-1)), Tpos, color_array,
-                     transStruc, atom_types, spgList, outdir, savedisplay)
-            
-        if interactive:
-            print("(Close the display windows to continue)")
-            plt.show()
-            print()
-
-    if anim:
-        print("Producing the animation...(this may take several hours)")
-        make_anim(n_steps, Tpos, color_array, transStruc, atom_types, spgList, outdir)
-        print()
-        
-    print("p2ptrans finished successfully")
-
 if __name__=='__main__':
-    p2ptrans(*readOptions())
+
+    (fileA, fileB, ncell, filename, interactive, savedisplay, outdir,
+     use, switch, prim, anim, vol, minimize, test) = readOptions()
+
+    # START
+    print(" ________    _______  ________   ")   
+    print("|\\   __  \\  /  ___  \\|\\   __  \\  ")
+    print("\\ \\  \\|\\  \\/__/|_/  /\\ \\  \\|\\  \\ ")
+    print(" \\ \\   ____\\__|//  / /\\ \\   ____\\")
+    print("  \\ \\  \\___|   /  /_/__\\ \\  \\___|")
+    print("   \\ \\__\\     |\\________\\ \\__\\   ")
+    print("    \\|__|      \\|_______|\\|__|   ")
+    print()
+    print("__________TRANSFORMATIONS__________")
+    print()
+    
+    # If reusing a result load the info
+    if use:
+
+        fileA = "File 1"
+        fileB = "File 2"
+        
+        A, B, ncell, filecontent, switch, prim, vol = pickle.load(open(outdir+"/param.dat","rb"))
+
+        print("==>Using information from %s<=="%(outdir))
+        print()
+        print("The inputs for that run were:")
+        print("-----------------------------------")
+        print("File 1:", A)
+        print("File 2:", B)
+        print("ncell:", ncell)
+        print("Param file:")
+        for l in filecontent:
+            print(l.rstrip())
+        print("switch:", switch)
+        print("prim:", prim)
+        print("vol:", vol)
+        print("-----------------------------------")
+        print()
+
+    else:
+
+        # Set up the output directory
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)                
+                
+        with open(filename, "r") as f:
+            filecontent = f.readlines()
+
+        # Save the parameters for the use function
+        pickle.dump((A, B, ncell, filecontent, switch, prim, vol), open(outdir+"/param.dat","wb"))
+    
+    if test:
+        p2ptrans(A, B, ncell, fileA=fileA, fileB=fileB,
+                 filename=filename, interactive=interactive,
+                 savedisplay=savedisplay, outdir=outdir,
+                 use=use, switch=switch, prim=prim, vol=vol,
+                 minimize=minimize, test=test)
+    else:
+        switched, tmat, dispStruc, vec_classes = p2ptrans(A, B, ncell, fileA=fileA, fileB=fileB,
+                                                          filename=filename, interactive=interactive,
+                                                          savedisplay=savedisplay, outdir=outdir,
+                                                          use=use, switch=switch, prim=prim, vol=vol,
+                                                          minimize=minimize, test=test)
+
+        if switched:
+            eigval, U, P, Q, planeHab = crystallography(la.inv(tmat), B, A,
+                                                        ccell2, ccell1, fileA=fileB, fileB=fileA,)
+        else:
+            eigval, U, P, Q, planeHab = crystallography(tmat, A, B,
+                                                        ccell1, ccell2, fileA=fileA, fileB=fileB,)
+            
+        print("=>Producing the steps along the transition<=")
+        result = produceTransition(n_steps, tmat, dispStruc, vec_classes,
+                                   outdir, anim or savedisplay or interactive)
+        transStruc, spgList, Tpos, color_array, atom_types = result
+        
+        print("Spacegroups along the transition:")
+        print(" -> ".join([e for i,e in enumerate(spgList) if i==len(spgList)-1 or e!=spgList[i+1]]))
+        #This will remove repetitions that are next to each other
+        print()
+            
+        # Showing some of the steps
+        if interactive or savedisplay:
+            print("Displaying Frames...")
+            for i in range(n_frames):
+                make_fig(int(i*n_steps/(n_frames-1)), Tpos, color_array,
+                         transStruc, atom_types, spgList, outdir, savedisplay, False)
+                
+            if interactive:
+                print("(Close the display windows to continue)")
+                plt.show()
+                print()
+        
+        if anim:
+            print("Producing the animation...(this may take several hours)")
+            make_anim(n_steps, Tpos, color_array, transStruc, atom_types, spgList, outdir)
+            print()
+            
+        print("p2ptrans finished successfully")
