@@ -1,130 +1,14 @@
-from fmodules import transform as tr
-import numpy as np
-import numpy.linalg as la
-from matplotlib import animation
-from fmodules import tiling as t
-import pickle
 import time
-from pylada.crystal import Structure, primitive, gruber, read, write, supercell, space_group
 from copy import deepcopy
-import argparse
 import os
-from format_spglib import from_spglib, to_spglib
 from spglib import get_spacegroup
-from display import displayOptimalResult, makeGif, displayTransCell, make_anim, make_fig, printMatAndDir
-from utils import lcm, find_uvw, normal
-from config import *
-        
-def readOptions():
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-I","--initial",dest="A",type=str, default='./POSCAR_A', help="Initial Structure")
-    parser.add_argument("-F","--final",dest="B",type=str, default='./POSCAR_B', help="Final Structure")
-    parser.add_argument("-n","--ncell",dest="ncell",type=int, default=300, help="Number of cells to tile")
-    parser.add_argument("-i","--interactive",dest="interactive",action="store_true", default=False, help="Enables interactive display")
-    parser.add_argument("-d","--disp",dest="savedisplay",action="store_true", default=False, help="Saves figures")
-    parser.add_argument("-p","--param", dest="filename", type=str, default='./p2p.in', help="Parameter file")
-    parser.add_argument("-c","--crystal", dest="crystfile", type=str, default='./cryst.in', help="Parameter file for crystllography analysis")
-    parser.add_argument("-o","--outdir",dest="outdir", type=str, default='.', help="Output directory")
-    parser.add_argument("-u","--use",dest="use", type=str, default=None, help="Use previously calculated data")
-    parser.add_argument("-m","--minimize",dest="minimize",action="store_true", default=False, help="Rerun minimization using the parameters stored in the folder provided with the -u option")
-    parser.add_argument("-s","--switch",dest="switch",action="store_true", default=False, help="Map the larger cell on the smaller cell")
-    parser.add_argument("-r","--noprim",dest="prim",action="store_false", default=True, help="Finds the primitive cell at the beginning") #TMP
-    parser.add_argument("-a","--anim",dest="anim",action="store_true", default=False, help="Produce the animation") #TMP
-    parser.add_argument("-v","--vol",dest="vol",action="store_true", default=False, help="Make the two (stochiometric) cells equal in volume")
-    parser.add_argument("-t","--test",dest="test",action="store_true", default=False, help="Tests the input file and prepares the run, you can continue this run with the -u [directory] -r option")
-
-    options = parser.parse_args()
-    
-    fileA = options.A
-    fileB = options.B
-    ncell = options.ncell
-    filename = options.filename
-    savedisplay = options.savedisplay
-    interactive = options.interactive
-    if options.use == None:
-        use = False
-        minimize = True
-        outdir = options.outdir
-    else:
-        use = True
-        minimize = options.minimize
-        outdir = options.use
-    switch = options.switch
-    prim = options.prim
-    anim = options.anim
-    vol = options.vol
-    test = options.test
-    crystfile = options.crystfile
-    
-    return fileA, fileB, ncell, filename, interactive, savedisplay, outdir, use, switch, prim, anim, vol, minimize, test, crystfile
-
-def readCrystParam(crystfile):
-    """ Reads the 4 possible parameters of the cystfile"""
-    
-    # Default values
-    ccell1 = np.eye(3)
-    ccell2 = np.eye(3)
-    planehkl = [1,0,0]
-    diruvw = [0,1,0]
-    
-    try:
-        with open(crystfile,"r") as f:
-            content = f.readlines()
-    except FileNotFoundError:
-            content = []
-
-    for l in content:
-        if l[0].rstrip() == "#":
-            continue
-        line = l.split('=')
-        if len(line) == 2:
-            if line[0].rstrip()=="ccell1":
-                ccell1 = eval(line[1].rstrip())
-            elif line[0].rstrip()=="ccell2":
-                ccell2 = eval(line[1].rstrip())
-            elif line[0].rstrip()=="planehkl":
-                planehkl = eval(line[1].rstrip())
-            elif line[0].rstrip()=="diruvw":
-                diruvw = eval(line[1].rstrip())
-            else:
-                print("WARNING: %s is not a supported input"%(line[0].rstrip()))
-        elif len(line) > 2:
-            raise SyntaxError(l)
-
-    return ccell1, ccell2, planehkl, diruvw
-
-def find_supercell(cell, newcell, tol):
-    
-    for i in range(1,10):
-        for j in range(1,10):
-            for k in range(1,10):
-                if abs(la.det(cell)) < abs(la.det(newcell)):
-                    if np.allclose(la.inv(cell).dot(newcell).dot(np.diag([i,j,k])), np.round(la.inv(cell).dot(newcell).dot(np.diag([i,j,k]))), tol):
-                        newcell = newcell.dot(np.diag([i,j,k]))
-                        break
-                else:
-                    if np.allclose(la.inv(newcell).dot(cell).dot(np.diag([i,j,k])), np.round(la.inv(newcell).dot(cell).dot(np.diag([i,j,k]))), tol):
-                        cell = cell.dot(np.diag([i,j,k]))
-                        break
-            else:
-                continue
-            break
-        else:
-            continue
-        break
-    else:
-        return cell, None
-
-    return cell, newcell
-                
-def find_multiples(vec, pos):
-    """Goes through the displacements and finds the one that are parallel"""
-    multiple = [0]
-    for p in pos.T:
-        if la.norm(np.cross(p,vec))/(la.norm(p) * la.norm(vec)) < tol:
-            multiple.append(p.dot(vec)/la.norm(vec)**2)
-    return multiple
+from .config import *
+from .fmodules import transform as tr
+from .format_spglib import from_spglib, to_spglib
+from .fmodules import tiling as t
+from .display import displayOptimalResult, makeGif, displayTransCell, make_anim, make_fig, printMatAndDir
+from .utils import lcm, find_uvw, normal, rotate, PCA, makeInitStruc
 
 def find_cell(class_list, positions, tol = 1e-5, frac_shell = 0.5, frac_correct = 0.95, max_count=1000):
     
@@ -225,34 +109,6 @@ def find_cell(class_list, positions, tol = 1e-5, frac_shell = 0.5, frac_correct 
         print("WARNING: Could not find cell using shortest distances, trying random order") 
     print("WARNING: Could not find periodic cell for any displacement. Increase sample size.")                
     return None, None
-    
-def uniqueclose(closest, tol):
-    """ For a 3xn matrix of coordinates returns an array of unique cooridnates and their
-    index in the original matrix"""
-    unique = []
-    idx = []
-    for i,line in enumerate(closest.T):
-        there = False
-        for j,check in enumerate(unique):
-            if np.allclose(check, line, atol=tol):
-                there = True
-                idx[j].append(i) 
-        if not there:
-            unique.append(line)
-            idx.append([i])
-    return (np.array(idx), np.array(unique))
-
-def rotate(icell,fcell):
-    U,S,V = la.svd(icell.dot(fcell.T))
-    return V.conj().T.dot(U.conj().T).real
-
-def rot_mat(u, theta):
-    u = u/la.norm(u)
-
-    P = u.reshape((3,1)).dot(u.reshape((1,3)))
-    Q = np.array([[0,-u[2],u[1]], [u[2], 0, -u[0]], [-u[1], u[0], 0]])
-
-    return  P + (np.eye(3) - P)*np.cos(theta) + Q*np.sin(theta)
 
 def makeSphere(A, ncell, *atom_types):
 
@@ -317,17 +173,22 @@ def makeSphere(A, ncell, *atom_types):
 
     else:
         raise ValueError("The only optional argument must be atom_types")
-    
-def atCenter(pos):
-    """ Align the center of mass of any 3*n array to the origin """
-    n = np.shape(pos)[1]
-    return  pos - (np.sum(pos,axis=1).reshape((3,1))/n).dot(np.ones((1,n)))
 
-def makeInitStruc(dispStruc, vec_classes):
-    initStruc = Structure(dispStruc.cell)
-    for a in dispStruc:
-        initStruc.add_atom(*(a.pos+vec_classes[int(a.type)]),a.atom)
-    return initStruc
+def uniqueclose(closest, tol):
+    """ For a 3xn matrix of coordinates returns an array of unique cooridnates and their
+    index in the original matrix"""
+    unique = []
+    idx = []
+    for i,line in enumerate(closest.T):
+        there = False
+        for j,check in enumerate(unique):
+            if np.allclose(check, line, atol=tol):
+                there = True
+                idx[j].append(i) 
+        if not there:
+            unique.append(line)
+            idx.append([i])
+    return (np.array(idx), np.array(unique))
 
 def makeStructures(cell, atoms, atom_types, natB, pos_in_struc, class_list, vec_classes):
     """Make the displacement structure from the repeating unit cell"""
@@ -378,154 +239,6 @@ def makeStructures(cell, atoms, atom_types, natB, pos_in_struc, class_list, vec_
     dispStruc = primitive(dispStruc, tolerance = tol)
 
     return dispStruc
-
-def strainDirs(tmat, ftf=True):
-
-    if ftf:
-        eigval, P = la.eig(tmat.T.dot(tmat))
-        eigval = np.sqrt(eigval)
-
-        idx = np.argsort(eigval)
-        eigval = eigval[idx]
-        P = P[:,idx]
-        
-        U = P.dot(np.diag(eigval)).dot(P.T)
-
-        invEigval, Q = la.eig(la.inv(tmat).T.dot(la.inv(tmat)))
-        invEigval = np.sqrt(invEigval)
-        idx = np.argsort(1/invEigval)
-        Q = Q[:,idx]
-        
-    else:
-        U = rotate(tmat, np.eye(3)).dot(tmat)
-
-        eigval, P = la.eig(U)
-
-        idx = np.argsort(eigval)
-        eigval = eigval[idx]
-        P = P[:,idx]
-        
-        iU = rotate(la.inv(tmat), np.eye(3)).dot(la.inv(tmat))
-        
-        invEigval, Q = la.eig(iU)
-        invEigval = np.sqrt(invEigval)
-        idx = np.argsort(1/invEigval)
-        Q = Q[:,idx]
-        
-    P = normal(P)
-    
-    Q = normal(Q)
-
-    return eigval, U, P, Q
-
-def findHabit(U, P, eigval):
-    
-    # Using uniformly strained plane
-    ratio = np.sqrt(abs((eigval[2]**2 - eigval[1]**2)/(eigval[1]**2 - eigval[0]**2)))
-    
-    # uvw direction of normal in cartesian coord
-    planeHab = np.zeros((3,2))
-    planeHab[:,0] = P[:,0] + ratio*P[:,2]
-    planeHab[:,1] = P[:,0] - ratio*P[:,2]
-    return planeHab, ratio
-
-def findR(U, P=None, planeHab=None, ratio=None):
-
-    if planeHab is None or ratio is None or P is None:
-        eigval, P = la.eig(mat)
-        planeHab, ratio = findHabit(U, P, eigval)
-    
-    V = np.zeros((2,3,3))
-    M = np.zeros((2,3,3))
-    R = np.zeros((2,3,3))
-    
-    for i in range(2):
-        V[i,:,0] = ratio*P[:,0] + (1-2*i)*P[:,2]
-        V[i,:,1] = P[:,1]
-        V[i,:,2] = planeHab[:,i]/la.norm(planeHab[:,i]) 
-    
-        M[i,:,:2] = U.dot(V[i,:,:2])
-        M[i,:,2] = np.cross(M[i,:,0], M[i,:,1])
-        M[i,:,2] = M[i,:,2] / la.norm(M[i,:,2])
-
-        R[i,:,:] = M[i,:,:].dot(M[i,:,:].T)
-        
-    return R
-
-def crystallography(tmat, A, B, ccellA, ccellB, planehkl, diruvw, fileA="input 1", fileB="input 2", ftf=True):
-    print("----------CRYSTALLOGRAPHY----------")
-    print()
-    eigval, U, P, Q = strainDirs(tmat, ftf=ftf)
-
-    print("Strain Directions in %s (%s) coordinates:"%(B.name, fileB))
-    print("    d1    d2    d3    ")
-    printMatAndDir(P, ccellA)
-    print()
-    print("Strain Directions in %s (%s) coordinates:"%(A.name, fileA))
-    print("    d1    d2    d3    ")
-    printMatAndDir(Q, ccellB)
-    print()
-    print("Strains + 1 (eigenvalues)")
-    print("    e1    e2    e3    ")
-    print(' '.join(["% 5.3f"%(val) for val in eigval])) 
-    print()
-
-    rcellA = la.inv(ccellA) #Reciprocal cell
-    rcellB = la.inv(ccellB) #Reciprocal cell
-
-    planeHab, ratio = findHabit(U, P, eigval)
-        
-    print("Uniformly strained planes:")
-    print()
-    print("Exact plane in %s (%s) coordinates:"%(B.name, fileB))
-    print("(+): (% 6.4f, % 6.4f, % 6.4f)"%(*ccellB.dot(planeHab[:,0]),))
-    print("(-): (% 6.4f, % 6.4f, % 6.4f)"%(*ccellB.dot(planeHab[:,1]),))
-    print()
-    print("Closest uvw:")
-    print("(+): (% d, % d, % d)"%(*find_uvw(planeHab[:,1:2], rcellB),))
-    print("(-): (% d, % d, % d)"%(*find_uvw(planeHab[:,0:1], rcellB),))
-    print()
-
-    R = findR(U, P=P, planeHab=planeHab, ratio=ratio)
-    
-    print("Orientation Relationship with habit plane:")
-    print()
-    orMat = np.zeros((2,3,3))
-    resPlanehkl = np.zeros((2,3))
-    resDiruvw = np.zeros((2,3))
-    for i in range(2):
-        orMat[i,:,:] = Q.dot(P.T).dot(R[i,:,:].T)
-        resPlanehkl[i,:] = ccellB.dot(orMat[i,:,:].dot(rcellA.dot(planehkl)))
-        resDiruvw[i,:] = la.inv(ccellB).dot(orMat[i,:,:].dot(ccellA.dot(diruvw)))
-    print("%s (%s) // %s (%s)"%(B.name, fileB, A.name, fileA))
-    print("(+): (% 2d, % 2d, % 2d) [% 2d, % 2d, % 2d] // (% 6.4f, % 6.4f, % 6.4f) [% 6.4f, % 6.4f, % 6.4f]"%(*planehkl, *diruvw, *resPlanehkl[0,:], *resDiruvw[0,:]))
-    print("(-): (% 2d, % 2d, % 2d) [% 2d, % 2d, % 2d] // (% 6.4f, % 6.4f, % 6.4f) [% 6.4f, % 6.4f, % 6.4f]"%(*planehkl, *diruvw, *resPlanehkl[1,:], *resDiruvw[1,:]))
-    print()
-    print("Approximate low index OR")
-    resPlanehklClose = np.zeros((2,3))
-    resDiruvwClose = np.zeros((2,3))
-    for i in range(2):
-        resPlanehklClose[i,:] = find_uvw(rcellB.dot(resPlanehkl[i,:].reshape((3,1))), rcellB).T[0]
-        resDiruvwClose[i,:] = find_uvw(ccellB.dot(resDiruvw[i,:].reshape((3,1))), ccellB).T[0]
-    print("(+): (% 2d, % 2d, % 2d) [% 2d, % 2d, % 2d] //  (% d, % d, % d) [% d, % d, % d]"%(*planehkl, *diruvw, *resPlanehklClose[0,:], *resDiruvwClose[0,:]))
-    print("(-): (% 2d, % 2d, % 2d) [% 2d, % 2d, % 2d] //  (% d, % d, % d) [% d, % d, % d]"%(*planehkl, *diruvw, *resPlanehklClose[1,:], *resDiruvwClose[1,:]))
-    print()
-    
-    print("Orientation Relationship in thin films:")
-    print()
-    orMat = Q.dot(P.T)
-    resPlanehkl = ccellB.dot(orMat.dot(rcellA.dot(planehkl)))
-    resDiruvw = la.inv(ccellB).dot(orMat.dot(ccellA.dot(diruvw)))
-    print("%s (%s) // %s (%s)"%(B.name, fileB, A.name, fileA))
-    print("(% 2d, % 2d, % 2d) [% 2d, % 2d, % 2d] // (% 6.4f, % 6.4f, % 6.4f) [% 6.4f, % 6.4f, % 6.4f]"%(*planehkl, *diruvw, *resPlanehkl, *resDiruvw))
-    print()
-    print("Approximate low index OR")
-    resPlanehklClose = find_uvw(rcellB.dot(resPlanehkl.reshape((3,1))), rcellB).T[0]
-    resDiruvwClose = find_uvw(ccellB.dot(resDiruvw.reshape((3,1))), ccellB).T[0]
-    print("(% 2d, % 2d, % 2d) [% 2d, % 2d, % 2d] //  (% d, % d, % d) [% d, % d, % d]"%(*planehkl, *diruvw, *resPlanehklClose, *resDiruvwClose))
-    print()
-
-    return eigval, U, P, Q, planeHab 
 
 def produceTransition(n_steps, tmat, dispStruc, vec_classes, outdir,
                       display):
@@ -595,40 +308,6 @@ def produceTransition(n_steps, tmat, dispStruc, vec_classes, outdir,
                 color_array[-1].append(types)
                 
     return transStruc, spgList, Tpos, color_array, atom_types
-        
-def PCA(disps):
-    # This is just kind of cool, but useless for now
-    n = np.shape(disps)[1]
-    M = np.zeros((n,n))
-    for i in range(n):
-        for j in range(n):
-            # M[i,j] = disps[:,i].dot(disps[:,j])
-            M[i,j] = la.norm(disps[:,i]-disps[:,j])
-
-    M = np.exp(-M/(1 - M/M.max()))
-    # M = np.exp(M.max() - M) - 1
-
-    eigval,eigvec = la.eig(M)
-    
-    idx = np.argsort(-eigval)
-
-    eigval = eigval[idx]
-    eigvec = eigvec[:,idx]
-
-    logdiffs = np.log(eigval[:-1]) - np.log(eigval[1:])
-
-    n_class = np.argmax(logdiffs)+1
-
-    plt.figure()
-    plt.plot(eigval,".")
-    
-    plt.figure()
-    plt.semilogy(eigval,".")
-
-    plt.figure()
-    plt.plot(logdiffs,".-")
-    
-    return n_class
 
 def optimizationLoop(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir): 
     """ This loop will repeat the entire minimization if no periodic cell can be found
@@ -690,20 +369,63 @@ def optimizationLoop(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir):
             print("Could not find periodic cell")
 
     return Apos, Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, atoms, atom_types, foundcell, origin
-            
-            
-def p2ptrans(A, B, ncell,
-             fileA='Input 1', fileB='Input 2',
-             ccellA=np.eye(3), ccellB=np.eye(3), 
-             filename='p2p.in',
-             interactive=False, savedisplay=False,
-             outdir='output',
-             use=False, switch= False, prim=True,
-             vol=False, minimize=True, test= False):
+                       
+def findMatching(A, B, ncell,
+                 fileA='Input 1', fileB='Input 2',
+                 ccellA=np.eye(3), ccellB=np.eye(3), 
+                 filename='p2p.in',
+                 interactive=False, savedisplay=False,
+                 outdir='output',
+                 switch= False, prim=True,
+                 vol=False, minimize=True, test= False):
+    """ 
+    This function finds the best matching between two given structures and returns the transformation matrix
+    and the transformation cell.
 
+    Parameters: 
+    A,B (Structure): Crystal Structures in the Pylada format  
+
+    ncell (int): Minimal number of unit cells in the set of point (It is automatically adjusted so that there is the 
+    same number of atoms in each sphere
+
+    Optional Parameters:
+    fileA, fileB (str): Location of file associated with the structure (display purposes only)
+
+    ccellA, ccellB (np.array((3,3))): Conventional cell of A and B in cartesian coord
+
+    filename (str): Location of the fortran namelist containing the parameters for the optimization
+
+    interactive (bool): Turn on interactive mode
+
+    savedisplay (bool): Save displayed images
+
+    outdir (str): Location of the output directory
+
+    switch (bool): Switch the direction of the transformation during the minimization.
+    By default the minimization will be made from the structure with the lowest density to the structure
+    with the highest desnity.
+
+    prim (bool): Make the structures primitive before creating the spheres
+
+    vol (bool): Make the volumes of the spheres equal
+
+    minimize (bool): Run the minimization (OptimizationLoop) or read a previous result
+
+    test (bool): Display all the parameter without starting the optimization
+
+    Returns:
+    (bool): Indicates if the order of the Structures has been inverted from what was given
+    ex: findMatching(A,B,300) will give True if the transition was calculated from A to B
+    and False if it was calculated from B to A
+    
+    (np.array((3,3)): Transformation matrix from Final to Initial  
+    
+    (Structure): Transformtation cell. a.type indicates the types of displacement, a.atom indicates the atom
+    
+    (list): List of 3D vectors corresponding to different types of displacements
+    """
+    
     os.makedirs(outdir, exist_ok=True)
-
-    setplt(interactive)
     
     # Make the structure primitive (default)
     if prim:
@@ -854,114 +576,3 @@ def p2ptrans(A, B, ncell,
         print()
 
     return switched, tmat, dispStruc, vec_classes
-        
-def main():
-
-    (fileA, fileB, ncell, filename, interactive, savedisplay, outdir,
-     use, switch, prim, anim, vol, minimize, test, crystfile) = readOptions()
-
-    # START
-    print(" ________    _______  ________   ")   
-    print("|\\   __  \\  /  ___  \\|\\   __  \\  ")
-    print("\\ \\  \\|\\  \\/__/|_/  /\\ \\  \\|\\  \\ ")
-    print(" \\ \\   ____\\__|//  / /\\ \\   ____\\")
-    print("  \\ \\  \\___|   /  /_/__\\ \\  \\___|")
-    print("   \\ \\__\\     |\\________\\ \\__\\   ")
-    print("    \\|__|      \\|_______|\\|__|   ")
-    print()
-    print("__________TRANSFORMATIONS__________")
-    print()
-    
-    # If reusing a result load the info
-    if use:
-
-        fileA = "File 1"
-        fileB = "File 2"
-        
-        A, B, ncell, filecontent, switch, prim, vol = pickle.load(open(outdir+"/param.dat","rb"))
-
-        print("==>Using information from %s<=="%(outdir))
-        print()
-        print("The inputs for that run were:")
-        print("-----------------------------------")
-        print("File 1:", A)
-        print("File 2:", B)
-        print("ncell:", ncell)
-        print("Param file (at time of running):")
-        for l in filecontent:
-            print(l.rstrip())
-        print("switch:", switch)
-        print("prim:", prim)
-        print("vol:", vol)
-        print("-----------------------------------")
-        print()
-
-    else:
-
-        # Set up the output directory
-        if not os.path.exists(outdir):
-            os.makedirs(outdir)                
-
-        A = read.poscar(fileA)
-        B = read.poscar(fileB)
-            
-        try:
-            with open(filename, "r") as f:
-                filecontent = f.readlines()
-        except FileNotFoundError:
-            filecontent = ""
-
-        # Save the parameters for the use function
-        pickle.dump((A, B, ncell, filecontent, switch, prim, vol), open(outdir+"/param.dat","wb"))
-
-    print("=>Reading crsytal analysis parameters<=") 
-    ccell1, ccell2, planehkl, diruvw = readCrystParam(crystfile)
-    print()
-          
-    switched, tmat, dispStruc, vec_classes = p2ptrans(A, B, ncell, fileA=fileA, fileB=fileB,
-                                                      ccellA=ccell1, ccellB=ccell2,
-                                                      filename=filename, interactive=interactive,
-                                                      savedisplay=savedisplay, outdir=outdir,
-                                                      use=use, switch=switch, prim=prim, vol=vol,
-                                                      minimize=minimize, test=test)
-    if test:
-        return
-    
-    if switched:
-        eigval, U, P, Q, planeHab = crystallography(la.inv(tmat), B, A, ccell2, ccell1, planehkl,
-                                                    diruvw, fileA=fileB, fileB=fileA,)
-    else:
-        eigval, U, P, Q, planeHab = crystallography(tmat, A, B, ccell1, ccell2, planehkl,
-                                                    diruvw, fileA=fileA, fileB=fileB,)
-        
-    print("=>Producing the steps along the transition<=")
-    result = produceTransition(n_steps, tmat, dispStruc, vec_classes,
-                               outdir, anim or savedisplay or interactive)
-    transStruc, spgList, Tpos, color_array, atom_types = result
-    
-    print("Spacegroups along the transition:")
-    print(" -> ".join([e for i,e in enumerate(spgList) if i==len(spgList)-1 or e!=spgList[i+1]]))
-    #This will remove repetitions that are next to each other
-    print()
-        
-    # Showing some of the steps
-    if interactive or savedisplay:
-        print("Displaying Frames...")
-        for i in range(n_frames):
-            make_fig(int(i*n_steps/(n_frames-1)), Tpos, color_array,
-                     transStruc, atom_types, spgList, outdir, savedisplay, False)
-            
-        if interactive:
-            print("(Close the display windows to continue)")
-            plt.show()
-            print()
-    
-    if anim:
-        print("Producing the animation...(this may take several hours)")
-        make_anim(n_steps, Tpos, color_array, transStruc, atom_types, spgList, outdir)
-        print()
-        
-    print("p2ptrans finished successfully")
-
-if __name__=="__main__":
-    main()

@@ -1,13 +1,31 @@
-import matplotlib.pyplot as plt
-import numpy as np
-import numpy.linalg as la
-from utils import find_uvw
-from config import *
+import matplotlib
+from mpl_toolkits.mplot3d import Axes3D
+
+from .config import *
+from .utils import find_uvw, makeInitStruc, normal
+
+plt=None
+isset = False
+
+def setplt(interactive):
+    global isset
+    global plt
+    if not isset:
+        if not interactive:
+            matplotlib.use('Agg')
+            
+        import matplotlib.pyplot as plt
+        
+        plt.rcParams["figure.figsize"] = [5, 5]
+
+        isset = True
 
 def displayOptimalResult(Apos, Bpos, Bposst, disps_total, disps, class_list, vec_classes,
                          nat, natA, natB, atoms, outdir, savedisplay, interactive):
 
     """Displays or saves pictures of the optimal result"""
+    
+    setplt(interactive)
     
     fig = plt.figure("Optimal Result", figsize=(15,5))
 
