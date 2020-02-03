@@ -1587,8 +1587,8 @@ subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, to
     tol = 1.0d-4
     tol_std = tol*1.0d-3
     tol_class = 1.0d-3
-    rate1 = 1.0d-5
-    rate2 = 1.0d-5
+    rate1 = 1.0d-3
+    rate2 = 1.0d-3
     slanting = .false.
     fixed_vol = .false.
     fracA = 0.09d0

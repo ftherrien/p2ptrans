@@ -1,0 +1,160 @@
+#!/usr/bin/env python3
+
+import argparse
+import os
+
+from p2ptrans import *
+
+def readOptions():
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-I","--initial",dest="A",type=str, default='./POSCAR_A', help="Initial Structure")
+    parser.add_argument("-F","--final",dest="B",type=str, default='./POSCAR_B', help="Final Structure")
+    parser.add_argument("-n","--ncell",dest="ncell",type=int, default=300, help="Number of cells to tile")
+    parser.add_argument("-i","--interactive",dest="interactive",action="store_true", default=False, help="Enables interactive display")
+    parser.add_argument("-d","--disp",dest="savedisplay",action="store_true", default=False, help="Saves figures")
+    parser.add_argument("-p","--param", dest="filename", type=str, default='./p2p.in', help="Parameter file")
+    parser.add_argument("-c","--crystal", dest="crystfile", type=str, default='./cryst.in', help="Parameter file for crystllography analysis")
+    parser.add_argument("-o","--outdir",dest="outdir", type=str, default='.', help="Output directory")
+    parser.add_argument("-u","--use",dest="use", type=str, default=None, help="Use previously calculated data")
+    parser.add_argument("-m","--minimize",dest="minimize",action="store_true", default=False, help="Rerun minimization using the parameters stored in the folder provided with the -u option")
+    parser.add_argument("-s","--switch",dest="switch",action="store_true", default=False, help="Map the larger cell on the smaller cell")
+    parser.add_argument("-r","--noprim",dest="prim",action="store_false", default=True, help="Finds the primitive cell at the beginning") #TMP
+    parser.add_argument("-a","--anim",dest="anim",action="store_true", default=False, help="Produce the animation") #TMP
+    parser.add_argument("-v","--vol",dest="vol",action="store_true", default=False, help="Make the two (stochiometric) cells equal in volume")
+    parser.add_argument("-t","--test",dest="test",action="store_true", default=False, help="Tests the input file and prepares the run, you can continue this run with the -u [directory] -r option")
+
+    options = parser.parse_args()
+    
+    fileA = options.A
+    fileB = options.B
+    ncell = options.ncell
+    filename = options.filename
+    savedisplay = options.savedisplay
+    interactive = options.interactive
+    if options.use == None:
+        use = False
+        minimize = True
+        outdir = options.outdir
+    else:
+        use = True
+        minimize = options.minimize
+        outdir = options.use
+    switch = options.switch
+    prim = options.prim
+    anim = options.anim
+    vol = options.vol
+    test = options.test
+    crystfile = options.crystfile
+    
+    return fileA, fileB, ncell, filename, interactive, savedisplay, outdir, use, switch, prim, anim, vol, minimize, test, crystfile
+
+def main():
+
+    (fileA, fileB, ncell, filename, interactive, savedisplay, outdir,
+     use, switch, prim, anim, vol, minimize, test, crystfile) = readOptions()
+
+    # START
+    print(" ________    _______  ________   ")   
+    print("|\\   __  \\  /  ___  \\|\\   __  \\  ")
+    print("\\ \\  \\|\\  \\/__/|_/  /\\ \\  \\|\\  \\ ")
+    print(" \\ \\   ____\\__|//  / /\\ \\   ____\\")
+    print("  \\ \\  \\___|   /  /_/__\\ \\  \\___|")
+    print("   \\ \\__\\     |\\________\\ \\__\\   ")
+    print("    \\|__|      \\|_______|\\|__|   ")
+    print()
+    print("__________TRANSFORMATIONS__________")
+    print()
+    
+    # If reusing a result load the info
+    if use:
+
+        fileA = "File 1"
+        fileB = "File 2"
+        
+        A, B, ncell, filecontent, switch, prim, vol = pickle.load(open(outdir+"/param.dat","rb"))
+
+        print("==>Using information from %s<=="%(outdir))
+        print()
+        print("The inputs for that run were:")
+        print("-----------------------------------")
+        print("File 1:", A)
+        print("File 2:", B)
+        print("ncell:", ncell)
+        print("Param file (at time of running):")
+        for l in filecontent:
+            print(l.rstrip())
+        print("switch:", switch)
+        print("prim:", prim)
+        print("vol:", vol)
+        print("-----------------------------------")
+        print()
+
+    else:
+
+        # Set up the output directory
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)                
+
+        A = read.poscar(fileA)
+        B = read.poscar(fileB)
+            
+        try:
+            with open(filename, "r") as f:
+                filecontent = f.readlines()
+        except FileNotFoundError:
+            filecontent = ""
+
+        # Save the parameters for the use function
+        pickle.dump((A, B, ncell, filecontent, switch, prim, vol), open(outdir+"/param.dat","wb"))
+
+    print("=>Reading crsytal analysis parameters<=") 
+    ccell1, ccell2, planehkl, diruvw = analysis.readCrystParam(crystfile)
+    print()
+          
+    switched, tmat, dispStruc, vec_classes = findMatching(A, B, ncell, fileA=fileA, fileB=fileB,
+                                                                   ccellA=ccell1, ccellB=ccell2,
+                                                                   filename=filename, interactive=interactive,
+                                                                   savedisplay=savedisplay, outdir=outdir,
+                                                                   switch=switch, prim=prim, vol=vol,
+                                                                   minimize=minimize, test=test)
+    if test:
+        return
+    
+    if switched:
+        eigval, U, P, Q, planeHab = analysis.crystallography(la.inv(tmat), B, A, ccell2, ccell1, planehkl,
+                                                    diruvw, fileA=fileB, fileB=fileA,)
+    else:
+        eigval, U, P, Q, planeHab = analysis.crystallography(tmat, A, B, ccell1, ccell2, planehkl,
+                                                    diruvw, fileA=fileA, fileB=fileB,)
+        
+    print("=>Producing the steps along the transition<=")
+    result = produceTransition(n_steps, tmat, dispStruc, vec_classes,
+                               outdir, anim or savedisplay or interactive)
+    transStruc, spgList, Tpos, color_array, atom_types = result
+    
+    print("Spacegroups along the transition:")
+    print(" -> ".join([e for i,e in enumerate(spgList) if i==len(spgList)-1 or e!=spgList[i+1]]))
+    #This will remove repetitions that are next to each other
+    print()
+        
+    # Showing some of the steps
+    if interactive or savedisplay:
+        print("Displaying Frames...")
+        for i in range(n_frames):
+            display.make_fig(int(i*n_steps/(n_frames-1)), Tpos, color_array,
+                     transStruc, atom_types, spgList, outdir, savedisplay, False)
+            
+        if interactive:
+            print("(Close the display windows to continue)")
+            display.plt.show()
+            print()
+    
+    if anim:
+        print("Producing the animation...(this may take several hours)")
+        display.make_anim(n_steps, Tpos, color_array, transStruc, atom_types, spgList, outdir)
+        print()
+        
+    print("p2ptrans finished successfully")
+
+main()
