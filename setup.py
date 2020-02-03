@@ -21,6 +21,6 @@ setup(name='p2ptrans',
       install_requires=[
           'matplotlib',
           'spglib',
+          'pylada @ git+https://github.com/pylada/pylada-light#egg=pylada',
         ],
-      dependency_links=['git+https://github.com/pylada/pylada-light#egg=pylada'],
       scripts=['bin/p2ptrans'],)
