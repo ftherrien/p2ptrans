@@ -7,7 +7,7 @@ setuptools.setup(
 
 from numpy.distutils.core import setup, Extension
 
-mod = Extension(name='p2ptrans.fmodules', sources=['source/tiling.f90', 'source/transform.f90'], libraries=['hungarian'], extra_f90_compile_args=["-fopenmp","-O3"], extra_link_args=['-lgomp'], f2py_options=["only:", "sphere", "parallelepiped", "circle", "center", "fastoptimization",":"])
+mod = Extension(name='p2ptrans.fmodules', sources=['source/lap.f90', 'source/tiling.f90', 'source/transform.f90'], extra_f90_compile_args=["-fopenmp","-O3"], extra_link_args=['-lgomp'], f2py_options=["only:", "sphere", "parallelepiped", "circle", "center", "fastoptimization",":"])
 
 setup(name='p2ptrans',
       version='0.0',
@@ -17,8 +17,6 @@ setup(name='p2ptrans',
       author_email='felix.therrien@gmail.com',
       license='MIT',
       packages=['p2ptrans'],
-      libraries = [('hungarian', dict(sources=['source/lap.f90'],
-                                    extra_f90_compile_args=["-fPIC"]))],
       ext_modules=[mod],
       install_requires=[
           'matplotlib',
