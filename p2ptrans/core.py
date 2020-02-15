@@ -190,7 +190,7 @@ def uniqueclose(closest, tol):
             idx.append([i])
     return (np.array(idx), np.array(unique))
 
-def makeStructures(cell, atoms, atom_types, natB, pos_in_struc, class_list, vec_classes):
+def makeStructures(cell, atoms, atom_types, natB, pos_in_struc, class_list):
     """Make the displacement structure from the repeating unit cell"""
     
     # Small function to determine type
@@ -240,6 +240,20 @@ def makeStructures(cell, atoms, atom_types, natB, pos_in_struc, class_list, vec_
 
     return dispStruc
 
+def switchDispStruc(dispStruc, tmat, vec_classes):
+    """ Switches the direction of the output so that the transformation is in the order
+    provided by the user"""
+    
+    initStruc = makeInitStruc(dispStruc, vec_classes)
+    newStruc = Structure(la.inv(tmat).dot(initStruc.cell))
+    for j,a in enumerate(dispStruc):
+        vec_classes[j] = la.inv(tmat).dot(a.pos) - la.inv(tmat).dot(initStruc[j].pos)
+        newStruc.add_atom(*(la.inv(tmat).dot(initStruc[j].pos)),a.type)
+        newStruc[j].atom = initStruc[j].type
+            
+    return newStruc, la.inv(tmat), vec_classes
+        
+    
 def produceTransition(n_steps, tmat, dispStruc, vec_classes, outdir,
                       display):
 
@@ -414,10 +428,6 @@ def findMatching(A, B, ncell,
     test (bool): Display all the parameter without starting the optimization
 
     Returns:
-    (bool): Indicates if the order of the Structures has been inverted from what was given
-    ex: findMatching(A,B,300) will give True if the transition was calculated from A to B
-    and False if it was calculated from B to A
-    
     (np.array((3,3)): Transformation matrix from Final to Initial  
     
     (Structure): Transformtation cell. a.type indicates the types of displacement, a.atom indicates the atom
@@ -458,8 +468,10 @@ def findMatching(A, B, ncell,
     if (abs(mulA*la.det(Acell)) < abs(mulB*la.det(Bcell))) != switch: # (is switched?) != switch
         A, mulA, Acell, fileA, ccellA, B, mulB, Bcell, fileB, ccellB = B, mulB, Bcell, fileB, ccellB, A, mulA, Acell, fileA, ccellA
         switched = True
-    print("Transition from %s (%s) to %s (%s)"%(A.name, fileA, B.name, fileB))
-    
+        print("The optimization will be performed in the reversed direction.")
+    else:
+        print("The optimization will be performed in the provided direction.")
+    print("Transition is *optimized* from %s (%s) to %s (%s)"%(A.name, fileA, B.name, fileB))
     
     # If vol is true the volumes are made equal
     if vol:
@@ -473,8 +485,8 @@ def findMatching(A, B, ncell,
     initSpg = get_spacegroup(to_spglib(A), symprec=0.3, angle_tolerance=3.0)
     finalSpg = get_spacegroup(to_spglib(B), symprec=0.3, angle_tolerance=3.0)
             
-    print("Initial SpaceGroup:", initSpg)
-    print("Final SpaceGroup:", finalSpg)
+    print("Initial SpaceGroup in optimization:", initSpg)
+    print("Final SpaceGroup in optimization:", finalSpg)
 
     print("Number of %s (%s) cells in sphere:"%(A.name, fileA), mulA*ncell)
     print("Number of %s (%s) cells in sphere:"%(B.name, fileB), mulB*ncell)
@@ -506,8 +518,8 @@ def findMatching(A, B, ncell,
     print("Number of classes:", len(np.unique(class_list)))
     print("Number of mapped atoms:", n_map)
     print("Total distance between structures:", dmin) 
-    print("Volume stretching factor:", la.det(tmat))
-    print("Cell volume ratio (should be exactly the same):", mulA * la.det(Acell)/(mulB * la.det(Bcell)))
+    print("Volume stretching factor (det(T)):", la.det(tmat))
+    print("Cell volume ratio (initial cell volume)/(final cell volume):", mulA * la.det(Acell)/(mulB * la.det(Bcell)))
 
     print()
     print("-----------PERIODIC CELL-----------")
@@ -545,22 +557,12 @@ def findMatching(A, B, ncell,
     pos_in_struc = Bposst - origin.dot(np.ones((1,np.shape(Bposst)[1])))
 
     dispStruc = makeStructures(foundcell, atoms, atom_types,
-                               natB, pos_in_struc, class_list, vec_classes)
+                               natB, pos_in_struc, class_list)
     
     print("Size of the transformation cell (TC):", len(dispStruc))
 
     print("Number of %s (%s) cells in TC:"%(A.name, fileA), abs(la.det(dispStruc.cell)/(la.det(Acell))))
     print("Number of %s (%s) cells in TC:"%(B.name, fileB), abs(la.det(dispStruc.cell)/(la.det(tmat.dot(Bcell)))))
-    
-    # Total displacement per unit volume a as metric
-    Total_disp = 0
-    for disp in dispStruc:
-        Total_disp += la.norm(vec_classes[int(disp.type)])
-    
-    Total_disp = Total_disp / la.det(dispStruc.cell)
-    
-    print("Total displacement in stretched cell:", Total_disp)
-    
     print()
     print("TC in %s (%s) coordinates:"%(B.name, fileB))
     printMatAndDir(la.inv(tmat).dot(dispStruc.cell), ccellB)
@@ -570,9 +572,16 @@ def findMatching(A, B, ncell,
     print()    
 
     if interactive or savedisplay:
-        print("Displaying the Transition cell...")
+        if switched:
+            direction = "reverse"
+        else:
+            direction = "direct"
+        print("Displaying the Transition cell as optimized (%s)..."%(direction))
         displayTransCell(disps, dispStruc, foundcell,
                          pos_in_struc, vec_classes, outdir, interactive, savedisplay)
         print()
 
-    return switched, tmat, dispStruc, vec_classes
+    if switched:
+        dispStruc, tmat, vec_classes = switchDispStruc(dispStruc, tmat, vec_classes)
+        
+    return tmat, dispStruc, vec_classes

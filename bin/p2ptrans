@@ -112,21 +112,18 @@ def main():
     ccell1, ccell2, planehkl, diruvw = analysis.readCrystParam(crystfile)
     print()
           
-    switched, tmat, dispStruc, vec_classes = findMatching(A, B, ncell, fileA=fileA, fileB=fileB,
-                                                                   ccellA=ccell1, ccellB=ccell2,
-                                                                   filename=filename, interactive=interactive,
-                                                                   savedisplay=savedisplay, outdir=outdir,
-                                                                   switch=switch, prim=prim, vol=vol,
-                                                                   minimize=minimize, test=test)
+    tmat, dispStruc, vec_classes = findMatching(A, B, ncell, fileA=fileA, fileB=fileB,
+                                                ccellA=ccell1, ccellB=ccell2,
+                                                filename=filename, interactive=interactive,
+                                                savedisplay=savedisplay, outdir=outdir,
+                                                switch=switch, prim=prim, vol=vol,
+                                                minimize=minimize, test=test)
+    
     if test:
         return
     
-    if switched:
-        eigval, U, P, Q, planeHab = analysis.crystallography(la.inv(tmat), B, A, ccell2, ccell1, planehkl,
-                                                    diruvw, fileA=fileB, fileB=fileA,)
-    else:
-        eigval, U, P, Q, planeHab = analysis.crystallography(tmat, A, B, ccell1, ccell2, planehkl,
-                                                    diruvw, fileA=fileA, fileB=fileB,)
+    eigval, U, P, Q, planeHab = analysis.crystallography(la.inv(tmat), B, A, ccell2, ccell1, planehkl,
+                                                         diruvw, fileA=fileB, fileB=fileA)
         
     print("=>Producing the steps along the transition<=")
     result = produceTransition(n_steps, tmat, dispStruc, vec_classes,
