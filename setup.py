@@ -18,6 +18,7 @@ setup(name='p2ptrans',
       license='MIT',
       packages=['p2ptrans'],
       ext_modules=[mod],
+      python_requires='>=3',
       install_requires=[
           'matplotlib',
           'spglib',
