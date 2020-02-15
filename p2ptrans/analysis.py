@@ -75,7 +75,7 @@ def strainDirs(tmat, ftf=True):
     Q = normal(Q)
 
     return eigval, U, P, Q
-# that
+
 def findHabit(U, P, eigval):
     
     # Using uniformly strained plane
@@ -86,11 +86,12 @@ def findHabit(U, P, eigval):
     planeHab[:,0] = P[:,0] + ratio*P[:,2]
     planeHab[:,1] = P[:,0] - ratio*P[:,2]
     return planeHab, ratio
-# that
+
 def findR(U, P=None, planeHab=None, ratio=None):
 
     if planeHab is None or ratio is None or P is None:
-        eigval, P = la.eig(mat)
+        eigval, P = la.eig(U)
+        U = P.dot(np.diag(eigval)).dot(P.T)
         planeHab, ratio = findHabit(U, P, eigval)
     
     V = np.zeros((2,3,3))
@@ -106,11 +107,18 @@ def findR(U, P=None, planeHab=None, ratio=None):
         M[i,:,2] = np.cross(M[i,:,0], M[i,:,1])
         M[i,:,2] = M[i,:,2] / la.norm(M[i,:,2])
 
-        R[i,:,:] = M[i,:,:].dot(M[i,:,:].T)
+        R[i,:,:] = V[i,:,:].dot(M[i,:,:].T)
         
     return R
 
 def crystallography(tmat, A, B, ccellA, ccellB, planehkl, diruvw, fileA="input 1", fileB="input 2", ftf=True):
+
+    """ This function does the crystallographic analysis using the deformation matrix tmat. It displays 
+    strain directions, habit plane and OR given that tmat.dot(TC^(A)) = TC^(B). If you are using the result
+    from findMatching and you want the strain directions from the initial to the final structure you must use
+    la.inv(tmat) and inverse the order of A and B. The idea is that tmat, the input, is the transformation
+    gradient matrix between A and B"""
+
     print("----------CRYSTALLOGRAPHY----------")
     print()
     eigval, U, P, Q = strainDirs(tmat, ftf=ftf)
