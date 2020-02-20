@@ -1,10 +1,4 @@
 import setuptools
-
-setuptools.setup(
-    setup_requires=[
-        'numpy'
-    ],)
-
 from numpy.distutils.core import setup, Extension
 
 mod = Extension(name='p2ptrans.fmodules', sources=['source/lap.f90', 'source/tiling.f90', 'source/transform.f90'], extra_f90_compile_args=["-fopenmp","-O3"], extra_link_args=['-lgomp'], f2py_options=["only:", "sphere", "parallelepiped", "circle", "center", "fastoptimization","munkres",":"])
@@ -20,6 +14,7 @@ setup(name='p2ptrans',
       ext_modules=[mod],
       python_requires='>=3',
       install_requires=[
+          'numpy',
           'matplotlib',
           'spglib',
           'pylada @ git+https://github.com/pylada/pylada-light#egg=pylada',
