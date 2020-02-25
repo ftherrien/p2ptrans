@@ -22,7 +22,14 @@ The interface analysis (2D) is currently under development in the [2D](https://g
 
 ## Installation
     pip install git+https://github.com/ftherrien/p2ptrans
-    
+
+Note: If you do not have [pylada](https://github.com/pylada/pylada-light), the installation will require **cmake**.
+
+### Possible Error
+On certain systems, the pylada installation fails with `error: ‘v’ does not name a type`. If you encounter this error retry the installation with:
+
+    CXXFLAGS="-std=c++11" pip install git+https://github.com/ftherrien/p2ptrans
+
 ## Documentation
 
 To run:
