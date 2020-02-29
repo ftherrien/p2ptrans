@@ -203,24 +203,34 @@ def makeStructures(cell, atoms, atom_types, natB, pos_in_struc, class_list):
         return atom_types[np.nonzero(atom_tot >= pos)[0][0]]
     
     # Make a pylada structure
-    cell_coord = np.mod(la.inv(cell).dot(pos_in_struc)+tol,1)-tol
+    cell_coord = np.mod(la.inv(cell).dot(pos_in_struc[1])+tol,1)-tol
     dispStruc = Structure(cell)
     incell = []
 
     # Goes thtough the unique atomic positions found in 1 cell
     for idx, disp in zip(*uniqueclose(cell_coord, tol)):
         for i in idx:
-            if np.allclose(pos_in_struc[:,i], cell.dot(disp), atol=tol):
-                incell.append((i,pos_in_struc[:,i]))
+            if np.allclose(pos_in_struc[1][:,i], cell.dot(disp), atol=tol):
+                incell.append((i,pos_in_struc[1][:,i]))
                 break
         else:
-            i = np.argmin(la.norm(np.array([pos_in_struc[:,j] for j in idx]),axis=1))
+            i = np.argmin(la.norm(np.array([pos_in_struc[1][:,j] for j in idx]),axis=1))
             incell.append((idx[i],cell.dot(disp)))
 
-    # Adds the atoms to the structure
+    # Adds the atoms to the structure and creates a new vec_classes based on the actual
+    # atmic positions in the final structure
     atom_list = []
+    vec_classes = [None]*len(set(class_list))
     for i, disp in incell:
-        dispStruc.add_atom(*(tuple(disp)+(str(class_list[i]),)))
+        vec = pos_in_struc[0][:,i] - pos_in_struc[1][:,i] 
+        ivec = class_list[i]
+        if vec_classes[ivec] is None:
+            vec_classes[ivec] = vec 
+        elif not np.allclose(vec, vec_classes[ivec], atol=tol):
+            vec_classes.append(vec)
+            ivec = len(vec_classes)-1
+                
+        dispStruc.add_atom(*(tuple(disp)+(str(ivec),)))
         atom_list.append(whattype(i, natB))
 
     # Adds a new label to each displacement called atom
@@ -238,7 +248,7 @@ def makeStructures(cell, atoms, atom_types, natB, pos_in_struc, class_list):
     # Makes sure it is the primitive cell 
     dispStruc = primitive(dispStruc, tolerance = tol)
 
-    return dispStruc
+    return dispStruc, vec_classes
 
 def switchDispStruc(dispStruc, tmat, vec_classes):
     """ Switches the direction of the output so that the transformation is in the order
@@ -247,7 +257,7 @@ def switchDispStruc(dispStruc, tmat, vec_classes):
     initStruc = makeInitStruc(dispStruc, vec_classes)
     newStruc = Structure(la.inv(tmat).dot(initStruc.cell))
     for j,a in enumerate(dispStruc):
-        vec_classes[j] = la.inv(tmat).dot(a.pos) - la.inv(tmat).dot(initStruc[j].pos)
+        vec_classes[int(a.type)] = la.inv(tmat).dot(a.pos) - la.inv(tmat).dot(initStruc[j].pos)
         newStruc.add_atom(*(la.inv(tmat).dot(initStruc[j].pos)),a.type)
         newStruc[j].atom = initStruc[j].type
             
@@ -531,7 +541,7 @@ def findMatching(A, B, ncell,
     disps = Apos_map - Bposst
 
     # Classes of vectors and their value
-    vec_classes = np.array([np.mean(disps[:,class_list==d_type], axis=1) for d_type in np.unique(class_list)])
+    vec_classes_estimate = np.array([np.mean(disps[:,class_list==d_type], axis=1) for d_type in np.unique(class_list)])
 
     # Run the PCA analysis if turned on
     if pca:
@@ -542,23 +552,32 @@ def findMatching(A, B, ncell,
         print("Displaying Optimal Connections...")
         if interactive:
             print("(Close the display window to continue)")
-        displayOptimalResult(Apos, Bpos, Bposst, disps_total, disps, class_list, vec_classes,
+        displayOptimalResult(Apos, Bpos, Bposst, disps_total, disps, class_list, vec_classes_estimate,
                                  nat, natA, natB, atoms, outdir, savedisplay, interactive)
         print()
 
     # Create gif if turned on
     if gif:
-        makeGif(Apos, Bposst, disps, vec_classes, nat, atoms)
+        makeGif(Apos, Bposst, disps, vec_classes_estimate, nat, atoms)
 
     # End program if a periodic cell couldn't be found earlier
     if foundcell is None:
         raise RuntimeError("Could not find good displacement cell. Increase system size")
-    
-    pos_in_struc = Bposst - origin.dot(np.ones((1,np.shape(Bposst)[1])))
 
-    dispStruc = makeStructures(foundcell, atoms, atom_types,
+    pos_in_struc = [None]*2
+    pos_in_struc[0] = Apos_map - origin.dot(np.ones((1,np.shape(Apos_map)[1])))
+    pos_in_struc[1] = Bposst - origin.dot(np.ones((1,np.shape(Bposst)[1])))
+
+    dispStruc, vec_classes = makeStructures(foundcell, atoms, atom_types,
                                natB, pos_in_struc, class_list)
-    
+
+    if len(vec_classes) > len(vec_classes_estimate):
+        print("WARNING: The number of classes found during the optimization is not sufficent to describe the transformation; increase the classification tolerence (tol_class)")
+        print()
+    elif len(vec_classes) < len(vec_classes_estimate):
+        print("WARNING: The number of classes found during the optimization is unnecessarily large; decrease the classification tolerence (tol_class)")
+        print()
+        
     print("Size of the transformation cell (TC):", len(dispStruc))
 
     print("Number of %s (%s) cells in TC:"%(A.name, fileA), abs(la.det(dispStruc.cell)/(la.det(Acell))))
@@ -578,7 +597,7 @@ def findMatching(A, B, ncell,
             direction = "direct"
         print("Displaying the Transition cell as optimized (%s)..."%(direction))
         displayTransCell(disps, dispStruc, foundcell,
-                         pos_in_struc, vec_classes, outdir, interactive, savedisplay)
+                         pos_in_struc[0], vec_classes, outdir, interactive, savedisplay)
         print()
 
     if switched:
