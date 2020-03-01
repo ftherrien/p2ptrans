@@ -504,7 +504,7 @@ def findMatching(A, B, ncell,
     print()
 
     if test:
-        return None, None, None, None
+        return None, None, None
     
     if minimize:
         print("==>Ready to start optimmization<==")
