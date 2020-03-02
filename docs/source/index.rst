@@ -1,3 +1,5 @@
+:github_url:
+
 A Simple Guide to p2ptrans
 ==========================
 
@@ -23,21 +25,10 @@ On certain systems, the pylada installation fails with ``error: ‘v’ does not
 
    CXXFLAGS="-std=c++11" pip install git+https://github.com/ftherrien/p2ptrans
 
-Tutorials
-^^^^^^^^^
-
 .. toctree::
    :maxdepth: 1
-   :caption: Contents:
+   :caption: Tutorials
 
    martensite
    interfaces
    pymodule
-
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`

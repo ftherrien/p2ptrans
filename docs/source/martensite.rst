@@ -1,3 +1,5 @@
+:github_url:
+
 Phase Transformations
 =====================
 
@@ -178,7 +180,7 @@ Running the algorithm on larger systems
 
 Let's now increase ``ncell`` to a larger number in order to obtain the result presented in the paper.
 
-.. note:: I like to make sure all the parameters are ok before I truly run the code. For that you can use the ``--test`` option.
+.. tip:: I like to make sure all the parameters are ok before I truly run the code. For that you can use the ``--test`` option.
 
 	  .. code-block:: console
 
@@ -202,7 +204,7 @@ We are now ready to run the calculation:
 
 The calculation should take a couple of hours on a modern computer. If you are on a cluster, you can simply put the previous line in a submission script. p2ptrans is parallelized with OpenMP; it will automatically use all the cores in one node but cannot use multiple nodes.
 
-.. note:: I like to monitor the progress of the calculation using
+.. tip:: I like to monitor the progress of the calculation using
 
 	  .. code-block:: console
 
