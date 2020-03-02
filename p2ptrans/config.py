@@ -18,7 +18,6 @@ gif = False
 
 # Steps
 PoscarDirName = "/TransPOSCARS"
-n_steps = 60
 viewDirs = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 size = 3
 habit = False

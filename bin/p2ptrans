@@ -23,9 +23,10 @@ def readOptions():
     parser.add_argument("-a","--anim",dest="anim",action="store_true", default=False, help="Produce the animation") #TMP
     parser.add_argument("-v","--vol",dest="vol",action="store_true", default=False, help="Make the two (stochiometric) cells equal in volume")
     parser.add_argument("-t","--test",dest="test",action="store_true", default=False, help="Tests the input file and prepares the run, you can continue this run with the -u [directory] -r option")
+    parser.add_argument("-f","--frames",dest="n_steps",type=int,default=60, help="Number of intermediate structures to create")
 
     options = parser.parse_args()
-    
+
     fileA = options.A
     fileB = options.B
     ncell = options.ncell
@@ -46,13 +47,14 @@ def readOptions():
     vol = options.vol
     test = options.test
     crystfile = options.crystfile
+    n_steps = options.n_steps
     
-    return fileA, fileB, ncell, filename, interactive, savedisplay, outdir, use, switch, prim, anim, vol, minimize, test, crystfile
+    return fileA, fileB, ncell, filename, interactive, savedisplay, outdir, use, switch, prim, anim, vol, minimize, test, crystfile, n_steps
 
 def main():
 
     (fileA, fileB, ncell, filename, interactive, savedisplay, outdir,
-     use, switch, prim, anim, vol, minimize, test, crystfile) = readOptions()
+     use, switch, prim, anim, vol, minimize, test, crystfile, n_steps) = readOptions()
 
     # START
     print(" ________    _______  ________   ")   
@@ -86,6 +88,7 @@ def main():
             print(l.rstrip())
         print("switch:", switch)
         print("prim:", prim)
+
         print("vol:", vol)
         print("-----------------------------------")
         print()
