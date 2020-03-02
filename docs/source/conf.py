@@ -58,3 +58,11 @@ html_theme = 'sphinx_rtd_theme'
 html_static_path = ['_static']
 
 master_doc = "index"
+
+html_context = {
+    "display_github": True, # Integrate GitHub
+    "github_user": "ftherrien", # Username
+    "github_repo": "p2ptrans", # Repo name
+    "github_version": "master", # Version
+    "conf_py_path": "/docs/source/", # Path in the checkout to the docs root
+}
