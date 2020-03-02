@@ -52,4 +52,4 @@ Any contribution including [raising issues](https://github.com/ftherrien/p2ptran
 ## Citation
 If you use p2ptrans in your research, please cite:
 
-> Therrien, F, Graf, G, Stevanovic, V, (2020). Matching Crystal Structures atom-by-atom. *The Journal of Chemical Physics* (Accepted), [ArXiv](https://arxiv.org/abs/1909.12965)
+[Therrien, F., Graf, P., & Stevanović, V. (2020). Matching crystal structures atom-to-atom. *The Journal of Chemical Physics, 152(7)*, 074106.](https://aip.scitation.org/doi/full/10.1063/1.5131527) [ArXiv](https://arxiv.org/abs/1909.12965)
