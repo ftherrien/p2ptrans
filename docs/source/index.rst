@@ -1,5 +1,3 @@
-:github_url:
-
 A Simple Guide to p2ptrans
 ==========================
 

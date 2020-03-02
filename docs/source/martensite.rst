@@ -1,5 +1,3 @@
-:github_url:
-
 Phase Transformations
 =====================
 
