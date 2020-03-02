@@ -6,7 +6,7 @@ p2ptrans allows you to find the best matching between two crystal structures.
 
 ## Latest Updates
 
-**3.2.2020**: The [documentation](p2ptrans.readthedocs.io) is finally available! 
+**3.2.2020**: The [documentation](https://p2ptrans.readthedocs.io) is finally available! 
 
 ## Features
 p2ptrans can be used directly as a command-line interface (cli) or as a python package. It can be used for two main aspects:
@@ -36,7 +36,7 @@ On certain systems, the pylada installation fails with `error: ‘v’ does not 
 
 ## Documentation & Tutorials
 
-Please visit the [documentation for p2ptrans](p2ptrans.readthedocs.io)
+Please visit the [documentation for p2ptrans](https://p2ptrans.readthedocs.io)
 
 To run:
     
