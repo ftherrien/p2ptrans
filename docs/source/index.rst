@@ -23,6 +23,14 @@ On certain systems, the pylada installation fails with ``error: ‘v’ does not
 
    CXXFLAGS="-std=c++11" pip install git+https://github.com/ftherrien/p2ptrans
 
+If you install p2ptrans in a conda environment on MacOS you may encounter a segmentation fault at runtime. To avoid this, try:
+
+.. code-block:: console
+
+   pip install git+https://github.com/pylada/pylada-light.git@scikit
+   pip install git+https://github.com/ftherrien/p2ptrans
+
+
 .. toctree::
    :maxdepth: 1
    :caption: Tutorials
