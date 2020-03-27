@@ -45,8 +45,6 @@ contains
 
     integer :: pathRow0, pathCol0  ! starting point for path finding part
 
-    integer :: test
-
     pathRow0 = 0
     pathCol0 = 0
     
@@ -73,11 +71,11 @@ contains
        case(2)           
           call step2(step,n,CC,M,rowCover, colCover)
        case(3)           
-          call step3(step,n,CC,M, colCover)
+          call step3(step,n,M, colCover)
        case(4)           
           call step4(step,n,CC,M,rowCover, colCover, pathRow0, pathCol0)
        case(5)           
-          call step5(step,n,CC,M,rowCover, colCover, pathRow0, pathCol0)
+          call step5(step,n,M,rowCover, colCover, pathRow0, pathCol0)
        case(6)           
           call step6(step,n,CC,rowCover, colCover)
        case default ! done
@@ -145,7 +143,7 @@ contains
 
     do i = 1, n
        do j = 1, n
-          if (CC(j,i) == 0 .and. rowCover(i) == 0 .and. colCover(j) == 0) then
+          if (CC(j,i) < 1.0d-12 .and. rowCover(i) == 0 .and. colCover(j) == 0) then
              M(j,i) = 1
              rowCover(i) = 1
              colCover(j) = 1
@@ -162,13 +160,12 @@ contains
 
   end subroutine step2
 
-  subroutine step3(step, n, CC, M, colCover)
+  subroutine step3(step, n, M, colCover)
     ! cover each column containing a starred zero. If n column are covered
     ! the starred zero describe an optimal assignment and we are done otherwise
     ! go to step 4.
 
     integer, intent(in) :: n      ! dimension of C - assumed to be a (nxn) square matrix
-    double precision, intent(inout),  dimension(n,n) :: CC   ! cost matrix (min sum)
 
     integer, dimension(:), intent(inout) :: colCover !cover row and cols
     
@@ -224,7 +221,7 @@ contains
        starInRow = .false.
        loop1: do i = 1, n
           loop2: do j = 1, n
-             if (CC(j,i) == 0 .and. rowCover(i) == 0 .and. colCover(j) == 0) then
+             if (CC(j,i) < 1.0d-12 .and. rowCover(i) == 0 .and. colCover(j) == 0) then
                 row = i
                 col = j
                 exit loop1
@@ -257,7 +254,7 @@ contains
 
   end subroutine step4
 
-  subroutine step5(step, n, CC, M, rowCover, colCover, pathRow0, pathCol0)
+  subroutine step5(step, n, M, rowCover, colCover, pathRow0, pathCol0)
     ! Augmenting path algorithm: construct a serie of alternating primed and
     ! starred zeros as follows. Let Z0 be the uncoverd primed zero found in
     ! step 4. Let Z1 be the starred zero in the column of Z0 (if any).
@@ -268,7 +265,6 @@ contains
     ! and columns. Return to step 3.
 
     integer, intent(in) :: n      ! dimension of C - assumed to be a (nxn) square matrix
-    double precision, intent(inout),  dimension(n,n) :: CC   ! cost matrix (min sum)
 
     integer, intent(out) :: step
 

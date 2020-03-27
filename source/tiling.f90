@@ -3,44 +3,15 @@ module tiling
   implicit none
 
   public :: &
-       parallelepiped, &
        sphere, &
        circle
        
   private :: &
-       calc_angles, &
        cross, &
        det, &
        norm
 
   contains
-
-  subroutine parallelepiped(Acell,nx,ny,nz,ASC)
-
-    double precision, intent(in), dimension(3,3) :: &
-         Acell ! Matrix containing the 3 cell vectors
-
-    integer, intent(in) :: &
-         nx,ny,nz ! Number of repetition in each direction
-
-    double precision, intent(out), dimension(3,nx*ny*nz) :: &
-         ASC ! Position of each cell in the SC
-    
-    integer :: &
-         i,j,k,l
-       
-    l = 0
-    do i=1,nx
-       do j=1,ny
-          do k=1,nz
-             l=l+1
-             ASC(:,l) = matmul(Acell,(/i,j,k/))
-          enddo
-       enddo
-    enddo
-    
-  end subroutine parallelepiped
-
 
   subroutine sphere(Acell, ncell, center, ASC)
 
@@ -60,8 +31,7 @@ module tiling
          dists
     
     integer :: &
-         i,j,k,l,m,nnx,nny,nnz, &
-         pos
+         i,j,k,l,m,nnx,nny,nnz
 
     double precision :: &
          rad, dist, &
@@ -97,7 +67,7 @@ module tiling
                 if (l < ncell) l=l+1
                 if (l == 1) then
                    dists(1) = dist
-                else if (dist < dists(l) .or. dists(l) == -1.0d0) then
+                else if (dist < dists(l) .or. dists(l) < 0.0d0) then
                    m=0
                    do while (dist < dists(l-1-m) .and. m < l-1)
                       m=m+1
@@ -129,8 +99,7 @@ module tiling
          dists
     
     integer :: &
-         i,j,k,l,nnx,nny, &
-         pos
+         i,j,k,l,nnx,nny
 
     double precision :: &
          rad, dist, &
@@ -165,7 +134,7 @@ module tiling
              if (l < ncell) l=l+1
              if (l == 1) then
                 dists(1) = dist
-             else if (dist < dists(l) .or. dists(l) == -1) then
+             else if (dist < dists(l) .or. dists(l) < 0.0d0) then
                 k=0
                 do while (dist < dists(l-1-k) .and. k < l-1)
                    k=k+1
@@ -181,38 +150,7 @@ module tiling
 
   end subroutine circle
   
-  subroutine calc_angles(A,lengths,angles)
-
-    double precision, parameter :: &
-         pi = 3.141592653589793d+0
-
-    double precision, intent(in), dimension(3,3) :: &
-         A         ! Cell structure
-
-    double precision, intent(out), dimension(3) :: &
-         lengths, &     ! Length vector 
-         angles      ! Angle vector
-
-    double precision, dimension(3,3) :: &
-         m
-
-    integer :: &
-         i,j,k 
-
-    m = transpose(A)
-    lengths = sqrt(sum(m**2,2))
-    angles = 0
-    do i=1,3
-       j = modulo(i, 3)+1
-       k = modulo((i + 1), 3)+1
-       angles(i) = max(-1.0d+0,min(1.0d+0,(dot_product(m(j,:), m(k,:)) / (lengths(j) * lengths(k)))))
-    enddo
-    
-    angles = acos(angles) * 180.d+0 / pi
-
-  end subroutine calc_angles
-
-    function cross(a, b)
+  function cross(a, b)
     !Copied from Rosetta Code at: https://rosettacode.org/wiki/Vector_products#Fortran
     ! Checked and modified for double precision
     double precision, dimension(3) :: cross

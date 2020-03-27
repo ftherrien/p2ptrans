@@ -1,7 +1,9 @@
 module utils
 
-  contains
-  
+  implicit none
+
+contains
+
   function free_trans(pos, mat, vec)
 
     double precision, intent(in), dimension(:,:) :: &
@@ -20,10 +22,10 @@ module utils
 
   end function free_trans
 
-    function rot_mat(angles) result(R)
+  function rot_mat(angles) result(R)
 
     ! Creates the rotation matrix from the 3 angles
-    
+
     double precision, intent(in), dimension(3) :: &
          angles     ! Rotation axis (unitary vector)
 
@@ -48,10 +50,10 @@ module utils
 
   end function rot_mat
 
-    subroutine center(pos,n)
+  subroutine center(pos,n)
 
     ! Center the structures on their center of mass
-    
+
     integer, intent(in) :: &
          n ! Number of atoms
 
@@ -62,11 +64,11 @@ module utils
 
   end subroutine center
 
-    function eye() result(a)
+  function eye() result(a)
     ! Creates the identity matrix
     ! Copied from Rosetta Code at: https://rosettacode.org/wiki/Identity_matrix#Fortran
     ! Checked and modified for double
-    
+
     double precision :: a(3,3)
     integer :: i,j
 
@@ -77,7 +79,7 @@ module utils
   function norm(a)
 
     ! Calculates the norm of a vector
-    
+
     double precision :: norm
     double precision, dimension(3), intent(in) :: a
 
@@ -88,19 +90,19 @@ module utils
   function split(a,char)
 
     ! Only keep what is before "char" 
-    
+
     character*200 :: split
     character*1, intent(in) :: char
     character*200, intent(in) :: a
     integer :: i
-    
+
     i=0
     do while (a(len(a) - i:len(a) - i) /= char .and. i < len(a))
        i = i + 1
     enddo
-    
+
     split = trim(a(1:len(a)-i))
-    
+
   end function split
 
   recursive function det(a,n) result(accumulation)
@@ -124,9 +126,9 @@ module utils
           sgn = -sgn
        enddo
     endif
-  end function det  
+  end function det
 
-    function sort(array) result(idx)
+  function sort(array) result(idx)
 
     double precision, intent(in), dimension(:) :: &
          array
@@ -139,7 +141,7 @@ module utils
 
     integer :: &
          k,i,n
-    
+
     n = size(array)
 
     order(1) = array(1)
@@ -158,20 +160,5 @@ module utils
 
   end function sort
 
-  function angle(mat)
-
-    double precision, intent(in), dimension(3,3) :: mat
-    double precision :: angle
-    double precision, dimension(3,1) :: u, vec
-
-    angle = 0.0d0
-    u = reshape((/0.0d0, 0.0d0, 1.0d0/),(/3,1/))
-    vec = 0.0d0
-    
-    call analytical_gd_rot(angle, u, vec, mat, eye(), &
-               300, 1.0d-3, 1.0d-3, &
-               1.0d0, .false., "Euclidean", 0.0d0)
-    
-  end function angle
-  
 end module utils
+
