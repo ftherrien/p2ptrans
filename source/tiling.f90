@@ -167,7 +167,7 @@ module tiling
                 dists(1) = dist
              else if (dist < dists(l) .or. dists(l) == -1) then
                 k=0
-                do while (dist < dists(l-1-k))
+                do while (dist < dists(l-1-k) .and. k < l-1)
                    k=k+1
                 enddo
                 dists(l-k+1:ncell) = dists(l-k:ncell-1)

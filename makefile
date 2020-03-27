@@ -1,7 +1,7 @@
 COMP = gfortran
 COMP2 = python3 -m numpy.f2py
 
-files = source/tiling2D.f90 source/transform2D.f90
+files = source/tiling.f90 source/transform2D.f90
 functions = circle trans center fastoptimization canonicalize
 flags = --f90exec=gfortran --f90flags="-g -fbacktrace -fopenmp" -lgomp 
 

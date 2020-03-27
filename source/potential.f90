@@ -1,0 +1,82 @@
+! README: This file contains two body potentials to minimize. If you wish to make your own potential,
+! add a case to the `distance` and `derivative` function.
+
+module potential
+
+  use utils
+  
+contains
+
+  function distance(Apos, Bpos, mat, vec, potential, param)
+
+    double precision, intent(in), dimension(:,:) :: &
+         Apos, &  ! position matrix
+         Bpos
+
+    double precision, dimension(size(Apos,2)) :: &
+         d
+
+    double precision, intent(in), dimension(3,3) :: &
+         mat
+
+    double precision, intent(in), dimension(3) :: &
+         vec
+    
+    double precision :: &
+         distance
+
+    double precision, intent(in) :: &
+         param ! Parameter of the potential
+         
+    character*200, intent(in) :: &
+         potential
+
+    select case (potential)
+    case ("LJ")
+       d = sum((Apos - free_trans(Bpos,mat,vec))**2,1)
+    
+       distance = sum(param**12/d**6 - 2*param**6/d**3)
+    case ("Euclidean")
+       distance = sum(sqrt(sum((Apos - free_trans(Bpos,mat,vec))**2,1)))
+    end select
+    
+  end function distance
+
+  function derivative(Apos, Bpos, mat, vec, potential, param), result(E)
+
+    double precision, intent(in), dimension(:,:) :: &
+         Apos, &  ! position matrix
+         Bpos
+
+    double precision, dimension(size(Apos,2)) :: &
+         d
+
+    double precision, intent(in), dimension(3,3) :: &
+         mat, &
+         P
+
+    double precision, intent(in), dimension(3) :: &
+         vec
+    
+    double precision :: &
+         distance
+
+    character*200, intent(in) :: &
+         potential
+
+    double precision, intent(in) :: &
+         param ! Parameter of the potential
+    
+    select case (potential)
+    case ("LJ")
+       E = Apos - free_trans(Bpos,mat,vec)
+       P = param**6/(sum(E**2,1))**7 - 1/(sum(E**2,1))**4
+       E = -E*spread(P,1,3)
+    case ("Euclidean")
+       E = Apos - free_trans(Bpos,mat,vec)
+    end select
+    
+  end function derivative
+
+  
+end module potential
