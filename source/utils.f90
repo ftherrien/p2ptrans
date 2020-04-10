@@ -1,9 +1,9 @@
 module utils
 
   implicit none
-
+    
 contains
-
+  
   function free_trans(pos, mat, vec)
 
     double precision, intent(in), dimension(:,:) :: &
@@ -81,7 +81,7 @@ contains
     ! Calculates the norm of a vector
 
     double precision :: norm
-    double precision, dimension(3), intent(in) :: a
+    double precision, dimension(:), intent(in) :: a
 
     norm = sqrt(sum(a**2))
 

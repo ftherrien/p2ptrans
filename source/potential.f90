@@ -9,7 +9,7 @@ module potential
 
 contains
 
-  function distance(Apos, Bpos, mat, vec, potential, param)
+  function distance(Apos, Bpos, mat, vec, pot, param)
 
     double precision, intent(in), dimension(:,:) :: &
          Apos, &  ! position matrix
@@ -31,20 +31,23 @@ contains
          param ! Parameter of the potential
 
     character*(*), intent(in) :: &
-         potential
+         pot
 
-    select case (potential)
+    select case (pot)
     case ("LJ")
+
        d = sum((Apos - free_trans(Bpos,mat,vec))**2,1)
 
        distance = sum(param**12/d**6 - 2*param**6/d**3)
+       
     case ("Euclidean")
+   
        distance = sum(sqrt(sum((Apos - free_trans(Bpos,mat,vec))**2,1)))
     end select
 
   end function distance
 
-  function derivative(Apos, Bpos, mat, vec, potential, param) result(E)
+  function derivative(Apos, Bpos, mat, vec, pot, param) result(E)
 
     double precision, intent(in), dimension(:,:) :: &
          Apos, &  ! position matrix
@@ -63,12 +66,12 @@ contains
          vec
 
     character*(*), intent(in) :: &
-         potential
+         pot
 
     double precision, intent(in) :: &
          param ! Parameter of the potential
 
-    select case (potential)
+    select case (pot)
     case ("LJ")
        E = Apos - free_trans(Bpos,mat,vec)
        P = param**6/(sum(E**2,1))**7 - 1/(sum(E**2,1))**4

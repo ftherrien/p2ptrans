@@ -12,22 +12,26 @@ from .utils import lcm, find_uvw, normal, rotate, PCA, makeInitStruc
 
 def find_cell(class_list, positions, tol = 1e-5, frac_shell = 0.5, frac_correct = 0.95, max_count=1000):
     
-    cm = np.mean(positions, axis=1).reshape((3,1))
+    cm = np.mean(positions, axis=1).reshape((np.shape(positions)[0],1)) # Centroid
 
     for loop in [0,1]:
         for i in np.unique(class_list):
-            pos = positions[:, class_list == i]
-            center = np.argmin(la.norm(pos, axis = 0))
-            list_in = list(range(np.shape(pos)[1]))
-            list_in.remove(center)
-            origin = pos[:,center:center+1]
-            pos = pos[:,list_in] - origin.dot(np.ones((1,np.shape(pos)[1]-1))) # centered
-            if not loop:
+            pos = positions[:, class_list == i] # All positions of type i
+            center = np.argmin(la.norm(pos, axis = 0)) # Index of most centered atom
+            list_in = list(range(np.shape(pos)[1])) # List of indices of positions
+            list_in.remove(center) # Remove the center atoms
+            origin = pos[:,center:center+1] # Position of the most centered atom (the origin)
+            pos = pos[:,list_in] - origin.dot(np.ones((1,np.shape(pos)[1]-1))) # Position relative to the origin
+            if not loop: # First loop
+                # Loop goes through in order of distances
+                # Goes through all z>y, for all y>x, for all x
                 norms = la.norm(pos, axis = 0)
                 idx = np.argsort(norms)
                 minj = 0
                 maxj = len(idx)
             else:
+                # Loop goes through randomly
+                # Goes through all x, y smaller than z for all z 
                 idx = np.arange(np.shape(pos)[1])
                 np.random.shuffle(idx)
                 minj = 3
@@ -42,38 +46,47 @@ def find_cell(class_list, positions, tol = 1e-5, frac_shell = 0.5, frac_correct 
                     mink = 0
                     maxk = j-1
                 for k in range(mink, maxk):
-                    if not loop:
-                        minl = k+1
-                        maxl = len(idx)
-                    else:
+                    if np.shape(pos)[0] == 3:
+                        if not loop:
+                            minl = k+1
+                            maxl = len(idx)
+                        else:
+                            minl = 0
+                            maxl = k-1
+                    elif np.shape(pos)[0] == 2:
                         minl = 0
-                        maxl = k-1
+                        maxl = 1
                     for l in range(minl, maxl):
-                        # creates all possible cells 
-                        newcell=np.concatenate([pos[:,idx[j]:idx[j]+1], 
+                        # creates all possible cells for each combinations
+                        if np.shape(pos)[0] == 3:
+                            newcell=np.concatenate([pos[:,idx[j]:idx[j]+1], 
                                                     pos[:,idx[k]:idx[k]+1], 
                                                     pos[:,idx[l]:idx[l]+1]],axis=1)
+                        elif np.shape(pos)[0] == 2:
+                            newcell=np.concatenate([pos[:,idx[j]:idx[j]+1], 
+                                                    pos[:,idx[k]:idx[k]+1]],axis=1)
 
                         if abs(la.det(newcell)) > tol: # Cell as non-zero volume
                             count += 1
-                            if count > max_count:
+                            if count > max_count: # Stops if reached max tries
                                 break
 
                             if la.det(newcell) < 0:
-                                newcell=np.concatenate([pos[:,idx[j]:idx[j]+1],
-                                                        pos[:,idx[l]:idx[l]+1],
-                                                        pos[:,idx[k]:idx[k]+1]],axis=1)
+                                newcell[:,:2] = newcell[:,1::-1] # Make sure volume is positive
 
+                            # Norms of all positions of all types of atoms with respect to centroid
                             norms = la.norm(positions - cm.dot(np.ones((1,np.shape(positions)[1]))), axis=0)
+                            # Expressed in coordinates of the new cell
                             apos = la.inv(newcell).dot(positions - origin.dot(np.ones((1,np.shape(positions)[1]))))
-
-                            inPos = apos[:,np.sum((apos < 1 - tol) & (apos > - tol),0)==3]
-                            inType = class_list[np.sum((apos < 1 - tol) & (apos > - tol),0)==3]
+                            
+                            # Positions and types inside the cell
+                            inPos = apos[:,np.sum((apos < 1 - tol) & (apos > - tol),0)==np.shape(apos)[0]]
+                            inType = class_list[np.sum((apos < 1 - tol) & (apos > - tol),0)==np.shape(apos)[0]]
                             
                             n_map = 0
                             for m, a in enumerate(apos.T):
+                                # Can this pos and type be found in inPos?
                                 for n, b in enumerate(inPos.T):
-                                    # Check that the cell is repeating
                                     if (all(abs(np.mod(a+tol,1)-tol-b) < tol) and 
                                         inType[n] == class_list[m]):
                                         break
@@ -82,22 +95,36 @@ def find_cell(class_list, positions, tol = 1e-5, frac_shell = 0.5, frac_correct 
                                 n_map += 1
         
                             genPos = []
+                            # If the fractions on generated atoms is greater than frac_correct
                             if float(n_map)/float(len(class_list)) > frac_correct:
+                                # Generate a parallelepieped that contains the apos sphere
                                 xMax = int(np.max(apos[0,:]))+1
                                 xMin = int(np.min(apos[0,:]))-1
                                 yMax = int(np.max(apos[1,:]))+1
                                 yMin = int(np.min(apos[1,:]))-1
-                                zMax = int(np.max(apos[2,:]))+1
-                                zMin = int(np.min(apos[2,:]))-1
+                                if np.shape(apos)[0] == 3:
+                                    zMax = int(np.max(apos[2,:]))+1
+                                    zMin = int(np.min(apos[2,:]))-1
+                                elif np.shape(apos)[0] == 2:
+                                    zMax = 1
+                                    zMin = 0
                                 for x in range(xMin,xMax):
                                     for y in range(yMin,yMax):
                                         for z in range(zMin,zMax):
-                                            genPos.append(inPos + np.array([[x,y,z]]).T.dot(np.ones((1,np.shape(inPos)[1]))))
-                            
-                                genPos = newcell.dot(np.concatenate(genPos,axis=1))
+                                            if np.shape(apos)[0] == 3:
+                                                genPos.append(inPos + np.array([[x,y,z]]).T.dot(np.ones((1,np.shape(inPos)[1]))))
+                                            if np.shape(apos)[0] == 2:
+                                                genPos.append(inPos + np.array([[x,y]]).T.dot(np.ones((1,np.shape(inPos)[1]))))
+
+                                genPos = newcell.dot(np.concatenate(genPos,axis=1)) #in coordinates of newcell
                                 genPos = genPos + origin.dot(np.ones((1,np.shape(genPos)[1])))
-        
-                                if np.sum(la.norm(genPos - cm.dot(np.ones((1,np.shape(genPos)[1]))), axis = 0) < frac_shell * np.max(norms) - tol) == np.sum(norms < frac_shell * np.max(norms) - tol):
+
+                                # Cut a smaller sphere in genPos
+                                genSphere = np.sum(la.norm(genPos - cm.dot(np.ones((1,np.shape(genPos)[1]))), axis = 0) < frac_shell * np.max(norms) - tol)
+                                # Cut the same sphere in Apos
+                                aposSphere = np.sum(norms < frac_shell * np.max(norms) - tol)
+                                
+                                if  genSphere == aposSphere:
                                     return newcell, origin
                     else:
                         continue
@@ -110,7 +137,7 @@ def find_cell(class_list, positions, tol = 1e-5, frac_shell = 0.5, frac_correct 
     print("WARNING: Could not find periodic cell for any displacement. Increase sample size.")                
     return None, None
 
-def makeSphere(A, ncell, *atom_types):
+def makeSphere(A, ncell, *atom_types, twoD=False):
 
     """ 
     Creates a spherical set of atoms.
@@ -142,13 +169,19 @@ def makeSphere(A, ncell, *atom_types):
         for a in A:
             if any(atom_types == a.type):
                 idx = np.where(atom_types == a.type)[0][0]
-                Apos[idx] = np.concatenate((Apos[idx], t.sphere(Acell, ncell, a.pos*float(A.scale))), axis = 1) 
+                if twoD:
+                    Apos[idx] = np.concatenate((Apos[idx], t.circle(Acell, ncell, a.pos*float(A.scale))), axis = 1)
+                else:
+                    Apos[idx] = np.concatenate((Apos[idx], t.sphere(Acell, ncell, a.pos*float(A.scale))), axis = 1) 
 
                 # Order the atoms with respect to distance
                 Apos[idx] = Apos[idx][:,np.argsort(la.norm(Apos[idx],axis=0))] 
                 atomsA[idx] += 1
             else:
-                Apos.append(t.sphere(Acell, ncell, a.pos*float(A.scale)))
+                if twoD:
+                    Apos.append(t.circle(Acell, ncell, a.pos*float(A.scale)))
+                else:
+                    Apos.append(t.sphere(Acell, ncell, a.pos*float(A.scale)))
                 atom_types = np.append(atom_types, a.type)
                 atomsA = np.append(atomsA,1)
         
@@ -162,10 +195,16 @@ def makeSphere(A, ncell, *atom_types):
         for a in A:
             idx = np.where(atom_types == a.type)[0][0]
             if atomsA[idx] == 0:
-                Apos[idx] = t.sphere(Acell, ncell, a.pos*float(A.scale))
+                if twoD:
+                    Apos[idx] = t.circle(Acell, ncell, a.pos*float(A.scale))
+                else:
+                    Apos[idx] = t.sphere(Acell, ncell, a.pos*float(A.scale))
             else:
-                Apos[idx] = np.concatenate((Apos[idx], t.sphere(Acell, ncell, a.pos*float(A.scale))), axis = 1) 
-                # Order the atoms with respect to distance
+                if twoD:
+                    Apos[idx] = np.concatenate((Apos[idx], t.circle(Acell, ncell, a.pos*float(A.scale))), axis = 1)
+                else:
+                    Apos[idx] = np.concatenate((Apos[idx], t.sphere(Acell, ncell, a.pos*float(A.scale))), axis = 1)
+                    # Order the atoms with respect to distance
                 Apos[idx] = Apos[idx][:,np.argsort(la.norm(Apos[idx],axis=0))]
             atomsA[idx] += 1
         

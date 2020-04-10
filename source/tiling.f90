@@ -1,5 +1,7 @@
 module tiling
 
+  use utils
+  
   implicit none
 
   public :: &
@@ -7,12 +9,10 @@ module tiling
        circle
        
   private :: &
-       cross, &
-       det, &
-       norm
-
+       cross
+  
   contains
-
+    
   subroutine sphere(Acell, ncell, center, ASC)
 
     double precision, intent(in), dimension(3,3) :: &
@@ -84,15 +84,18 @@ module tiling
 
   end subroutine sphere  
 
-  subroutine circle(Acell,ncell,ASC)
+  subroutine circle(Acell, ncell, center, ASC)
 
-    double precision, intent(in), dimension(2,2) :: &
-         Acell ! Matrix containing the 2 cell vectors
+    double precision, intent(in), dimension(3,3) :: &
+         Acell ! Matrix containing the 3 cell vectors
 
     integer, intent(in) :: &
          ncell ! Number of repetition in each direction
 
-    double precision, intent(out), dimension(2,ncell) :: &
+    double precision, intent(in), dimension(3) :: &
+         center
+    
+    double precision, intent(out), dimension(3,ncell) :: &
          ASC ! Position of each cell in the SC
 
     double precision, dimension(ncell) :: &
@@ -128,7 +131,7 @@ module tiling
     dists = -1
     do i=-nnx,nnx
        do j=-nny,nny
-          dist = norm(matmul(Acell,(/i+0.5d0,j+0.5d0/)))
+          dist = norm(matmul(Acell,(/i+0.5d0,j+0.5d0,0.0d0/)) + center)
           if (dist <= rad) then
              
              if (l < ncell) l=l+1
@@ -142,7 +145,7 @@ module tiling
                 dists(l-k+1:ncell) = dists(l-k:ncell-1)
                 dists(l-k) = dist
                 ASC(:,l-k+1:ncell) = ASC(:,l-k:ncell-1)
-                ASC(:,l-k) = matmul(Acell,(/i,j/))
+                ASC(:,l-k) = matmul(Acell,(/dble(i),dble(j),0.0d0/)) + center
              endif
           endif
        enddo
@@ -160,38 +163,7 @@ module tiling
     cross(2) = a(3)*b(1) - a(1)*b(3)
     cross(3) = a(1)*b(2) - b(1)*a(2)
   end function cross
-
-  recursive function det(a,n) result(accumulation)
-    ! Copied from Rosetta Code at: https://rosettacode.org/wiki/Matrix_arithmetic#Fortran
-    ! Checked and modified for determinant only, and double precision
-    double precision, dimension(n,n), intent(in) :: a
-    integer, intent(in) :: n
-    double precision, dimension(n-1, n-1) :: b
-    double precision :: accumulation
-    integer :: i, sgn
-    if (n == 1) then
-       accumulation = a(1,1)
-    else
-       accumulation = 0
-       sgn = 1
-       do i=1, n
-          b(:, :(i-1)) = a(2:, :i-1)
-          b(:, i:) = a(2:, i+1:)
-          accumulation = accumulation + sgn * a(1, i) * det(b, n-1)
-          sgn = -sgn
-       enddo
-    endif
-  end function det
-
-  function norm(a)
-
-    double precision :: norm
-    double precision, dimension(:), intent(in) :: a
-    
-    norm = sqrt(sum(a**2))
-    
-  end function norm
-
+  
 end module tiling
 
 !Made by Louis Popovic. Special thanks to Felix Therrien. 

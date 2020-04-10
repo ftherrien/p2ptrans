@@ -1,5 +1,25 @@
 from .config import *
 
+def scale(A):
+    A.cell = float(A.scale)*A.cell
+    for a in A:
+        a.pos = float(A.scale)*a.pos
+    A.scale = 1
+    return A
+
+def is_same_struc(A, B, tol=tol):
+    res = True
+    if not np.allclose(float(A.scale)*A.cell, float(B.scale)*B.cell, atol=tol):
+        res = False
+        
+    for a in A:
+        for b in B:
+            if a.type == b.type and np.allclose(a.pos, b.pos, atol=tol):
+                break
+        else:
+            res = False
+    return res
+
 def lcm(x, y):
    """This function takes two
    integers and returns the L.C.M."""

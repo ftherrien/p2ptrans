@@ -20,6 +20,84 @@ def setplt(interactive):
 
         isset = True
 
+def displayStats(stats, n_iter, peak_thetas, ttrans, dmin, n_peaks, sym, interactive, savedisplay, outdir):
+    """ Displays the statistics of the interface minimization """
+
+    setplt(interactive)
+
+    angles = stats[:,0]
+    angles= np.mod(angles,np.pi*2/sym)
+
+    vol = stats[:,1]
+        
+    dists = stats[:,2]
+        
+    idx = np.argsort(angles)
+    angles = 180*angles[idx]/np.pi
+    vol = vol[idx]
+    dists = dists[idx]
+
+    size = int(0.02*n_iter)
+
+    n_bins = n_iter//10
+        
+    fig = plt.figure("Stats", figsize=[15,7.5])
+
+    gs = fig.add_gridspec(3, 6)
+
+    ax = [None]*6
+        
+    ax[0] = fig.add_subplot(gs[0:2,0])
+    ax[0].hist(dists,n_bins, orientation="horizontal")
+    ax[0].set_xlim(ax[0].get_xlim()[::-1])
+    ax[0].set_axis_off()
+        
+    ax[1] = fig.add_subplot(gs[0:2,1:3])
+    ax[1].set_title("Distance vs angles")
+    idvol = np.argsort(vol)[::-1]
+    im = ax[1].scatter(angles[idvol], dists[idvol], c=vol[idvol])
+        
+    meanrun = np.zeros(n_iter-size)
+    for i in range(n_iter-size):
+        meanrun[i] = np.mean(dists[i:i+size])
+            
+    ax[1].plot(angles[size//2:-size//2],meanrun, 'gray')
+
+    for i in range(n_peaks):
+        ax[1].scatter(np.mod(180*peak_thetas[i]/np.pi,360/sym), dmin[i], marker="X", c="red")
+            
+    fig.colorbar(im, ax=ax[0:1], location='left')
+        
+    ax[2] = fig.add_subplot(gs[0:2,3:5])
+    ax[2].set_title("Volume vs angles")
+    iddist = np.argsort(dists)[::-1]
+    im = ax[2].scatter(angles[iddist], vol[iddist], c=dists[iddist])
+
+    for i in range(n_peaks):
+        ax[2].scatter(np.mod(180*peak_thetas[i]/np.pi,360/sym), la.det(ttrans[i,:,:3]), marker="X", c="red")
+        
+    ax[3] = fig.add_subplot(gs[0:2,5])
+    ax[3].hist(vol,n_bins, orientation="horizontal")
+    ax[3].set_axis_off()
+        
+    fig.colorbar(im, ax=ax[3])
+
+    ax[4] = fig.add_subplot(gs[2,1:3])
+    ax[4].hist(angles,n_bins)
+    ax[4].set_ylim(ax[4].get_ylim()[::-1])
+    ax[4].set_axis_off()
+        
+    ax[5] = fig.add_subplot(gs[2,3:5])
+    ax[5].hist(angles,n_bins)
+    ax[5].set_ylim(ax[5].get_ylim()[::-1])
+    ax[5].set_axis_off()
+
+    if savedisplay:
+        fig.savefig(outdir+"/stats.png")
+        
+    if interactive:
+        plt.show()
+        
 def displayOptimalResult(Apos, Bpos, Bposst, disps_total, disps, class_list, vec_classes,
                          nat, natA, natB, atoms, outdir, savedisplay, interactive):
 
