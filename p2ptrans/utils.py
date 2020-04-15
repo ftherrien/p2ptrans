@@ -109,3 +109,38 @@ def makeInitStruc(dispStruc, vec_classes):
     for a in dispStruc:
         initStruc.add_atom(*(a.pos+vec_classes[int(a.type)]),a.atom)
     return initStruc
+
+def is_integer(cell, tol):
+   return np.allclose(cell, np.round(cell), atol=tol)
+
+def superize(cell, newcell):
+   return cell.dot(np.round(la.inv(cell).dot(newcell)))
+
+def lccell(S1, S2, tol):
+   # This create a common supercell between S1 and S2
+   # This will always return a valid answer, the optimal answer can be
+   # Calculated using the Smith Normal Decomposition
+
+   n = np.shape(S1)[0]
+   
+   if la.det(S1) < la.det(S2):
+      A = la.inv(S1).dot(S2)
+      S = np.eye(n)
+      for v in range(n):
+         for j in range(int(round(la.det(S1)))):
+            if np.allclose((j+1)*A[:,v], np.round((j+1)*A[:,v]), tol):
+               break
+         S[v,v] = j+1
+         
+      return S2.dot(S)
+   else:
+      A = la.inv(S2).dot(S1)
+      S = np.eye(n)
+      for v in range(n):
+         for j in range(int(round(la.det(S2)))):
+            if np.allclose((j+1)*A[:,v], np.round((j+1)*A[:,v]), tol):
+               break
+         S[v,v] = j+1
+         
+      return S1.dot(S)
+

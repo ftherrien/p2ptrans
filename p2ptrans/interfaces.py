@@ -8,7 +8,7 @@ from .fmodules import transform as tr
 from .fmodules import tiling as t
 from .display import displayStats, displayOptimalResult, displayTransCell, printMatAndDir
 from .core import makeSphere, find_cell, makeStructures, switchDispStruc 
-from .utils import scale, is_same_struc, lcm
+from .utils import scale, is_same_struc, lcm, lccell, superize
 
 def find_layer(strucList, rule):
     """This function replaces the names of the atoms according to the rule in a list of 
@@ -16,7 +16,8 @@ def find_layer(strucList, rule):
     """
     A = []
     ruleset = set.union(*list(rule.values())) # Puts all possible values in one set
-    for struc in strucList:
+    idx = []
+    for i,struc in enumerate(strucList):
         struc = scale(struc)
         types = set([a.type for a in struc]) # Create a set of types
         if not ruleset.isdisjoint(types): # If ruleset is contained in types
@@ -30,7 +31,8 @@ def find_layer(strucList, rule):
                             break
                     tmpStruc.add_atom(*a.pos, newtype) # Changes the types according to the rule 
             A.append(tmpStruc)
-    return A
+            idx.append(i)
+    return A, idx
         
 def find_basis(diruvw, ccell = np.eye(3), tol=tol, maxi=10):
     """ Finds a new cell for the structure where the specified plane is in the z direction """
@@ -87,7 +89,7 @@ def find_basis(diruvw, ccell = np.eye(3), tol=tol, maxi=10):
     
     return cell2D, cell3D
 
-def readSurface(A, planehkl, rule, ccell=None, tol=tol):
+def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3):
     """Creates a structure for all possible combinations and renames the atoms according to the rule"""
 
     A = scale(A)
@@ -116,16 +118,24 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol):
         idx = idx[1:]
         
     strucs = []
+    recMap = []
+    reconstructure = [None]*len(inplane)
     # Creates a structure for each possible termination
     for j,ix in enumerate(inplane):
+
         tmpstruc = Structure(cell2D)
+        reconstructure[j] = deepcopy(tmpstruc)
         tmpstruc.add_atom(0,0,0,A[ix[0]].type)
         for i in ix[1:]:
             pos = cell2D.dot(la.inv(cell3D)).dot(A[i].pos-A[ix[0]].pos)
             tmpstruc.add_atom(*(pos),A[i].type)
-
+        for a in A:
+            pos = cell2D.dot(la.inv(cell3D)).dot(a.pos-A[ix[0]].pos)
+            reconstructure[j].add_atom(*(pos), a.type)
+            
         tmpstruc = supercell(tmpstruc,tmpstruc.cell) #Puts atoms inside the cell
-
+        reconstructure[j] = supercell(reconstructure[j], reconstructure[j].cell)
+        
         # Removes structures that are trivially the same
         for i, s in enumerate(strucs):
             for a in s:
@@ -134,6 +144,10 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol):
                     b.pos = b.pos - a.pos
                 tmps = supercell(tmps,tmps.cell)
                 if is_same_struc(tmpstruc, tmps, tol=tol):
+                    for b in reconstructure[j]:
+                        b.pos = b.pos + a.pos
+                    reconstructure[j] = supercell(reconstructure[j], reconstructure[j].cell)
+                    recMap[i].append(reshift(primitive(reconstructure[j],primtol)))
                     break
             else:
                 continue
@@ -141,13 +155,18 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol):
         else:
             tmpstruc.name = A.name + " " + "(%d %d %d)"%(tuple(planehkl)) + " " + str(len(strucs))
             strucs.append(tmpstruc)
-            write.poscar(strucs[-1], vasp5=True, file="POSCAR_%03d"%j)
 
-    for i in range(len(strucs)):
-        strucs[i] = primitive(strucs[i])
-        reshift(strucs[i])
+            recMap.append([reshift(primitive(reconstructure[j], primtol))])
             
-    return find_layer(strucs, rule)    
+    for i in range(len(strucs)):
+        strucs[i] = primitive(strucs[i], primtol)
+        strucs[i] = reshift(strucs[i])
+
+    layers, idx = find_layer(strucs, rule)
+
+    recMap = [recMap[i] for i in idx]
+        
+    return list(zip(layers, recMap))    
 
 def reshift(struc):
     """Reshift the z axis to the last position in the matrix and makes it positive"""
@@ -169,6 +188,11 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, filename, outdir):
     Apos, atomsA, atom_types = makeSphere(A, mulA*ncell, twoD=True) # Create Apos
     
     Bpos, atomsB = makeSphere(B, mulB*ncell, atom_types, twoD=True) # Create Bpos
+
+    centroidA = np.mean(Apos, axis=1)
+    centroidB = np.mean(Bpos, axis=1)
+
+    print("CENTROIDS", centroidA, centroidB)
     
     assert all(mulA*atomsA == mulB*atomsB)
     atoms = mulA*atomsA
@@ -201,7 +225,9 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, filename, outdir):
     origin = [None]*n_peaks
     
     for i in range(n_peaks): 
-            
+
+        ttrans[i,:,3] = ttrans[i,:,3] - ttrans[i,:,:3].dot(centroidB) + centroidA
+        
         print("Looking for periodic cell for peak %d..."%(i))        
 
         foundcell[i] = np.eye(3)
@@ -219,6 +245,73 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, filename, outdir):
     return (Apos, Apos_map, Bpos, Bposst, n_map, natA, class_list,
             ttrans, rtrans, dmin, stats, n_peaks, peak_thetas,
             atoms, atom_types, foundcell, origin)
+
+def createPoscar(A, B, reconA, reconB, ttrans, dispStruc, outdir=".", lay=1, vac=10, tol=1e-3):
+    """ Creates the interfacial POSCARS """
+    
+    reconB.cell = ttrans[:,:3].dot(reconB.cell)
+    shift = deepcopy(ttrans[:,3])
+    shift[2] = 0 
+    for b in reconB:
+        b.pos = ttrans[:,:3].dot(b.pos) + shift
+
+    if la.det(A.cell) <  la.det(reconA.cell):
+        dispA = deepcopy(dispStruc.cell)
+        dispA[3,3] = A.cell[3,3]
+        SdA = la.inv(A.cell).dot(dispStruc.cell)
+        SrA = la.inv(A.cell).dot(reconA.cell)
+    
+        NA = lccell(SdA, SrA, tol)
+        SA = la.inv(SdA).dot(NA) 
+    else:
+        SA = np.eye(3)
+
+    if la.det(B.cell) <  la.det(reconB.cell):
+        dispB = deepcopy(dispStruc.cell)
+        dispB[3,3] = B.cell[3,3]
+        SdB = la.inv(ttrans[:,:3].dot(B.cell)).dot(dispStruc.cell)
+        SrB = la.inv(ttrans[:,:3].dot(B.cell)).dot(reconB.cell)
+    
+        NB = lccell(SdB, SrB, tol)
+        SB = la.inv(SdB).dot(NB)
+        
+    else:
+        SB = np.eye(3)
+          
+    N = lccell(SA[:2,:2], SB[:2,:2], tol)
+
+    newA = -deepcopy(A.cell)
+    
+    newA[:2,:2] = dispStruc.cell[:2,:2].dot(N)
+    
+    newB = deepcopy(B.cell)
+
+    newB[:2,:2] = newA[:2,:2]
+    
+    reconA = supercell(reconA, superize(reconA.cell, newA))
+        
+    reconB = supercell(reconB, superize(reconB.cell, newB))
+    
+    write.poscar(reconA, vasp5=True, file= outdir + "/POSCAR_Bottom")
+    
+    write.poscar(reconB, vasp5=True, file= outdir + "/POSCAR_Top")
+
+    reconA = supercell(reconA, reconA.cell.dot(np.array([[1,0,0],[0,1,0],[0,0,lay]])))
+        
+    reconB = supercell(reconB, reconB.cell.dot(np.array([[1,0,0],[0,1,0],[0,0,lay]])) )
+
+    interface = Structure(newA)
+    interface.cell[2,2] = reconB.cell[2,2] - reconA.cell[2,2] + ttrans[2,3] + vac
+    for b in reconB:
+        pos = b.pos + np.array([0,0,1])*(ttrans[2,3] + vac/2) - reconA.cell[2,2]
+        interface.add_atom(*pos, b.type)
+
+    for a in reconA:
+        pos = a.pos + np.array([0,0,1])*(vac/2) - reconA.cell[2,2]
+        interface.add_atom(*pos, a.type)
+
+    write.poscar(interface, vasp5=True, file=outdir + "/POSCAR_interface")
+
 
 def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", interactive=False,
                            savedisplay=False, outdir='.',
@@ -280,19 +373,18 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
         
     for k in range(n_peaks):
 
-
-        print("ANGLE!", peak_thetas[k])
-        
         outcur = outdir+"/peak_%03d"%k
-        
-        os.makedirs(outcur, exist_ok=True)
+
+        if savedisplay:
+            os.makedirs(outcur, exist_ok=True)
         
         print()
         print("-------OPTIMIZATION RESULTS FOR PEAK %d--------"%k)
         print()
         print("Number of classes:", len(np.unique(class_list[k,:])))
         print("Number of mapped atoms:", n_map)
-        print("Total distance between structures:", dmin[k]) 
+        print("Total distance between structures:", dmin[k])
+        print("Optimal angle between structures:", np.mod(peak_thetas[k]*180/np.pi,360/sym))
         print("Volume stretching factor (det(T)):", la.det(ttrans[k,:2,:2]))
         print("Cell volume ratio (initial cell volume)/(final cell volume):", mulA * la.det(Acell)/(mulB * la.det(Bcell)))
 
@@ -362,6 +454,7 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
             print()
             
         if switched:
-            dispStruc[k], ttrans[k,:,:3], vec_classes[k] = switchDispStruc(dispStruc[k], ttrans[k,:,:3], vec_classes[k])        
+            dispStruc[k], ttrans[k,:,:3], vec_classes[k] = switchDispStruc(dispStruc[k], ttrans[k,:,:3], vec_classes[k])
+            ttrans[k,:,3] = -ttrans[k,:,3]
 
     return ttrans, dispStruc, vec_classes

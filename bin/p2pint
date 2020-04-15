@@ -6,6 +6,11 @@ from glob import iglob
 
 from p2ptrans.interfaces import *
 
+try:
+    from param import *
+except ModuleNotFoundError:
+    pass
+    
 def readOptions():
 
     parser = argparse.ArgumentParser()
@@ -127,14 +132,31 @@ def main():
         # Save the parameters for the use function
         pickle.dump((listA, planeA, listB, planeB,  ncell, n_iter, filecontent, rule), open(outdir+"/param.dat","wb"))
 
-    for A in listA:
-        for B in listB:
-            findMatchingInterfaces(A, B, ncell, n_iter, sym=sym, filename=filename, interactive=interactive,
-                                   savedisplay=savedisplay, outdir=outdir,
-                                   minimize=minimize, test=test)
+    for A, mapA in listA:
+        for B, mapB in listB:
+            ttrans, dispStruc, vec_classes = findMatchingInterfaces(A, B, ncell, n_iter,
+                                                                    sym=sym, filename=filename,
+                                                                    interactive=interactive,
+                                                                    savedisplay=savedisplay, outdir=outdir,
+                                                                    minimize=minimize, test=test)
+            if test:
+                continue
+
+            for k in range(len(dispStruc)):
+
+                peak_outdir = outdir + "/peak_%03d"%k
+                os.makedirs(peak_outdir, exist_ok=True)
+                
+                for i, reconstructureA in enumerate(mapA):
+                    for j, reconstructureB in  enumerate(mapB):
+                        
+                        print("Creating POSCARS for peak %d, bottom term. %d, top term %d"%(k, i, j))
+
+                        term_outdir = peak_outdir + "/term_%03d-%03d"%(i,j)
+                        os.makedirs(term_outdir, exist_ok=True)
+                        
+                        createPoscar(A, B, deepcopy(reconstructureA), deepcopy(reconstructureB), ttrans[k,:,:], dispStruc[k], outdir=term_outdir, lay=lay, vac=vac, tol=tol)
     
-    if test:
-        return
     
     print("p2pint finished successfully")
 

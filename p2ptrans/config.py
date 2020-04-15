@@ -14,6 +14,8 @@ tol_uvw = 1e-6
 pca = False
 nrep = 1
 gif = False
+lay = 1
+vac = 10
 # ++++++++++++++++++++++++++++++++
 
 # Steps
@@ -22,3 +24,4 @@ viewDirs = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 size = 3
 habit = False
 n_frames = 5
+
