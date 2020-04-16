@@ -16,7 +16,7 @@ def readOptions():
     parser = argparse.ArgumentParser()
     parser.add_argument("-B","--bottom", nargs=2, dest="A", default=['./POSCAR_A','[0,0,1]'], help="Structure at the bottom")
     parser.add_argument("-T","--top", nargs=2, dest="B", default=['./POSCAR_B','[0,0,1]'], help="Structure at the top")
-    parser.add_argument("-n","--ncell",dest="ncell",type=int, default=300, help="Number of cells to tile")
+    parser.add_argument("-n","--ncell",dest="ncell",type=int, default=100, help="Number of cells to tile")
     parser.add_argument("-N","--niter",dest="n_iter",type=int, default=1000, help="Number of random starts")
     parser.add_argument("-i","--interactive",dest="interactive",action="store_true", default=False, help="Enables interactive display")
     parser.add_argument("-d","--disp",dest="savedisplay",action="store_true", default=False, help="Saves figures")

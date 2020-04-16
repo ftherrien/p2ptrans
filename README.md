@@ -6,10 +6,11 @@ p2ptrans allows you to find the best matching between two crystal structures.
 
 ## Latest Updates
 
+**4.15.2020**: The Interface Matching (p2pint) is now fully functional
 **3.2.2020**: The [documentation](https://p2ptrans.readthedocs.io) is finally available! 
 
 ## Features
-p2ptrans can be used directly as a command-line interface (cli) or as a python package. It can be used for two main aspects:
+p2ptrans (and p2pint) can be used directly as a command-line interface (cli) or as a python package. It can be used for two main aspects:
 
 ### 1. Phase Transformations:
 p2ptrans can find the optimal mechanism of transformation between any two structures. It can provide the following information:
@@ -22,34 +23,44 @@ p2ptrans can find the optimal mechanism of transformation between any two struct
 * An animation of the transformation from different points of vue
 
 ### 2. Interfaces
-The interface analysis (2D) is currently under development in the [2D](https://github.com/ftherrien/p2ptrans/tree/2D) branch. **It will be available soon.**
+Given the interfacial planes, p2pint finds the optimal matching between two interface. It can provide the following information:
+* The distance between the two structures (how well they match)
+* The cell of correspondance between the two structure (Interface Cell)
+* The amount of strain at the interface
+* A POSCAR file representing the interface for each termination
 
 ## Installation
     pip install git+https://github.com/ftherrien/p2ptrans
 
-Note: If you do not have [pylada](https://github.com/pylada/pylada-light), the installation will require **cmake**.
+Note: If you do not have [pylada](https://github.com/pylada/pylada-light), you will need to install the py module first:
+    pip install py
+
 
 ### Possible Errors
 1. On certain systems, the pylada installation fails with `error: ‘v’ does not name a type`. If you encounter this error retry the installation with:
 ```
 CXXFLAGS="-std=c++11" pip install git+https://github.com/ftherrien/p2ptrans
 ```
-2. If you install p2ptrans in a conda environment on MacOS you may encounter a segmentation fault at runtime. To avoid this, try:
-```
-pip install git+https://github.com/pylada/pylada-light.git@scikit
-pip install git+https://github.com/ftherrien/p2ptrans
-``` 
+ 
 ## Documentation & Tutorials
 
 Please visit the [documentation for p2ptrans](https://p2ptrans.readthedocs.io)
 
-To run:
+To run the *transformation* finder:
     
     p2ptrans -I POSCAR_INITIAL -F POSCAR_FINAL
     
 to get help:
     
     p2ptrans --help
+
+To run the *interface* finder:
+
+   p2pint -T POSCAR_TOP -B POSCAR_BOTTOM
+
+to get help:
+    
+    p2pint --help
 
 ## Contribution
 Any contribution including [raising issues](https://github.com/ftherrien/p2ptrans/issues) is greatly appreciated.

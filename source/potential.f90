@@ -78,6 +78,7 @@ contains
        E = -E*spread(P,1,3)
     case ("Euclidean")
        E = Apos - free_trans(Bpos,mat,vec)
+       E = E / spread(sqrt(sum(E**2,1)),1,3)
     end select
 
   end function derivative
