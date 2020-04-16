@@ -405,7 +405,6 @@ def optimizationLoop(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir):
         print("Optimizing... (this may take several hours)")
         print("Check progress in %s"%(outdir+"/progress.txt"))
         result = tr.fastoptimization(Apos, Bpos, Acell, la.inv(Acell),
-                                     mulA * la.det(Acell)/(mulB * la.det(Bcell)),
                                      atoms, filename, outdir)
         Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, vec = result
         t_time = time.time() - t_time

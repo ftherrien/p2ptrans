@@ -191,8 +191,6 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, filename, outdir):
 
     centroidA = np.mean(Apos, axis=1)
     centroidB = np.mean(Bpos, axis=1)
-
-    print("CENTROIDS", centroidA, centroidB)
     
     assert all(mulA*atomsA == mulB*atomsB)
     atoms = mulA*atomsA
