@@ -1058,7 +1058,7 @@ contains
        Apos_mapped_prev = 0.0d0
        k=1
 
-       do while ( k <= n_conv .and. any(abs(Apos_mapped - Apos_mapped_prev) < 1.0d-12))
+       do while ( k <= n_conv .and. any(abs(Apos_mapped - Apos_mapped_prev) > 1.0d-12))
           k=k+1
 
           Apos_mapped_prev = Apos_mapped
@@ -1072,9 +1072,9 @@ contains
                n_ana, rate1, rate2, tol, pot, param)
 
        enddo
-
+       
        dist_cur = distance(Apos_mapped, Bpos_opt, rot_mat(angles_local), vec_local, pot, param) 
-
+       
        write(13,"(A, I4, A, I6, A, F8.3)") &
             "Opt dist found for thread", thread,", iteration", j,":", dist_cur
        flush(13)
