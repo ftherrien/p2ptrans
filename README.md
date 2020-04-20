@@ -6,6 +6,7 @@ p2ptrans allows you to find the best matching between two crystal structures.
 
 ## Latest Updates
 
+**20.15.2020**: Documentation is available for Interface Matching and for using p2ptrans as a python module
 **4.15.2020**: The Interface Matching (p2pint) is now fully functional
 **3.2.2020**: The [documentation](https://p2ptrans.readthedocs.io) is finally available! 
 
@@ -25,7 +26,7 @@ p2ptrans can find the optimal mechanism of transformation between any two struct
 ### 2. Interfaces
 Given the interfacial planes, p2pint finds the optimal matching between two interface. It can provide the following information:
 * The distance between the two structures (how well they match)
-* The cell of correspondance between the two structure (Interface Cell)
+* The cell of correspondance between the two structures (Interface Cell)
 * The amount of strain at the interface
 * A POSCAR file representing the interface for each termination
 
