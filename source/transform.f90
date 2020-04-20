@@ -1056,6 +1056,7 @@ contains
 
        Apos_mapped = 1.0d0
        Apos_mapped_prev = 0.0d0
+       Bpos_opt = 0.0d0
        k=1
 
        do while ( k <= n_conv .and. any(abs(Apos_mapped - Apos_mapped_prev) > 1.0d-12))
@@ -1328,7 +1329,7 @@ contains
                 call analytical_gd_rot(twodim, angles_local, vec_rot_local, tmat_local, eye(), &
                      100000, 1.0d0, 1.0d0, tol, "Euclidean", 0.0d0)
              endif
-             
+
              dist_cur = distance(Apos_mapped, Bpos_opt, tmat_local, vec_local, pot, param)
              dist_cur_rot = distance(Apos_mapped, Bpos_opt, rot_mat(angles_local), vec_rot_local, pot, param)
              

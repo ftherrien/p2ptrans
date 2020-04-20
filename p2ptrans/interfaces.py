@@ -147,7 +147,11 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3):
                     for b in reconstructure[j]:
                         b.pos = b.pos + a.pos
                     reconstructure[j] = supercell(reconstructure[j], reconstructure[j].cell)
-                    recMap[i].append(reshift(primitive(reconstructure[j],primtol)))
+                    for rec in recMap[i]:
+                        if is_same_struc(rec, reconstructure[j], tol=tol):
+                            break
+                    else:
+                        recMap[i].append(reconstructure[j])
                     break
             else:
                 continue
@@ -156,11 +160,13 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3):
             tmpstruc.name = A.name + " " + "(%d %d %d)"%(tuple(planehkl)) + " " + str(len(strucs))
             strucs.append(tmpstruc)
 
-            recMap.append([reshift(primitive(reconstructure[j], primtol))])
+            recMap.append([reconstructure[j]])
             
     for i in range(len(strucs)):
         strucs[i] = primitive(strucs[i], primtol)
         strucs[i] = reshift(strucs[i])
+        for j in range(len(recMap[i])):
+            recMap[i][j] = reshift(primitive(recMap[i][j], primtol))
 
     layers, idx = find_layer(strucs, rule)
 
@@ -244,8 +250,11 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, filename, outdir):
             ttrans, rtrans, dmin, stats, n_peaks, peak_thetas,
             atoms, atom_types, foundcell, origin)
 
-def createPoscar(A, B, reconA, reconB, ttrans, dispStruc, outdir=".", lay=1, vac=10, tol=1e-3):
+def createPoscar(A, B, reconA, reconB, ttrans, dispStruc, outdir=".", layers=1, vacuum=10, tol=1e-3):
     """ Creates the interfacial POSCARS """
+
+    reconA = deepcopy(reconA)
+    reconB = deepcopy(reconB)
     
     reconB.cell = ttrans[:,:3].dot(reconB.cell)
     shift = deepcopy(ttrans[:,3])
@@ -255,8 +264,8 @@ def createPoscar(A, B, reconA, reconB, ttrans, dispStruc, outdir=".", lay=1, vac
 
     if la.det(A.cell) <  la.det(reconA.cell):
         dispA = deepcopy(dispStruc.cell)
-        dispA[3,3] = A.cell[3,3]
-        SdA = la.inv(A.cell).dot(dispStruc.cell)
+        dispA[2,2] = A.cell[2,2]
+        SdA = la.inv(A.cell).dot(dispA)
         SrA = la.inv(A.cell).dot(reconA.cell)
     
         NA = lccell(SdA, SrA, tol)
@@ -266,8 +275,8 @@ def createPoscar(A, B, reconA, reconB, ttrans, dispStruc, outdir=".", lay=1, vac
 
     if la.det(B.cell) <  la.det(reconB.cell):
         dispB = deepcopy(dispStruc.cell)
-        dispB[3,3] = B.cell[3,3]
-        SdB = la.inv(ttrans[:,:3].dot(B.cell)).dot(dispStruc.cell)
+        dispB[2,2] = B.cell[2,2]
+        SdB = la.inv(ttrans[:,:3].dot(B.cell)).dot(dispB)
         SrB = la.inv(ttrans[:,:3].dot(B.cell)).dot(reconB.cell)
     
         NB = lccell(SdB, SrB, tol)
@@ -290,9 +299,9 @@ def createPoscar(A, B, reconA, reconB, ttrans, dispStruc, outdir=".", lay=1, vac
         
     reconB = supercell(reconB, superize(reconB.cell, newB))
     
-    write.poscar(reconA, vasp5=True, file= outdir + "/POSCAR_Bottom")
+    write.poscar(reconA, vasp5=True, file= outdir + "/POSCAR_bottom")
     
-    write.poscar(reconB, vasp5=True, file= outdir + "/POSCAR_Top")
+    write.poscar(reconB, vasp5=True, file= outdir + "/POSCAR_top")
 
     reconA = supercell(reconA, reconA.cell.dot(np.array([[1,0,0],[0,1,0],[0,0,lay]])))
         
@@ -341,7 +350,7 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
     print()
 
     if test:
-        return
+        return None, None, None, None
 
     if minimize:
         print("==>Ready to start optimmization<==")
@@ -453,6 +462,6 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
             
         if switched:
             dispStruc[k], ttrans[k,:,:3], vec_classes[k] = switchDispStruc(dispStruc[k], ttrans[k,:,:3], vec_classes[k])
-            ttrans[k,:,3] = -ttrans[k,:,3]
+            ttrans[k,:2,3] = -ttrans[k,:2,:2].dot(ttrans[k,:2,3])
 
-    return ttrans, dispStruc, vec_classes
+    return ttrans, dispStruc, vec_classes, dmin.min()

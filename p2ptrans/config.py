@@ -3,6 +3,16 @@ import numpy as np
 import numpy.linalg as la
 import pickle
 
+supercell_original = supercell
+
+def supercell(*args):
+    if len(getattr(args[0], 'name', '')) > 0:
+        tmpname = args[0].name
+    result = supercell_original(*args)
+    if len(getattr(result, 'name', '')) > 0:
+        result.name = tmpname
+    return result
+
 # Default color styles
 colorlist=['#929591', 'r', 'k','b','#06470c','#ceb301', '#9e0168', '#26f7fd', '#f97306', '#c20078']
 reccolor=['blue','green','red']

@@ -6,16 +6,22 @@ from glob import iglob
 
 from p2ptrans.interfaces import *
 
-try:
-    from param import *
-except ModuleNotFoundError:
-    pass
-    
+def readRule(l):
+    rule = dict()
+    for symbol in l:
+        if symbol.isdigit():
+            key = symbol
+        elif key in rule:
+            rule[key].add(symbol)
+        else:
+            rule[key] = {symbol}
+    return rule
+
 def readOptions():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-B","--bottom", nargs=2, dest="A", default=['./POSCAR_A','[0,0,1]'], help="Structure at the bottom")
-    parser.add_argument("-T","--top", nargs=2, dest="B", default=['./POSCAR_B','[0,0,1]'], help="Structure at the top")
+    parser.add_argument("-B","--bottom", nargs='+', dest="A", default=['./POSCAR_A','[0,0,1]','1','Si'], help="Structure at the bottom, miller indices and chemistry rule. Ex: POSCAR_A [0,0,1] 1 Si")
+    parser.add_argument("-T","--top", nargs='+', dest="B", default=['./POSCAR_B','[1,1,0]','1','Si'], help="Structure at the top, miller indices and chemistry rule. Ex: POSCAR_B [1,1,0] 1 Si")
     parser.add_argument("-n","--ncell",dest="ncell",type=int, default=100, help="Number of cells to tile")
     parser.add_argument("-N","--niter",dest="n_iter",type=int, default=1000, help="Number of random starts")
     parser.add_argument("-i","--interactive",dest="interactive",action="store_true", default=False, help="Enables interactive display")
@@ -25,13 +31,20 @@ def readOptions():
     parser.add_argument("-u","--use",dest="use", type=str, default=None, help="Use previously calculated data")
     parser.add_argument("-m","--minimize",dest="minimize",action="store_true", default=False, help="Rerun minimization using the parameters stored in the folder provided with the -u option")
     parser.add_argument("-t","--test",dest="test",action="store_true", default=False, help="Tests the input file and prepares the run, you can continue this run with the -u [directory] -r option")
-    parser.add_argument("-c","--chem", nargs='+', dest="rule", default=["1","Pt","Al","2","Si","Ge"], help="Chemisrty rule")
     parser.add_argument("-s","--sym",dest="sym",type=int, default=1, help="Max rotational symmetry of the two phases")
+    parser.add_argument("-l","--layers", dest="layers", type=int, default=1, help="Number of layers in the interface structure")
+    parser.add_argument("-v","--vacuum", dest="vacuum", type=float, default=10, help="Thickness of vaccum")
 
     options = parser.parse_args()
 
     fileA = options.A[0]
     planeA = eval(options.A[1])
+    if not len(options.A) >= 4:
+        raise ValueError("-B should have at least 4 arguments")  
+    ruleA = readRule(options.A[2:])
+    if not len(options.B) >= 4:
+        raise ValueError("-T should have at least 4 arguments")
+    ruleB = readRule(options.B[2:])
     fileB = options.B[0]
     planeB = eval(options.B[1])
     ncell = options.ncell
@@ -48,21 +61,15 @@ def readOptions():
         outdir = options.use
     test = options.test
     n_iter = options.n_iter
-    rule = dict()
-    for symbol in options.rule:
-        if symbol.isdigit():
-            key = symbol
-        elif key in rule:
-            rule[key].add(symbol)
-        else:
-            rule[key] = {symbol}
     sym = options.sym
+    vacuum = options.vacuum
+    layers = options.layers
             
-    return fileA, fileB, planeA, planeB, ncell, n_iter, filename, interactive, savedisplay, outdir, use, minimize, test, n_iter, rule, sym
+    return fileA, fileB, planeA, planeB, ruleA, ruleB, ncell, n_iter, filename, interactive, savedisplay, outdir, use, minimize, test, n_iter, sym, vacuum, layers
 
 def main():
 
-    (fileA, fileB, planeA, planeB, ncell, n_iter, filename, interactive, savedisplay, outdir, use, minimize, test, n_iter, rule, sym) = readOptions()
+    (fileA, fileB, planeA, planeB, ruleA, ruleB, ncell, n_iter, filename, interactive, savedisplay, outdir, use, minimize, test, n_iter, sym, vacuum, layers) = readOptions()
     
     # START
     print(" ________    _______  ________   ")   
@@ -82,17 +89,18 @@ def main():
         fileA = "File 1"
         fileB = "File 2"
         
-        listA, planeA, listB, planeB, ncell, n_iter, filecontent, rule  = pickle.load(open(outdir+"/param.dat","rb"))
+        listA, planeA, listB, planeB, ncell, n_iter, filecontent, ruleA, ruleB  = pickle.load(open(outdir+"/param.dat","rb"))
 
         print("==>Using information from %s<=="%(outdir))
         print()
         print("The inputs for that run were:")
         print("-----------------------------------")
-        print("Plane 1:", planeA)
-        print("Plane 2:", planeB)
-        print("Chemistry rule:", rule)
-        print("File 1:", listA[0])
-        print("File 2:", listB[0])
+        print("Plane bottom:", planeA)
+        print("Plane top:", planeB)
+        print("Chemistry rule bottom:", ruleA)
+        print("Chemistry rule top:", ruleB)
+        print("File bottom:", listA[0])
+        print("File top:", listB[0])
         print("ncell:", ncell)
         print("n_iter:", n_iter)
         print("Param file (at time of running):")
@@ -103,7 +111,8 @@ def main():
 
     else:
 
-        print("Chemistry rule:", rule)
+        print("Chemistry rule bottom:", ruleA)
+        print("Chemistry rule top:", ruleB)
         
         # Set up the output directory
         if not os.path.exists(outdir):
@@ -113,14 +122,14 @@ def main():
         print("Bottom structure file(s):")
         for poscarfile in iglob(fileA):
             print(poscarfile)
-            listA.extend(readSurface(read.poscar(poscarfile), planeA, rule))
+            listA.append((poscarfile, readSurface(read.poscar(poscarfile), planeA, ruleA)))
         print("Number of A structures:", len(listA))
         
         listB = []
         print("Top structure file(s):")
         for poscarfile in iglob(fileB):
             print(poscarfile)
-            listB.extend(readSurface(read.poscar(poscarfile), planeB, rule))
+            listB.append((poscarfile, readSurface(read.poscar(poscarfile), planeB, ruleB)))
         print("Number of B structures:", len(listB))
             
         try:
@@ -130,33 +139,52 @@ def main():
             filecontent = ""
 
         # Save the parameters for the use function
-        pickle.dump((listA, planeA, listB, planeB,  ncell, n_iter, filecontent, rule), open(outdir+"/param.dat","wb"))
+        pickle.dump((listA, planeA, listB, planeB,  ncell, n_iter, filecontent, ruleA, ruleB), open(outdir+"/param.dat","wb"))
 
-    for A, mapA in listA:
-        for B, mapB in listB:
-            ttrans, dispStruc, vec_classes = findMatchingInterfaces(A, B, ncell, n_iter,
-                                                                    sym=sym, filename=filename,
-                                                                    interactive=interactive,
-                                                                    savedisplay=savedisplay, outdir=outdir,
-                                                                    minimize=minimize, test=test)
-            if test:
-                continue
-
-            for k in range(len(dispStruc)):
-
-                peak_outdir = outdir + "/peak_%03d"%k
-                os.makedirs(peak_outdir, exist_ok=True)
-                
-                for i, reconstructureA in enumerate(mapA):
-                    for j, reconstructureB in  enumerate(mapB):
+    dists = []
+    filedists = []
+    for nameA, termsA in listA:
+        for nameB, termsB in listB:
+            nameA = nameA.rsplit(".",1)[0].rsplit("/",1)[-1]
+            nameB = nameB.rsplit(".",1)[0].rsplit("/",1)[-1]
+            file_outdir = outdir + "/%s-%s"%(nameA, nameB)
+            os.makedirs(file_outdir, exist_ok=True)
+            for k, (A, mapA) in enumerate(termsA):
+                for l, (B, mapB) in enumerate(termsB):
+                    term_outdir = file_outdir + "/term_%03d-%03d"%(k,l)
+                    os.makedirs(term_outdir, exist_ok=True)
+                    ttrans, dispStruc, vec_classes, dmin = findMatchingInterfaces(A, B, ncell, n_iter,
+                                                                                  sym=sym, filename=filename,
+                                                                                  interactive=interactive,
+                                                                                  savedisplay=savedisplay,
+                                                                                  outdir=term_outdir,
+                                                                                  minimize=minimize, test=test)
+                    dists.append(dmin)
+                    filedists.append(term_outdir)
+                    
+                    if test:
+                        continue
+                    
+                    for k in range(len(dispStruc)):
+                    
+                        peak_outdir = term_outdir + "/peak_%03d"%k
+                        os.makedirs(peak_outdir, exist_ok=True)
                         
-                        print("Creating POSCARS for peak %d, bottom term. %d, top term %d"%(k, i, j))
+                        for i, reconstructureA in enumerate(mapA):
+                            for j, reconstructureB in  enumerate(mapB):
+                                
+                                print("Creating POSCARS for peak %d, bottom term. %d, top term %d"%(k, i, j))
+                    
+                                var_outdir = peak_outdir + "/var_%03d-%03d"%(i,j)
+                                os.makedirs(var_outdir, exist_ok=True)                        
+                                
+                                createPoscar(A, B, reconstructureA, reconstructureB, ttrans[k,:,:],
+                                             dispStruc[k], outdir=var_outdir,
+                                             layers=layers, vacuum=vacuum, tol=tol)
 
-                        term_outdir = peak_outdir + "/term_%03d-%03d"%(i,j)
-                        os.makedirs(term_outdir, exist_ok=True)
-                        
-                        createPoscar(A, B, deepcopy(reconstructureA), deepcopy(reconstructureB), ttrans[k,:,:], dispStruc[k], outdir=term_outdir, lay=lay, vac=vac, tol=tol)
-    
+    with open(outdir + "/out.txt", "w") as f:
+        for i in np.argsort(dists):
+            print("%07.4f in %s"%(dists[i], filedists[i]), file=f)
     
     print("p2pint finished successfully")
 
