@@ -6,9 +6,9 @@ p2ptrans allows you to find the best matching between two crystal structures.
 
 ## Latest Updates
 
-**20.15.2020**: Documentation is available for Interface Matching and for using p2ptrans as a python module
-**4.15.2020**: The Interface Matching (p2pint) is now fully functional
-**3.2.2020**: The [documentation](https://p2ptrans.readthedocs.io) is finally available! 
+**4.20.2020**: Documentation is available for Interface Matching and for using p2ptrans as a python module  
+**4.15.2020**: The Interface Matching (p2pint) is now fully functional  
+**3.2.2020**: The [documentation](https://p2ptrans.readthedocs.io) is finally available!  
 
 ## Features
 p2ptrans (and p2pint) can be used directly as a command-line interface (cli) or as a python package. It can be used for two main aspects:
@@ -21,12 +21,12 @@ p2ptrans can find the optimal mechanism of transformation between any two struct
 * The principal strains and directions
 * The uniformly strained plane (Habit Plane)
 * The orientation relationship (constrained and unconstrained)
-* An animation of the transformation from different points of vue
+* An animation of the transformation from different points of view
 
 ### 2. Interfaces
-Given the interfacial planes, p2pint finds the optimal matching between two interface. It can provide the following information:
+Given the interfacial planes, p2pint finds the optimal matching between two interfaces. It can provide the following information:
 * The distance between the two structures (how well they match)
-* The cell of correspondance between the two structures (Interface Cell)
+* The cell of correspondence between the two structures (Interface Cell)
 * The amount of strain at the interface
 * A POSCAR file representing the interface for each termination
 
