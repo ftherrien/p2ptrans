@@ -238,8 +238,6 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, filename, outdir):
         origin[i] = np.zeros((3,1))
         
         foundcell[i][:2,:2], origin[i][:2,:] = find_cell(class_list[i,:], Bposst[i,:2,:])
-
-        
         
         if foundcell[i] is not None:
             print("Found cell!")
@@ -427,7 +425,7 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
         pos_in_struc[1] = Bposst[k,:,:] - origin[k].reshape((3,1)).dot(np.ones((1,np.shape(Bposst[k,:,:])[1])))
 
         dispStruc[k], vec_classes[k] = makeStructures(foundcell[k], atoms, atom_types,
-                                                  natB, pos_in_struc, class_list[k,:])
+                                                      natB, pos_in_struc, class_list[k,:])
 
         dispStruc[k] = reshift(dispStruc[k])
 

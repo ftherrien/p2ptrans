@@ -1410,19 +1410,30 @@ contains
          idx, idx_copy, idxx
 
     integer :: &
-         i,j,n,id
+         i,j,n,id, &
+         start, &
+         finish
 
     integer, parameter :: &
          peak_size = 10
 
     n=0
     do i = 1, n_array
-       if (all(array(max(1, i-peak_size):max(1,i-1)) >= array(i)) .and. &
-            all(array(min(i+1, n_array):min(i+peak_size, n_array)) >= array(i))) then
-          n=n+1
-          idx(n) = i
-          peaks(n) = array(i)
-       endif
+       start = 1 + modulo(i-peak_size-1, n_array)
+       finish = 1 + modulo(i+peak_size-1, n_array)
+       if (start > finish) then
+           if (all(array(start:n_array) >= array(i)) .and. all(array(1:finish) >= array(i))) then
+              n=n+1
+              idx(n) = i
+              peaks(n) = array(i)
+           endif
+        else
+           if (all(array(start:finish) >= array(i))) then
+              n=n+1
+              idx(n) = i
+              peaks(n) = array(i)
+           endif
+        endif
 
     enddo
 
@@ -1450,7 +1461,7 @@ contains
     enddo
 
     j = 0
-    do i=1,n-1
+    do i=1,n
        if (prom(i) > tol_prom) then
           j = j + 1
           peaks_out(j) = peaks(i)
@@ -2263,7 +2274,7 @@ contains
          tol_std
 
     double precision, dimension(n_iter) :: &
-         dists, meanrun,  &
+         dists, &
          peaks, prom, &
          thetas
 
@@ -2275,6 +2286,7 @@ contains
 
     double precision, dimension(n_iter,3) :: &
          vecs, &
+         vecs_ordered, &
          peak_vecs
 
     integer, dimension(n_iter) :: &
@@ -2295,22 +2307,26 @@ contains
          rBpos_opt
 
     integer :: &
-         i, k, &
+         i, j, k, &
+         j_in, &
+         id, &
+         n_bins, &
          n_frac, &
-         size_mean, &
-         vecrep
+         vecrep, &
+         n_empty
 
     double precision, parameter, dimension(3) :: &
          zeros = (/0.0d0, 0.0d0, 0.0d0/)
 
+    double precision, allocatable, dimension(:) :: &
+         bins
+    
     integer, allocatable, dimension(:) :: &
-         classes_list
+         classes_list, &
+         bin_index
 
     integer, intent(out), dimension(n_iter, size(Apos,2)) :: &
          classes_list_out
-
-    double precision :: &
-         max_vol
 
     logical :: &
          remap, &
@@ -2329,7 +2345,10 @@ contains
 
     double precision :: &
          param, &
-         zdist
+         zdist, &
+         max_vol, &
+         size_bin, &
+         min_prom
 
     namelist /input2d/ &
          fracA, fracB, &
@@ -2349,7 +2368,8 @@ contains
          findpeaks, &
          check, &
          vecrep, &
-         zdist
+         zdist, &
+         min_prom
 
     tol = 1.0d-6
     tol_std = tol*1.0d-3
@@ -2369,10 +2389,11 @@ contains
     usebest = .false.
     remap = .true.
     pot = "LJ"
-    param = 2.5
+    param = 2.5d0
     zdist = param
     check = .false.
     vecrep = 10
+    min_prom = 0.6d0
 
     progressfile = trim(outdir)//"/progress.txt"
     open(13, file = trim(progressfile), status='replace')
@@ -2458,33 +2479,61 @@ contains
        idx = sort(modulo(stats(:,1), 2.0d0*pi/dble(sym)))
 
        do i=1,n_iter
-          thetas(i) = stats(idx(i),1)
+          thetas(i) = modulo(stats(idx(i),1), 2.0d0*pi/dble(sym))
           dists(i) = stats(idx(i),3)
-          vecs(i,:) = vecs(idx(i),:)
+          vecs_ordered(i,:) = vecs(idx(i),:)
           tmats_ordered(i,:,:) = tmats(idx(i),:,:)
        enddo
 
+       vecs = vecs_ordered
        tmats = tmats_ordered
 
-       size_mean = int(1d-2*n_iter)
+       n_bins = int(n_iter/10.0d0) + 1
 
-       do i=1, n_iter-size_mean+1
-          meanrun(i) = sum(dists(i:i+size_mean-1))/dble(size_mean)
+       size_bin = 2.0d0*pi/dble(sym)/n_bins
+
+       allocate(bins(n_bins), bin_index(n_bins+1))
+
+       j=1
+       n_empty=0
+       bin_index(1) = 0
+       do i=1, n_bins
+          bins(i) = 0
+          j_in = j
+          do while (thetas(j) < i*size_bin .and. j < n_iter + 1)
+             bins(i) = bins(i) + dists(j)
+             j=j+1
+          enddo
+          bin_index(i+1) = j - 1
+          if (j == j_in) then
+             n_empty = n_empty + 1
+             idx(n_empty) = i
+          else
+             bins(i) = bins(i) / (j - j_in)
+          endif
        enddo
 
-       call find_peaks(meanrun, n_iter-size_mean+1, 0.6d0, n_peaks, peaks, idx, prom)
+       do k=1, n_empty
+          bins(idx(k)) = (bins(1+modulo(idx(k)-2, n_bins)) + bins(1 + modulo(idx(k), n_bins)))/2
+       enddo
+       
+       call find_peaks(bins, n_bins, min_prom, n_peaks, peaks, idx, prom)
+       
+       do i=1, n_peaks
 
-       do i=1,n_peaks
-
-          peak_tmats(i,:,:) = tmats((idx(i)+minloc(dists(idx(i):idx(i)+size_mean-1),1)-1),:,:)
-          peak_thetas(i) = thetas(idx(i)+minloc(dists(idx(i):idx(i)+size_mean-1),1)-1)
-          peak_vecs(i,:) = vecs(idx(i)+minloc(dists(idx(i):idx(i)+size_mean-1),1)-1,:)
+          id = bin_index(idx(i)) + minloc(dists(bin_index(idx(i))+1:bin_index(idx(i)+1)),1)
+          
+          peak_tmats(i,:,:) = tmats(id, :, :)
+          peak_thetas(i) = thetas(id)
+          peak_vecs(i,:) = vecs(id, :)
 
        enddo
 
        write(13,*) "Peak Angles:", 180 * modulo(peak_thetas(1:n_peaks), 2.0d0*pi/dble(sym)) / pi
        write(13,*) "Peak Distances:", peaks(1:n_peaks)
        write(13,*) "Peak Prominences:", prom(1:n_peaks)
+
+       deallocate(bins, bin_index)
 
     else
 
@@ -2494,16 +2543,18 @@ contains
       
     endif
 
+    classes_list_out = 0
     angles = 0.0d0
 
     do k=1,n_peaks
 
        if (findpeaks) then
           write(13,*) "New Peak #", k, "++++++++++++++++++++++++++++++++++++"
-          write(13,*) "Angle:", modulo(peak_thetas(k)*180/pi, 180.0/sym)
+          write(13,*) "Angle:", modulo(peak_thetas(k)*180/pi, 360.0/sym)
        endif
        
        tmat = peak_tmats(k,:,:)
+       vec = peak_vecs(k,:)
 
        write(13,*) "/======== Stretching Adjustment ========\\"
 
@@ -2551,7 +2602,6 @@ contains
        write(13,*) "Final rmat"
        write(13,"(3(F7.3,X))") rot_mat(angles)
 
-       classes_list_out = 0
        classes_list_out(k,1:n_out) = classes_list
 
        write(13,*) "Final tmat"

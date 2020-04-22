@@ -57,7 +57,7 @@ to get help:
 
 To run the *interface* finder:
 
-   p2pint -T POSCAR_TOP -B POSCAR_BOTTOM
+    p2pint -T POSCAR_TOP -B POSCAR_BOTTOM
 
 to get help:
     
