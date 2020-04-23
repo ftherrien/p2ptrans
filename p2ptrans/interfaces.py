@@ -51,7 +51,6 @@ def find_basis(diruvw, ccell = np.eye(3), tol=tol, maxi=10):
                     elif la.norm(np.cross(diruvw, pos)) < tol: #Is it parallel to uvw?
                         if la.norm(pos) < la.norm(vectors[0]) and pos.dot(vectors[0]) > 0: # Is it shorter?
                             vectors[0] = pos
-                            
     # Make an array
     inplane = np.array(inplane).T
 
@@ -61,6 +60,8 @@ def find_basis(diruvw, ccell = np.eye(3), tol=tol, maxi=10):
             vectors.append(inplane[:,i])
         if len(vectors) == 3:
             break
+    else:
+        raise RuntimeError("Could not form a basis with specified uvw with and a mximum of %d unit cells"%(maxi))
     
     cell3D = np.array(vectors[::-1]).T
     
@@ -78,10 +79,17 @@ def find_basis(diruvw, ccell = np.eye(3), tol=tol, maxi=10):
     
         cell3D[:,int(not idd)] = cell3D.dot(inplane_cell[:,np.argmin(abs(inplane_cell[int(not idd),:]))])
 
-    if la.det(cell3D) < 0:
-        cell3D[:,:2] = cell3D[:,1::-1] 
+    cell3D = gruber(cell3D)
 
-    cell3D = gruber(cell3D)    
+    for i in range(2):
+        if np.allclose(cell3D[:,i], vectors[0], atol=1e-12):
+            cell3D[:,i], cell3D[:,2] = -cell3D[:,2], cell3D[:,i]
+
+        if np.allclose(cell3D[:,i], -vectors[0], atol=1e-12):
+            cell3D[:,i], cell3D[:,2] = cell3D[:,2], -cell3D[:,i]
+            
+    if la.det(cell3D) < 0:
+        cell3D[:,0] = -cell3D[:,0]
     
     cell2D = np.array([[la.norm(cell3D[:,0]),0,0],
                        [cell3D[:,0].dot(cell3D[:,1])/la.norm(cell3D[:,0]),la.norm(np.cross(cell3D[:,0],cell3D[:,1]))/la.norm(cell3D[:,0]),0],
@@ -89,7 +97,7 @@ def find_basis(diruvw, ccell = np.eye(3), tol=tol, maxi=10):
     
     return cell2D, cell3D
 
-def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3):
+def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3, maxi=10):
     """Creates a structure for all possible combinations and renames the atoms according to the rule"""
 
     A = scale(A)
@@ -97,11 +105,11 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3):
     if ccell is None:
         ccell = A.cell
         
-    diruvw = la.inv(ccell).dot(planehkl) # Transforms hkl into uvw
+    diruvw = la.inv(ccell.T).dot(planehkl) # Transforms hkl into uvw
 
     diruvw = diruvw/la.norm(diruvw)
 
-    cell2D, cell3D = find_basis(diruvw, ccell = ccell, tol=tol) #Create a new cell with diruvw as z
+    cell2D, cell3D = find_basis(diruvw, ccell = ccell, tol=tol, maxi=maxi) #Create a new cell with diruvw as z
     
     A = supercell(A, cell3D) # Reorganize the atoms in the new cell
     
@@ -132,7 +140,7 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3):
         for a in A:
             pos = cell2D.dot(la.inv(cell3D)).dot(a.pos-A[ix[0]].pos)
             reconstructure[j].add_atom(*(pos), a.type)
-            
+        
         tmpstruc = supercell(tmpstruc,tmpstruc.cell) #Puts atoms inside the cell
         reconstructure[j] = supercell(reconstructure[j], reconstructure[j].cell)
         
@@ -200,7 +208,7 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, filename, outdir):
     
     assert all(mulA*atomsA == mulB*atomsB)
     atoms = mulA*atomsA
-        
+    
     Apos = np.asfortranarray(Apos)
     Bpos = np.asfortranarray(Bpos)
     t_time = time.time()
@@ -220,7 +228,7 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, filename, outdir):
     Bpos = Bpos[:n_peaks,:,:n_map]
     Bposst = Bposst[:n_peaks,:,:n_map]
     Apos_map = Apos_map[:n_peaks,:,:n_map]    
-
+    
     ttrans = ttrans[:n_peaks,:,:]
     rtrans = rtrans[:n_peaks,:,:]
     dmin = dmin[:n_peaks]
@@ -237,7 +245,8 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, filename, outdir):
         foundcell[i] = np.eye(3)
         origin[i] = np.zeros((3,1))
         
-        foundcell[i][:2,:2], origin[i][:2,:] = find_cell(class_list[i,:], Bposst[i,:2,:])
+        foundcell[i][:2,:2], origin[i][:2,:] = find_cell(class_list[i,:], Bposst[i,:2,:],
+                                                         minvol=abs(la.det(B.cell[:2,:2]))/len(B))
         
         if foundcell[i] is not None:
             print("Found cell!")

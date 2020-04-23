@@ -10,7 +10,7 @@ from .fmodules import tiling as t
 from .display import displayOptimalResult, makeGif, displayTransCell, make_anim, make_fig, printMatAndDir
 from .utils import lcm, find_uvw, normal, rotate, PCA, makeInitStruc
 
-def find_cell(class_list, positions, tol = 1e-5, frac_shell = 0.5, frac_correct = 0.95, max_count=1000):
+def find_cell(class_list, positions, tol = 1e-5, frac_shell = 0.5, frac_correct = 0.95, max_count=1000, minvol = 1e-5):
     
     cm = np.mean(positions, axis=1).reshape((np.shape(positions)[0],1)) # Centroid
 
@@ -18,6 +18,7 @@ def find_cell(class_list, positions, tol = 1e-5, frac_shell = 0.5, frac_correct 
         for i in np.unique(class_list):
             pos = positions[:, class_list == i] # All positions of type i
             center = np.argmin(la.norm(pos, axis = 0)) # Index of most centered atom
+            
             list_in = list(range(np.shape(pos)[1])) # List of indices of positions
             list_in.remove(center) # Remove the center atoms
             origin = pos[:,center:center+1] # Position of the most centered atom (the origin)
@@ -66,7 +67,7 @@ def find_cell(class_list, positions, tol = 1e-5, frac_shell = 0.5, frac_correct 
                             newcell=np.concatenate([pos[:,idx[j]:idx[j]+1], 
                                                     pos[:,idx[k]:idx[k]+1]],axis=1)
 
-                        if abs(la.det(newcell)) > tol: # Cell as non-zero volume
+                        if abs(la.det(newcell)) > minvol: # Cell as non-zero volume
                             count += 1
                             if count > max_count: # Stops if reached max tries
                                 break
@@ -423,7 +424,7 @@ def optimizationLoop(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir):
             print("Warning: The volume factor is wrong.")
             
         print("Looking for periodic cell...")        
-        foundcell, origin = find_cell(class_list, Bposst)
+        foundcell, origin = find_cell(class_list, Bposst, minvol=abs(la.det(Bcell))/len(B))
         
         if foundcell is not None:
             print("Found cell!")

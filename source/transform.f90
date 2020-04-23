@@ -33,7 +33,7 @@ module transform
   double precision,  parameter :: &
        pi = 3.141592653589793d0  
 
-  logical, parameter ::  rotmin = .true.
+  logical, parameter ::  rotmin = .false.
 
 contains
   
@@ -434,7 +434,7 @@ contains
 
     enddo
 
-    ! print*, "Fini", j, dist
+    ! print*, "Fini", j, dist_prev - dist, dist
 
   end subroutine analytical_gd_rot
 
@@ -540,6 +540,93 @@ contains
     ! print*, "free", j, dist  
 
   end subroutine analytical_gd_free
+  
+  subroutine analytical_gd_vec(tmat, vec, Apos, Bpos, n_iter, rate2, tol, pot, param)
+
+    ! Gradient descent with respect to the vector only (3x3 matrix)
+    ! ADJUST has been implemented
+
+    integer, intent(in) :: &
+         n_iter ! Number of atoms
+
+    double precision, intent(in) :: &
+         rate2, & ! Rate for disp
+         tol
+
+    double precision, intent(in), dimension(:,:) :: &
+         Apos, &
+         Bpos ! Bpos ordered according to the mapping
+
+    double precision, dimension(3,size(Bpos,2)) :: &
+         E ! position matrix
+
+    double precision, intent(inout), dimension(3,3) :: &         
+         tmat     ! Transformation matrix
+
+    double precision, intent(inout), dimension(3,1) :: &         
+         vec     ! Translation vector
+
+    double precision, dimension(3,1) :: &         
+         vec_prev     ! Translation vector
+
+    double precision, dimension(size(Bpos,2),1) :: &
+         ones
+
+    character*(*), intent(in) :: &
+         pot
+
+    double precision, intent(in) :: &
+         param
+
+    double precision :: &
+         dist, &
+         dist_prev, &
+         dist_init, &
+         nat
+
+    integer :: &
+         j ! Iterator
+
+    nat = dble(size(Apos,2))
+
+    ones = 1.0d0
+
+    dist = 0.0d0
+    dist_prev = tol+1
+    vec_prev = vec
+
+    j=0
+    do while (j < n_iter .and. abs(dist - dist_prev) > tol)
+       j=j+1
+       
+       dist_prev = dist
+       dist = distance(Apos, Bpos, tmat, vec, pot, param)
+
+       if (j==1) then
+          dist_prev = dist + tol + 1.0d0
+          dist_init = dist
+       endif
+
+       ! print*, dist, dist_prev - dist, "FREE", j
+
+       E = derivative(Apos, Bpos, tmat, vec, pot, param)
+
+       if(dist > dist_prev .or. abs(dist_init) < 1.0d-8) then
+          dist_init = 10 * dist_init
+          vec = vec_prev
+       else
+
+          vec_prev = vec
+
+          vec = vec   + rate2 * dist / dist_init * matmul(E,ones)
+          
+       endif
+
+    enddo
+
+    ! print*, "free", j, dist  
+
+  end subroutine analytical_gd_vec
 
   subroutine analytical_gd_std(twodim, std, tmat, vec, Apos, Bpos, n_classes, classes, n_iter, rate1, rate2, tol)
 
@@ -2581,6 +2668,10 @@ contains
             tol, tol_class, tol_std, &
             trim(pot), param)
 
+       ! Reshift after classification
+       call analytical_gd_vec(tmat, vec, Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
+            tol, pot, param)
+
        vec_rot = vec
        
        call analytical_gd_rot(.true., angles, vec_rot, Apos_mapped, Bpos_opt, &
@@ -2600,17 +2691,12 @@ contains
        rtrans(k,:,4) = vec_rot
 
        write(13,*) "Final rmat"
-       write(13,"(3(F7.3,X))") rot_mat(angles)
+       write(13,"(3(F10.6,X))") rot_mat(angles)
 
        classes_list_out(k,1:n_out) = classes_list
 
        write(13,*) "Final tmat"
-       write(13,"(3(F7.3,X))") tmat
-       
-       ! Reshift after classification
-       ! center_vec = sum(free_trans(Bpos_opt,tmat,vec) - Apos_mapped,2) / n_out
-
-       ! vec(1:2) = vec(1:2) - center_vec(1:2)
+       write(13,"(3(F10.6,X))") tmat
        
        Bpos_opt_stretch = free_trans(Bpos_opt, tmat, vec)
 
