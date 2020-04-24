@@ -18,6 +18,7 @@ colorlist=['#929591', 'r', 'k','b','#06470c','#ceb301', '#9e0168', '#26f7fd', '#
 reccolor=['blue','green','red']
 
 # Default extra parameters +++++++
+primtol = 1e-3
 tol = 1e-5
 tol_vol = 2*1e-3
 tol_uvw = 1e-6

@@ -440,7 +440,7 @@ def findMatching(A, B, ncell,
                  interactive=False, savedisplay=False,
                  outdir='output',
                  switch= False, prim=True,
-                 vol=False, minimize=True, test= False):
+                 vol=False, minimize=True, test= False, primtol=primtol):
     """ 
     This function finds the best matching between two given structures and returns the transformation matrix
     and the transformation cell.
@@ -491,8 +491,8 @@ def findMatching(A, B, ncell,
         lenA = len(A)
         lenB = len(B)
         print("Making the cells primitive.")
-        A = primitive(A, tol)
-        B = primitive(B, tol)
+        A = primitive(A, primtol)
+        B = primitive(B, primtol)
         if len(A) == lenA:
             print("%s (%s) did not change. It has %d atoms."%(A.name, fileA, len(A)))
         else:
