@@ -95,9 +95,11 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
 
     diruvw = diruvw/la.norm(diruvw)
 
-    A = primitive(A, primtol) # Find the primitive cell
+    if not bottom_only:
+        A = primitive(A, primtol) # Find the primitive cell
     
     cell2D, cell3D = find_basis(diruvw, A.cell, tol=tol, maxi=maxi) #Create a new cell with diruvw as z
+
     
     A = supercell(A, cell3D) # Reorganize the atoms in the new cell 
     
@@ -105,7 +107,9 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
     
     inplane = []
     # Creates a list of list of indices where each list of indices correspond to a possible termination considering the rule
+    c = 0
     while len(idx)>0:
+        c=c+1
         if A[idx[0]].type in ruleset:
             inplane.append([idx[0]])
             for i in idx[1:]:
@@ -131,7 +135,7 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
         for i in ix[1:]:
             pos = cell2D.dot(la.inv(cell3D)).dot(A[i].pos-A[ix[0]].pos)
             tmpstruc.add_atom(*(into_cell(pos,tmpstruc.cell)),find_type(A[i], rule))
-        for a in A:
+        for k,a in enumerate(A):
             pos = cell2D.dot(la.inv(cell3D)).dot(a.pos-A[ix[0]].pos)
             reconstructure[j].add_atom(*(into_cell(pos,reconstructure[j].cell)), a.type)
                 
@@ -226,14 +230,16 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, filename, outdir):
         
         print("Looking for periodic cell for peak %d..."%(i))        
 
-        foundcell[i] = np.eye(3)
         origin[i] = np.zeros((3,1))
         
-        foundcell[i][:2,:2], origin[i][:2,:] = find_cell(class_list[i,:], Bposst[i,:2,:],
+        foundcell[i], origin[i][:2,:] = find_cell(class_list[i,:], Bposst[i,:2,:],
                                                          minvol=abs(la.det(B.cell[:2,:2]))/len(B))
         
         if foundcell[i] is not None:
             print("Found cell!")
+            tmpcell = np.eye(3)
+            tmpcell[:2,:2] = foundcell[i]
+            foundcell[i] = deepcopy(tmpcell) 
         else:
             print("Could not find periodic cell")
 
@@ -407,7 +413,7 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
             displayOptimalResult(Apos, Bpos[k,:,:], Bposst[k,:,:], bonds_total, bonds, class_list[k,:],
                                  vec_classes_estimate, nat, natA, natB, atoms, outcur, savedisplay, interactive)
             print()
-                         
+            
         # End loop if a periodic cell couldn't be found earlier
         if foundcell[k] is None:
             print("Could not find good displacement cell. Increase system size")

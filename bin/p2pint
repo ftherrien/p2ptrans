@@ -170,7 +170,10 @@ def main():
                         continue
                     
                     for k in range(len(dispStruc)):
-                    
+
+                        if dispStruc[k] is None:
+                            continue
+                        
                         peak_outdir = term_outdir + "/peak_%03d"%k
                         os.makedirs(peak_outdir, exist_ok=True)
                         
@@ -186,10 +189,14 @@ def main():
                                              dispStruc[k], outdir=var_outdir,
                                              layers=layers, vacuum=vacuum, tol=tol)
 
-    with open(outdir + "/out.txt", "w") as f:
-        for i in np.argsort(dists):
-            print("%07.4f in %s"%(dists[i], filedists[i]), file=f)
-    
+    if not test:
+        with open(outdir + "/out.txt", "w") as f:
+            for i in np.argsort(dists):
+                print("%07.4f in %s"%(dists[i], filedists[i]), file=f)
+    else:
+        print("Test run completed, rerun with: p2pint -u %s -m"%outdir)
+        print()
+                
     print("p2pint finished successfully")
 
 

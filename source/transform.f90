@@ -1417,12 +1417,14 @@ contains
                      100000, 1.0d0, 1.0d0, tol, "Euclidean", 0.0d0)
              endif
 
+             vec_rot_local = vec_local
+             
              dist_cur = distance(Apos_mapped, Bpos_opt, tmat_local, vec_local, pot, param)
              dist_cur_rot = distance(Apos_mapped, Bpos_opt, rot_mat(angles_local), vec_rot_local, pot, param)
              
-             write(13,"(A, I4, A, I6, A, I6, A, F8.3, F8.3)") &
+             write(13,"(A, I4, A, I6, A, I6, A, F8.3, A, F8.3)") &
                   "Opt dist found for thread", thread,", iteration", j,".",vl,":", &
-                  dist_cur, dist_cur_rot
+                  dist_cur, " ", dist_cur_rot
              flush(13)
 
              if (twodim) then
@@ -1680,18 +1682,19 @@ contains
 
        enddo
 
-       vec_rot = vec
+       vec_rot = 0.0d0
 
        ! This step is just to get the "unstretched distance"
        if (rotmin) then
-          call analytical_gd_rot(twodim, angles, vec_rot, Apos_mapped, Bpos_opt, &
-               n_ana*1000, rate1, rate2, tol, pot, param)
-       else
           call analytical_gd_rot(twodim, angles, vec_rot, tmat, eye(), &
                100000, 1.0d0, 1.0d0, &
                tol, "Euclidean", 0.0d0)
        endif
 
+       vec_rot = vec
+       
+       call analytical_gd_rot(twodim, angles, vec_rot, Apos_mapped, Bpos_opt, &
+               n_ana*1000, rate1, rate2, tol, pot, param)
 
        write(13,*) "-->", i
 
