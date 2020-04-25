@@ -2,26 +2,38 @@
 
 import argparse
 import os
-from glob import iglob
 
 from p2ptrans.interfaces import *
 
 def readRule(l):
     rule = dict()
+    key = None
+    fileA = []
     for symbol in l:
         if symbol.isdigit():
             key = symbol
-        elif key in rule:
-            rule[key].add(symbol)
+        elif key is not None:
+            if key in rule:
+                rule[key].add(symbol)
+            else:
+                rule[key] = {symbol}
         else:
-            rule[key] = {symbol}
-    return rule
+            fileA.append(symbol)
+    try:
+        planeA = eval(fileA.pop())
+    except SyntaxError:
+        planeA = None
+        
+    if type(planeA) is not list or len(fileA) == 0 or len(rule) == 0:
+        raise ValueError("-B and -T should be of the form: FILE_1 FILE_2 ... [h,k,l] 1 ELEMENT_1 ELEMENT_2 ... 2 ELEMENT_3 ELEMENT_4 ... 3 ...")
+
+    return fileA, planeA, rule
 
 def readOptions():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-B","--bottom", nargs='+', dest="A", default=['./POSCAR_A','[0,0,1]','1','Si'], help="Structure at the bottom, miller indices and chemistry rule. Ex: POSCAR_A [0,0,1] 1 Si")
-    parser.add_argument("-T","--top", nargs='+', dest="B", default=['./POSCAR_B','[1,1,0]','1','Si'], help="Structure at the top, miller indices and chemistry rule. Ex: POSCAR_B [1,1,0] 1 Si")
+    parser.add_argument("-B","--bottom", nargs='+', type=str, dest="A", default=['./POSCAR_A','[0,0,1]','1','Si'], help="Structure at the bottom, miller indices and chemistry rule. Ex: POSCAR_A [0,0,1] 1 Si")
+    parser.add_argument("-T","--top", nargs='+', type=str, dest="B", default=['./POSCAR_B','[1,1,0]','1','Si'], help="Structure at the top, miller indices and chemistry rule. Ex: POSCAR_B [1,1,0] 1 Si")
     parser.add_argument("-n","--ncell",dest="ncell",type=int, default=100, help="Number of cells to tile")
     parser.add_argument("-N","--niter",dest="n_iter",type=int, default=1000, help="Number of random starts")
     parser.add_argument("-i","--interactive",dest="interactive",action="store_true", default=False, help="Enables interactive display")
@@ -31,22 +43,14 @@ def readOptions():
     parser.add_argument("-u","--use",dest="use", type=str, default=None, help="Use previously calculated data")
     parser.add_argument("-m","--minimize",dest="minimize",action="store_true", default=False, help="Rerun minimization using the parameters stored in the folder provided with the -u option")
     parser.add_argument("-t","--test",dest="test",action="store_true", default=False, help="Tests the input file and prepares the run, you can continue this run with the -u [directory] -r option")
+    parser.add_argument("-b","--bottom-only",dest="bottom_only",action="store_true", default=False, help="Only uses the first termination from the bottom")
     parser.add_argument("-s","--sym",dest="sym",type=int, default=1, help="Max rotational symmetry of the two phases")
     parser.add_argument("-l","--layers", dest="layers", type=int, default=1, help="Number of layers in the interface structure")
     parser.add_argument("-v","--vacuum", dest="vacuum", type=float, default=10, help="Thickness of vaccum")
 
     options = parser.parse_args()
-
-    fileA = options.A[0]
-    planeA = eval(options.A[1])
-    if not len(options.A) >= 4:
-        raise ValueError("-B should have at least 4 arguments")  
-    ruleA = readRule(options.A[2:])
-    if not len(options.B) >= 4:
-        raise ValueError("-T should have at least 4 arguments")
-    ruleB = readRule(options.B[2:])
-    fileB = options.B[0]
-    planeB = eval(options.B[1])
+    fileA, planeA, ruleA = readRule(options.A)
+    fileB, planeB, ruleB = readRule(options.B)
     ncell = options.ncell
     filename = options.filename
     savedisplay = options.savedisplay
@@ -64,12 +68,13 @@ def readOptions():
     sym = options.sym
     vacuum = options.vacuum
     layers = options.layers
+    bottom_only = options.bottom_only
             
-    return fileA, fileB, planeA, planeB, ruleA, ruleB, ncell, n_iter, filename, interactive, savedisplay, outdir, use, minimize, test, n_iter, sym, vacuum, layers
+    return fileA, fileB, planeA, planeB, ruleA, ruleB, ncell, n_iter, filename, interactive, savedisplay, outdir, use, minimize, test, n_iter, sym, vacuum, layers, bottom_only
 
 def main():
 
-    (fileA, fileB, planeA, planeB, ruleA, ruleB, ncell, n_iter, filename, interactive, savedisplay, outdir, use, minimize, test, n_iter, sym, vacuum, layers) = readOptions()
+    (fileA, fileB, planeA, planeB, ruleA, ruleB, ncell, n_iter, filename, interactive, savedisplay, outdir, use, minimize, test, n_iter, sym, vacuum, layers, bottom_only) = readOptions()
     
     # START
     print(" ________    _______  ________   ")   
@@ -85,9 +90,6 @@ def main():
 
     # If reusing a result load the info
     if use:
-
-        fileA = "File 1"
-        fileB = "File 2"
         
         listA, planeA, listB, planeB, ncell, n_iter, filecontent, ruleA, ruleB  = pickle.load(open(outdir+"/param.dat","rb"))
 
@@ -120,16 +122,18 @@ def main():
 
         listA = []
         print("Bottom structure file(s):")
-        for poscarfile in iglob(fileA):
+        for poscarfile in fileA:
             print(poscarfile)
-            listA.append((poscarfile, readSurface(read.poscar(poscarfile), planeA, ruleA)))
+            listA.append((poscarfile, readSurface(read.poscar(poscarfile), planeA,
+                                                  ruleA, bottom_only=bottom_only)))
         print("Number of A structures:", len(listA))
         
         listB = []
         print("Top structure file(s):")
-        for poscarfile in iglob(fileB):
+        for poscarfile in fileB:
             print(poscarfile)
-            listB.append((poscarfile, readSurface(read.poscar(poscarfile), planeB, ruleB)))
+            listB.append((poscarfile, readSurface(read.poscar(poscarfile), planeB,
+                                                  ruleB, bottom_only=bottom_only)))
         print("Number of B structures:", len(listB))
             
         try:

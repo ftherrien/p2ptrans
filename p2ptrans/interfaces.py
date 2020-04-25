@@ -10,31 +10,14 @@ from .display import displayStats, displayOptimalResult, displayTransCell, print
 from .core import makeSphere, find_cell, makeStructures, switchDispStruc 
 from .utils import scale, is_same_struc, lcm, lccell, superize
 
-def find_layer(strucList, rule):
-    """This function replaces the names of the atoms according to the rule in a list of 
-    structures.
-    """
-    A = []
-    ruleset = set.union(*list(rule.values())) # Puts all possible values in one set
-    idx = []
-    for i,struc in enumerate(strucList):
-        struc = scale(struc)
-        types = set([a.type for a in struc]) # Create a set of types
-        if not ruleset.isdisjoint(types): # If ruleset is contained in types
-            tmpStruc = Structure(struc.cell)
-            tmpStruc.name = struc.name
-            for a in struc:
-                if a.type in ruleset:
-                    for key, val in rule.items():
-                        if a.type in val:
-                            newtype = key
-                            break
-                    tmpStruc.add_atom(*a.pos, newtype) # Changes the types according to the rule 
-            A.append(tmpStruc)
-            idx.append(i)
-    return A, idx
+def find_type(a, rule):
+    for key, val in rule.items():
+        if a.type in val:
+            newtype = key
+            break
+    return newtype
         
-def find_basis(diruvw, ccell = np.eye(3), tol=tol, maxi=10):
+def find_basis(diruvw, ccell, tol=tol, maxi=10):
     """ Finds a new cell for the structure where the specified plane is in the z direction """
 
     vectors = [diruvw*1000]
@@ -80,13 +63,13 @@ def find_basis(diruvw, ccell = np.eye(3), tol=tol, maxi=10):
         cell3D[:,int(not idd)] = cell3D.dot(inplane_cell[:,np.argmin(abs(inplane_cell[int(not idd),:]))])
 
     cell3D = gruber(cell3D)
-
+    
     for i in range(2):
         if np.allclose(cell3D[:,i], vectors[0], atol=1e-12):
-            cell3D[:,i], cell3D[:,2] = -cell3D[:,2], cell3D[:,i]
+            cell3D[:,i], cell3D[:,2] = -cell3D[:,2], deepcopy(cell3D[:,i])
 
         if np.allclose(cell3D[:,i], -vectors[0], atol=1e-12):
-            cell3D[:,i], cell3D[:,2] = cell3D[:,2], -cell3D[:,i]
+            cell3D[:,i], cell3D[:,2] = deepcopy(cell3D[:,2]), -cell3D[:,i]
             
     if la.det(cell3D) < 0:
         cell3D[:,0] = -cell3D[:,0]
@@ -97,9 +80,12 @@ def find_basis(diruvw, ccell = np.eye(3), tol=tol, maxi=10):
     
     return cell2D, cell3D
 
-def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3, maxi=10):
+def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
+                maxi=10, bottom_only=False):
     """Creates a structure for all possible combinations and renames the atoms according to the rule"""
 
+    ruleset = set.union(*list(rule.values())) # Set of atoms named in the rule
+    
     A = scale(A)
     
     if ccell is None:
@@ -109,21 +95,29 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3, maxi=10):
 
     diruvw = diruvw/la.norm(diruvw)
 
-    cell2D, cell3D = find_basis(diruvw, ccell = ccell, tol=tol, maxi=maxi) #Create a new cell with diruvw as z
+    A = primitive(A, primtol) # Find the primitive cell
     
-    A = supercell(A, cell3D) # Reorganize the atoms in the new cell
+    cell2D, cell3D = find_basis(diruvw, A.cell, tol=tol, maxi=maxi) #Create a new cell with diruvw as z
+    
+    A = supercell(A, cell3D) # Reorganize the atoms in the new cell 
     
     idx = list(range(len(A)))
     
     inplane = []
-    # Creates a list of list of indices where each list of indices correspond to a possible termination
+    # Creates a list of list of indices where each list of indices correspond to a possible termination considering the rule
     while len(idx)>0:
-        inplane.append([idx[0]])
-        for i in idx[1:]:
-            if abs(diruvw.dot(A[idx[0]].pos) - diruvw.dot(A[i].pos)) < tol:
-                inplane[-1].append(i)
-                idx.remove(i)
+        if A[idx[0]].type in ruleset:
+            inplane.append([idx[0]])
+            for i in idx[1:]:
+                if abs(diruvw.dot(A[idx[0]].pos) - diruvw.dot(A[i].pos)) < tol:
+                    if A[i].type in ruleset:
+                        inplane[-1].append(i)
+                    idx.remove(i)
         idx = idx[1:]
+
+    if len(inplane) > 1 and bottom_only:
+        z = np.array([cell2D.dot(la.inv(cell3D)).dot(A[term[0]].pos)[2] for term in inplane])
+        inplane = [inplane[np.argmin(z)]]
         
     strucs = []
     recMap = []
@@ -133,28 +127,23 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3, maxi=10):
 
         tmpstruc = Structure(cell2D)
         reconstructure[j] = deepcopy(tmpstruc)
-        tmpstruc.add_atom(0,0,0,A[ix[0]].type)
+        tmpstruc.add_atom(0,0,0,find_type(A[ix[0]], rule))
         for i in ix[1:]:
             pos = cell2D.dot(la.inv(cell3D)).dot(A[i].pos-A[ix[0]].pos)
-            tmpstruc.add_atom(*(pos),A[i].type)
+            tmpstruc.add_atom(*(into_cell(pos,tmpstruc.cell)),find_type(A[i], rule))
         for a in A:
             pos = cell2D.dot(la.inv(cell3D)).dot(a.pos-A[ix[0]].pos)
-            reconstructure[j].add_atom(*(pos), a.type)
-        
-        tmpstruc = supercell(tmpstruc,tmpstruc.cell) #Puts atoms inside the cell
-        reconstructure[j] = supercell(reconstructure[j], reconstructure[j].cell)
-        
+            reconstructure[j].add_atom(*(into_cell(pos,reconstructure[j].cell)), a.type)
+                
         # Removes structures that are trivially the same
         for i, s in enumerate(strucs):
             for a in s:
                 tmps = deepcopy(s)
                 for b in tmps:
-                    b.pos = b.pos - a.pos
-                tmps = supercell(tmps,tmps.cell)
+                    b.pos = into_cell(b.pos - a.pos, tmps.cell)
                 if is_same_struc(tmpstruc, tmps, tol=tol):
                     for b in reconstructure[j]:
-                        b.pos = b.pos + a.pos
-                    reconstructure[j] = supercell(reconstructure[j], reconstructure[j].cell)
+                        b.pos = into_cell(b.pos + a.pos,reconstructure[j].cell)
                     for rec in recMap[i]:
                         if is_same_struc(rec, reconstructure[j], tol=tol):
                             break
@@ -169,18 +158,13 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3, maxi=10):
             strucs.append(tmpstruc)
 
             recMap.append([reconstructure[j]])
+
             
     for i in range(len(strucs)):
         strucs[i] = primitive(strucs[i], primtol)
         strucs[i] = reshift(strucs[i])
-        for j in range(len(recMap[i])):
-            recMap[i][j] = reshift(primitive(recMap[i][j], primtol))
-
-    layers, idx = find_layer(strucs, rule)
-
-    recMap = [recMap[i] for i in idx]
-        
-    return list(zip(layers, recMap))    
+                    
+    return list(zip(strucs, recMap))    
 
 def reshift(struc):
     """Reshift the z axis to the last position in the matrix and makes it positive"""

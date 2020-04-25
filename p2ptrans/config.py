@@ -1,4 +1,4 @@
-from pylada.crystal import Structure, primitive, gruber, read, write, supercell, space_group
+from pylada.crystal import Structure, primitive, gruber, read, write, supercell, space_group, into_cell
 import numpy as np
 import numpy.linalg as la
 import pickle
