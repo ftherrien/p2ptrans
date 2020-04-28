@@ -43,7 +43,7 @@ def readOptions():
     parser.add_argument("-u","--use",dest="use", type=str, default=None, help="Use previously calculated data")
     parser.add_argument("-m","--minimize",dest="minimize",action="store_true", default=False, help="Rerun minimization using the parameters stored in the folder provided with the -u option")
     parser.add_argument("-t","--test",dest="test",action="store_true", default=False, help="Tests the input file and prepares the run, you can continue this run with the -u [directory] -r option")
-    parser.add_argument("-b","--bottom-only",dest="bottom_only",action="store_true", default=False, help="Only uses the first termination from the bottom")
+    parser.add_argument("-b","--surface-only",dest="surface",action="store_true", default=False, help="Only uses the first termination from the bottom")
     parser.add_argument("-s","--sym",dest="sym",type=int, default=1, help="Max rotational symmetry of the two phases")
     parser.add_argument("-l","--layers", dest="layers", type=int, default=1, help="Number of layers in the interface structure")
     parser.add_argument("-v","--vacuum", dest="vacuum", type=float, default=10, help="Thickness of vaccum")
@@ -68,13 +68,13 @@ def readOptions():
     sym = options.sym
     vacuum = options.vacuum
     layers = options.layers
-    bottom_only = options.bottom_only
+    surface = options.surface
             
-    return fileA, fileB, planeA, planeB, ruleA, ruleB, ncell, n_iter, filename, interactive, savedisplay, outdir, use, minimize, test, n_iter, sym, vacuum, layers, bottom_only
+    return fileA, fileB, planeA, planeB, ruleA, ruleB, ncell, n_iter, filename, interactive, savedisplay, outdir, use, minimize, test, n_iter, sym, vacuum, layers, surface
 
 def main():
 
-    (fileA, fileB, planeA, planeB, ruleA, ruleB, ncell, n_iter, filename, interactive, savedisplay, outdir, use, minimize, test, n_iter, sym, vacuum, layers, bottom_only) = readOptions()
+    (fileA, fileB, planeA, planeB, ruleA, ruleB, ncell, n_iter, filename, interactive, savedisplay, outdir, use, minimize, test, n_iter, sym, vacuum, layers, surface) = readOptions()
     
     # START
     print(" ________    _______  ________   ")   
@@ -118,14 +118,19 @@ def main():
         
         # Set up the output directory
         if not os.path.exists(outdir):
-            os.makedirs(outdir)                
+            os.makedirs(outdir)
+
+        if surface:
+            top, bottom = "top", "bottom"
+        else:
+            top, bottom = None, None
 
         listA = []
         print("Bottom structure file(s):")
         for poscarfile in fileA:
             print(poscarfile)
             listA.append((poscarfile, readSurface(read.poscar(poscarfile), planeA,
-                                                  ruleA, bottom_only=bottom_only)))
+                                                  ruleA, surface=top)))
         print("Number of A structures:", len(listA))
         
         listB = []
@@ -133,7 +138,7 @@ def main():
         for poscarfile in fileB:
             print(poscarfile)
             listB.append((poscarfile, readSurface(read.poscar(poscarfile), planeB,
-                                                  ruleB, bottom_only=bottom_only)))
+                                                  ruleB, surface=bottom)))
         print("Number of B structures:", len(listB))
             
         try:
@@ -192,7 +197,7 @@ def main():
     if not test:
         with open(outdir + "/out.txt", "w") as f:
             for i in np.argsort(dists):
-                print("%07.4f in %s"%(dists[i], filedists[i]), file=f)
+                print("%14.10e in %s"%(dists[i], filedists[i]), file=f)
     else:
         print("Test run completed, rerun with: p2pint -u %s -m"%outdir)
         print()

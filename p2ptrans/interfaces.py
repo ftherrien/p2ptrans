@@ -81,7 +81,7 @@ def find_basis(diruvw, ccell, tol=tol, maxi=10):
     return cell2D, cell3D
 
 def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
-                maxi=10, bottom_only=False):
+                maxi=10, surface=None):
     """Creates a structure for all possible combinations and renames the atoms according to the rule"""
 
     ruleset = set.union(*list(rule.values())) # Set of atoms named in the rule
@@ -95,7 +95,7 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
 
     diruvw = diruvw/la.norm(diruvw)
 
-    if not bottom_only:
+    if surface is None:
         A = primitive(A, primtol) # Find the primitive cell
     
     cell2D, cell3D = find_basis(diruvw, A.cell, tol=tol, maxi=maxi) #Create a new cell with diruvw as z
@@ -119,9 +119,13 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
                     idx.remove(i)
         idx = idx[1:]
 
-    if len(inplane) > 1 and bottom_only:
+    if len(inplane) > 1 and surface is not None:
         z = np.array([cell2D.dot(la.inv(cell3D)).dot(A[term[0]].pos)[2] for term in inplane])
-        inplane = [inplane[np.argmin(z)]]
+        if surface is "bottom":
+            inplane = [inplane[np.argmin(z)]]
+        elif surface is "top":
+            inplane = [inplane[np.argmax(z)]]
+        
         
     strucs = []
     recMap = []
@@ -137,7 +141,10 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
             tmpstruc.add_atom(*(into_cell(pos,tmpstruc.cell)),find_type(A[i], rule))
         for k,a in enumerate(A):
             pos = cell2D.dot(la.inv(cell3D)).dot(a.pos-A[ix[0]].pos)
-            reconstructure[j].add_atom(*(into_cell(pos,reconstructure[j].cell)), a.type)
+            if (surface is None or
+                ((surface is "top" and pos[2] < 0 + tol) or
+                (surface is "bottom" and pos[2] > 0 - tol))):
+                reconstructure[j].add_atom(*(into_cell(pos,reconstructure[j].cell)), a.type)
                 
         # Removes structures that are trivially the same
         for i, s in enumerate(strucs):
@@ -305,13 +312,13 @@ def createPoscar(A, B, reconA, reconB, ttrans, dispStruc, outdir=".", layers=1, 
     reconB = supercell(reconB, reconB.cell.dot(np.array([[1,0,0],[0,1,0],[0,0,lay]])) )
 
     interface = Structure(newA)
-    interface.cell[2,2] = reconB.cell[2,2] - reconA.cell[2,2] + ttrans[2,3] + vac
+    interface.cell[2,2] = reconB.cell[2,2] - reconA.cell[2,2] + ttrans[2,3] + vacuum
     for b in reconB:
-        pos = b.pos + np.array([0,0,1])*(ttrans[2,3] + vac/2) - reconA.cell[2,2]
+        pos = b.pos + np.array([0,0,1])*(ttrans[2,3] + vacuum/2) - reconA.cell[2,2]
         interface.add_atom(*pos, b.type)
 
     for a in reconA:
-        pos = a.pos + np.array([0,0,1])*(vac/2) - reconA.cell[2,2]
+        pos = a.pos + np.array([0,0,1])*(vacuum/2) - reconA.cell[2,2]
         interface.add_atom(*pos, a.type)
 
     write.poscar(interface, vasp5=True, file=outdir + "/POSCAR_interface")
@@ -381,13 +388,22 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
 
         if savedisplay:
             os.makedirs(outcur, exist_ok=True)
-        
+
+        # Distance per area
+        if switched:
+            Area = n_map*la.det(B.cell[:2,:2])/len(B)
+        else:
+            Area = n_map*la.det(B.cell[:2,:2])*la.det(ttrans[k, :2, :2])/len(B)
+
+        dmin_abs = dmin[k]
+        dmin[k] = dmin[k] / Area
+            
         print()
         print("-------OPTIMIZATION RESULTS FOR PEAK %d--------"%k)
         print()
         print("Number of classes:", len(np.unique(class_list[k,:])))
         print("Number of mapped atoms:", n_map)
-        print("Total distance between structures:", dmin[k])
+        print("Total distance between structures:", dmin[k], "(", dmin_abs, ")")
         print("Optimal angle between structures:", np.mod(peak_thetas[k]*180/np.pi,360/sym))
         print("Volume stretching factor (det(T)):", la.det(ttrans[k,:2,:2]))
         print("Cell volume ratio (initial cell volume)/(final cell volume):", mulA * la.det(Acell)/(mulB * la.det(Bcell)))
@@ -460,5 +476,5 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
         if switched:
             dispStruc[k], ttrans[k,:,:3], vec_classes[k] = switchDispStruc(dispStruc[k], ttrans[k,:,:3], vec_classes[k])
             ttrans[k,:2,3] = -ttrans[k,:2,:2].dot(ttrans[k,:2,3])
-
+                
     return ttrans, dispStruc, vec_classes, dmin.min()
