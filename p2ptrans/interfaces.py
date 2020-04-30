@@ -34,6 +34,10 @@ def find_basis(diruvw, ccell, tol=tol, maxi=10):
                     elif la.norm(np.cross(diruvw, pos)) < tol: #Is it parallel to uvw?
                         if la.norm(pos) < la.norm(vectors[0]) and pos.dot(vectors[0]) > 0: # Is it shorter?
                             vectors[0] = pos
+
+    if np.allclose(vectors[0], diruvw*1000, 1e-12):
+        raise RuntimeError("Could not find lattice point in the specified direction:", diruvw)
+    
     # Make an array
     inplane = np.array(inplane).T
 
@@ -44,9 +48,10 @@ def find_basis(diruvw, ccell, tol=tol, maxi=10):
         if len(vectors) == 3:
             break
     else:
-        raise RuntimeError("Could not form a basis with specified uvw with and a mximum of %d unit cells"%(maxi))
+        raise RuntimeError("Could not form a basis with specified uvw with and a maximum of %d unit cells"%(maxi))
     
     cell3D = np.array(vectors[::-1]).T
+
     
     # Expressed in terms of the cell
     inplane_cell = la.inv(cell3D).dot(inplane)
@@ -61,7 +66,7 @@ def find_basis(diruvw, ccell, tol=tol, maxi=10):
         idd = np.argmin(la.norm(cell3D[:,:2], axis=0))
     
         cell3D[:,int(not idd)] = cell3D.dot(inplane_cell[:,np.argmin(abs(inplane_cell[int(not idd),:]))])
-
+        
     cell3D = gruber(cell3D)
     
     for i in range(2):
@@ -73,7 +78,7 @@ def find_basis(diruvw, ccell, tol=tol, maxi=10):
             
     if la.det(cell3D) < 0:
         cell3D[:,0] = -cell3D[:,0]
-    
+        
     cell2D = np.array([[la.norm(cell3D[:,0]),0,0],
                        [cell3D[:,0].dot(cell3D[:,1])/la.norm(cell3D[:,0]),la.norm(np.cross(cell3D[:,0],cell3D[:,1]))/la.norm(cell3D[:,0]),0],
                        [0,0,la.norm(cell3D[:,2])]]).T
@@ -100,7 +105,6 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
     
     cell2D, cell3D = find_basis(diruvw, A.cell, tol=tol, maxi=maxi) #Create a new cell with diruvw as z
 
-    
     A = supercell(A, cell3D) # Reorganize the atoms in the new cell 
     
     idx = list(range(len(A)))
@@ -307,9 +311,9 @@ def createPoscar(A, B, reconA, reconB, ttrans, dispStruc, outdir=".", layers=1, 
     
     write.poscar(reconB, vasp5=True, file= outdir + "/POSCAR_top")
 
-    reconA = supercell(reconA, reconA.cell.dot(np.array([[1,0,0],[0,1,0],[0,0,lay]])))
+    reconA = supercell(reconA, reconA.cell.dot(np.array([[1,0,0],[0,1,0],[0,0,layers]])))
         
-    reconB = supercell(reconB, reconB.cell.dot(np.array([[1,0,0],[0,1,0],[0,0,lay]])) )
+    reconB = supercell(reconB, reconB.cell.dot(np.array([[1,0,0],[0,1,0],[0,0,layers]])) )
 
     interface = Structure(newA)
     interface.cell[2,2] = reconB.cell[2,2] - reconA.cell[2,2] + ttrans[2,3] + vacuum
