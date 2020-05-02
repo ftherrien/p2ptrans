@@ -2175,7 +2175,7 @@ contains
           open(12, file = trim(savebest))
           read(12,*) tmat, vec
           close(12)
-
+          
        else
           if (free) then
 
@@ -2190,14 +2190,14 @@ contains
                   0.0d0, "Euclidean", 0.0d0)
           endif
 
+          tmat = rot_mat(angles)
+          
           if (trim(savebest)/="") then
              open(12, file = trim(savebest))
-             write(12,*) angles, vec
+             write(12,*) tmat, vec
              close(12)
 
           endif
-
-          tmat = rot_mat(angles)
 
        endif
 
