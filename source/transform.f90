@@ -28,6 +28,7 @@ module transform
        adjust, &
        remove_slanting, &
        classification, &
+       lagrange, &
        pi, rotmin
 
   double precision,  parameter :: &
@@ -540,6 +541,123 @@ contains
     ! print*, "free", j, dist  
 
   end subroutine analytical_gd_free
+
+  subroutine lagrange(twodim, tmat, vec, Apos, Bpos, n_iter, rate1, rate2, tol, pot, param)
+
+    ! Gradient descent with respect to a linear transfromation (3x3 matrix) with
+    ! lagrange multipliers
+
+    logical, intent(in) :: &
+         twodim
+
+    integer, intent(in) :: &
+         n_iter ! Number of atoms
+
+    double precision, intent(in) :: &
+         rate1, & ! Rate for angles
+         rate2, & ! Rate for disp
+         tol
+
+    double precision, intent(in), dimension(:,:) :: &
+         Apos, &
+         Bpos ! Bpos ordered according to the mapping
+
+    double precision, dimension(3,size(Bpos,2)) :: &
+         E ! position matrix
+
+    double precision, intent(inout), dimension(3,3) :: &         
+         tmat     ! Transformation matrix
+
+    double precision, dimension(3,3) :: &         
+         tmat_prev     ! Transformation matrix
+
+    double precision, intent(inout), dimension(3,1) :: &         
+         vec     ! Translation vector
+
+    double precision, dimension(3,1) :: &         
+         vec_prev     ! Translation vector
+
+    double precision, dimension(size(Bpos,2),1) :: &
+         ones
+
+    character*(*), intent(in) :: &
+         pot
+
+    double precision, intent(in) :: &
+         param
+
+    double precision :: &
+         dist, &
+         dist_prev, &
+         dist_init, &
+         d_in, d_cur, &
+         lam, &
+         lam_prev, &
+         nat
+
+    integer :: &
+         j ! Iterator
+
+    nat = dble(size(Apos,2))
+
+    ones = 1.0d0
+
+    lam = 1000.0d0
+    dist = 0.0d0
+    dist_prev = tol+1
+    tmat_prev = tmat
+    vec_prev = vec
+    d_in = distance(Apos, Bpos, tmat, vec, pot, param)
+
+    j=0
+    do while (j < n_iter .and. abs(dist - dist_prev) > tol)
+       j=j+1
+       
+       dist_prev = dist
+       d_cur = distance(Apos, Bpos, tmat, vec, pot, param) - d_in
+       dist = distance(Apos, Bpos, tmat, vec, "E2D", 0.0d0) + lam * d_cur
+
+       if (j==1) then
+          dist_prev = dist + tol + 1.0d0
+          dist_init = dist
+       endif
+
+       ! print*, dist, dist_prev - dist, "FREE", j
+
+       E = derivative(Apos, Bpos, tmat, vec, "E2D", 0.0d0) &
+            + lam * derivative(Apos, Bpos, tmat, vec, pot, param)
+
+       if(dist > dist_prev .or. abs(dist_init) < 1.0d-8) then
+          dist_init = 10 * dist_init
+          tmat = tmat_prev
+          vec = vec_prev
+          lam = lam_prev
+       else
+
+          tmat_prev = tmat
+          vec_prev = vec
+          lam_prev = lam
+
+          if (twodim) then
+             tmat(1:2,1:2) = tmat(1:2,1:2) + rate1 * dist / dist_init * matmul(E(1:2,:),transpose(Bpos(1:2,:)))
+          else
+             tmat = tmat + rate1 * dist / dist_init * matmul(E,transpose(Bpos))
+          endif
+
+          vec = vec   + rate2 * dist / dist_init * matmul(E,ones)
+          
+          lam = lam + rate2 * dist / dist_init * d_cur
+
+          ! print*, lam, dist, dist_init, d_cur
+          
+       endif
+
+    enddo
+
+    ! print*, "free", j, dist, lam, distance(Apos, Bpos, tmat, vec, pot, param), &
+         distance(Apos, Bpos, tmat, vec, "E2D", 0.0d0)
+
+  end subroutine lagrange
   
   subroutine analytical_gd_vec(tmat, vec, Apos, Bpos, n_iter, rate2, tol, pot, param)
 
@@ -2675,6 +2793,11 @@ contains
        call analytical_gd_vec(tmat, vec, Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
             tol, pot, param)
 
+       if (trim(pot)=="LJ") then
+          call lagrange(.true., tmat, vec, Apos_mapped, Bpos_opt, n_ana*1000, &
+               rate1, rate2, tol, pot, param)
+       endif
+       
        vec_rot = vec
        
        call analytical_gd_rot(.true., angles, vec_rot, Apos_mapped, Bpos_opt, &
