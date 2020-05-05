@@ -11,10 +11,11 @@ from .core import makeSphere, find_cell, makeStructures, switchDispStruc
 from .utils import scale, is_same_struc, lcm, lccell, superize
 
 def find_type(a, rule):
+    newtype = []
     for key, val in rule.items():
-        if a.type in val:
-            newtype = key
-            break
+        for i,v in enumerate(val):
+            if v == a.type:
+                newtype.append(key+"-"+str(i))
     return newtype
         
 def find_basis(diruvw, ccell, tol=tol, maxi=10):
@@ -34,7 +35,7 @@ def find_basis(diruvw, ccell, tol=tol, maxi=10):
                     elif la.norm(np.cross(diruvw, pos)) < tol: #Is it parallel to uvw?
                         if la.norm(pos) < la.norm(vectors[0]) and pos.dot(vectors[0]) > 0: # Is it shorter?
                             vectors[0] = pos
-
+                            
     if np.allclose(vectors[0], diruvw*1000, 1e-12):
         raise RuntimeError("Could not find lattice point in the specified direction:", diruvw)
     
@@ -66,7 +67,7 @@ def find_basis(diruvw, ccell, tol=tol, maxi=10):
         idd = np.argmin(la.norm(cell3D[:,:2], axis=0))
     
         cell3D[:,int(not idd)] = cell3D.dot(inplane_cell[:,np.argmin(abs(inplane_cell[int(not idd),:]))])
-        
+
     cell3D = gruber(cell3D)
     
     for i in range(2):
@@ -75,6 +76,9 @@ def find_basis(diruvw, ccell, tol=tol, maxi=10):
 
         if np.allclose(cell3D[:,i], -vectors[0], atol=1e-12):
             cell3D[:,i], cell3D[:,2] = deepcopy(cell3D[:,2]), -cell3D[:,i]
+
+    if np.allclose(cell3D[:,2], -vectors[0], atol=1e-12):
+        cell3D[:,2] = -cell3D[:,2]
             
     if la.det(cell3D) < 0:
         cell3D[:,0] = -cell3D[:,0]
@@ -89,7 +93,18 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
                 maxi=10, surface=None):
     """Creates a structure for all possible combinations and renames the atoms according to the rule"""
 
-    ruleset = set.union(*list(rule.values())) # Set of atoms named in the rule
+    for key, val in rule.items():
+        rule[key] = []
+        for v in val:
+            for i, symbol in  enumerate(v):
+                if not symbol.isdigit():
+                    break
+            if i:
+                rule[key].extend([v[i:]]*int(v[:i]))
+            else:
+                rule[key].append(v)
+    
+    ruleset = set([a for b in list(rule.values()) for a in b]) # Set of atoms named in the rule
     
     A = scale(A)
     
@@ -112,19 +127,33 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
     inplane = []
     # Creates a list of list of indices where each list of indices correspond to a possible termination considering the rule
     c = 0
+    z = []
     while len(idx)>0:
         c=c+1
         if A[idx[0]].type in ruleset:
             inplane.append([idx[0]])
+            z.append([diruvw.dot(A[idx[0]].pos)])
             for i in idx[1:]:
                 if abs(diruvw.dot(A[idx[0]].pos) - diruvw.dot(A[i].pos)) < tol:
                     if A[i].type in ruleset:
                         inplane[-1].append(i)
+                        z[-1].append(diruvw.dot(A[i].pos))
                     idx.remove(i)
+            for i,a in enumerate(A):
+                diff = diruvw.dot(a.pos) - z[-1][0]
+                if diff < 1 and diff > 0 + tol:
+                    inplane[-1].append(i)
+                    z[-1].append(diruvw.dot(a.pos))
+                    
         idx = idx[1:]
-
+    
+    for i,lz in enumerate(z):
+        idx = np.argsort(lz)
+        z[i] = [z[i][j] for j in idx]
+        inplane[i] = [inplane[i][j] for j in idx]
+        
     if len(inplane) > 1 and surface is not None:
-        z = np.array([cell2D.dot(la.inv(cell3D)).dot(A[term[0]].pos)[2] for term in inplane])
+        z = np.array([lz[0] for lz in z])
         if surface is "bottom":
             inplane = [inplane[np.argmin(z)]]
         elif surface is "top":
@@ -139,10 +168,12 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
 
         tmpstruc = Structure(cell2D)
         reconstructure[j] = deepcopy(tmpstruc)
-        tmpstruc.add_atom(0,0,0,find_type(A[ix[0]], rule))
+        for t in find_type(A[ix[0]], rule):
+            tmpstruc.add_atom(0,0,0,t)
         for i in ix[1:]:
             pos = cell2D.dot(la.inv(cell3D)).dot(A[i].pos-A[ix[0]].pos)
-            tmpstruc.add_atom(*(into_cell(pos,tmpstruc.cell)),find_type(A[i], rule))
+            for t in find_type(A[i], rule):
+                tmpstruc.add_atom(*(into_cell(pos,tmpstruc.cell)),t)
         for k,a in enumerate(A):
             pos = cell2D.dot(la.inv(cell3D)).dot(a.pos-A[ix[0]].pos)
             if (surface is None or
@@ -177,6 +208,8 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
             
     for i in range(len(strucs)):
         strucs[i] = primitive(strucs[i], primtol)
+        for a in strucs[i]:
+            a.type=a.type.split("-")[0]
         strucs[i] = reshift(strucs[i])
                     
     return list(zip(strucs, recMap))    
