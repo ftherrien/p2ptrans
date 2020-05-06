@@ -90,9 +90,12 @@ def find_basis(diruvw, ccell, tol=tol, maxi=10):
     return cell2D, cell3D
 
 def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
-                maxi=10, surface=None):
+                maxi=10, surface = None, max_thickness = None):
     """Creates a structure for all possible combinations and renames the atoms according to the rule"""
 
+    if max_thickness is None:
+        max_thickness = tol
+    
     for key, val in rule.items():
         rule[key] = []
         for v in val:
@@ -103,7 +106,7 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
                 rule[key].extend([v[i:]]*int(v[:i]))
             else:
                 rule[key].append(v)
-    
+                
     ruleset = set([a for b in list(rule.values()) for a in b]) # Set of atoms named in the rule
     
     A = scale(A)
@@ -121,9 +124,14 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
     cell2D, cell3D = find_basis(diruvw, A.cell, tol=tol, maxi=maxi) #Create a new cell with diruvw as z
 
     A = supercell(A, cell3D) # Reorganize the atoms in the new cell 
-    
-    idx = list(range(len(A)))
-    
+
+    z = [diruvw.dot(a.pos) for a in A]
+
+    idx = list(np.argsort(z))
+
+    if surface is "bottom":
+        idx = idx[::-1]
+        
     inplane = []
     # Creates a list of list of indices where each list of indices correspond to a possible termination considering the rule
     c = 0
@@ -134,31 +142,23 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
             inplane.append([idx[0]])
             z.append([diruvw.dot(A[idx[0]].pos)])
             for i in idx[1:]:
-                if abs(diruvw.dot(A[idx[0]].pos) - diruvw.dot(A[i].pos)) < tol:
+                if abs(diruvw.dot(A[idx[0]].pos) - diruvw.dot(A[i].pos)) < max_thickness:
                     if A[i].type in ruleset:
                         inplane[-1].append(i)
                         z[-1].append(diruvw.dot(A[i].pos))
                     idx.remove(i)
-            for i,a in enumerate(A):
-                diff = diruvw.dot(a.pos) - z[-1][0]
-                if diff < 1 and diff > 0 + tol:
-                    inplane[-1].append(i)
-                    z[-1].append(diruvw.dot(a.pos))
-                    
+
+        if surface is not None:
+            break
         idx = idx[1:]
-    
-    for i,lz in enumerate(z):
-        idx = np.argsort(lz)
-        z[i] = [z[i][j] for j in idx]
-        inplane[i] = [inplane[i][j] for j in idx]
-        
-    if len(inplane) > 1 and surface is not None:
-        z = np.array([lz[0] for lz in z])
-        if surface is "bottom":
-            inplane = [inplane[np.argmin(z)]]
-        elif surface is "top":
-            inplane = [inplane[np.argmax(z)]]
-        
+
+    if len(z) > 1:
+        if z[0][-1] - z[-1][0] + cell2D[2,2] < max_thickness:
+            for a in A:
+                a.pos = into_cell(a.pos - A[inplane[-1][0]].pos, A.cell)
+            inplane[0] = inplane.pop() + inplane[0]
+    elif len(z) == 0:
+        print("WARNING: The structure does not contain the elements specified in the rule")
         
     strucs = []
     recMap = []
@@ -228,7 +228,7 @@ def reshift(struc):
     return supercell(struc,struc.cell)
     
 
-def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, filename, outdir): 
+def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, outdir): 
     """ Creates the structures and finds the mapping between them """
     
     Apos, atomsA, atom_types = makeSphere(A, mulA*ncell, twoD=True) # Create Apos
@@ -247,7 +247,7 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, filename, outdir):
     print("Optimizing... (this may take several hours)")
     print("Check progress in %s"%(outdir+"/progress.txt"))
     result = tr.intoptimization(sym, n_iter, Apos, Bpos, A.cell, la.inv(A.cell),
-                                atoms, filename, outdir)
+                                atoms, switched, filename, outdir)
     Apos_map, Bpos, Bposst, n_map, natA, class_list, ttrans, rtrans, dmin, stats, n_peaks, peak_thetas = result
     t_time = time.time() - t_time
     Bpos = np.asanyarray(Bpos)
@@ -293,9 +293,11 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, filename, outdir):
 
 def createPoscar(A, B, reconA, reconB, ttrans, dispStruc, outdir=".", layers=1, vacuum=10, tol=1e-3):
     """ Creates the interfacial POSCARS """
-
+    
     reconA = deepcopy(reconA)
     reconB = deepcopy(reconB)
+    
+    max_thickness = np.array([a.pos[2] for a in A]).max()
     
     reconB.cell = ttrans[:,:3].dot(reconB.cell)
     shift = deepcopy(ttrans[:,3])
@@ -322,7 +324,6 @@ def createPoscar(A, B, reconA, reconB, ttrans, dispStruc, outdir=".", layers=1, 
     
         NB = lccell(SdB, SrB, tol)
         SB = la.inv(SdB).dot(NB)
-        
     else:
         SB = np.eye(3)
           
@@ -335,6 +336,9 @@ def createPoscar(A, B, reconA, reconB, ttrans, dispStruc, outdir=".", layers=1, 
     newB = deepcopy(B.cell)
 
     newB[:2,:2] = newA[:2,:2]
+    
+    for a in reconA:
+        a.pos[2] = a.pos[2] - max_thickness
     
     reconA = supercell(reconA, superize(reconA.cell, newA))
         
@@ -349,9 +353,9 @@ def createPoscar(A, B, reconA, reconB, ttrans, dispStruc, outdir=".", layers=1, 
     reconB = supercell(reconB, reconB.cell.dot(np.array([[1,0,0],[0,1,0],[0,0,layers]])) )
 
     interface = Structure(newA)
-    interface.cell[2,2] = reconB.cell[2,2] - reconA.cell[2,2] + ttrans[2,3] + vacuum
+    interface.cell[2,2] = reconB.cell[2,2] - reconA.cell[2,2] + ttrans[2,3] - max_thickness + vacuum
     for b in reconB:
-        pos = b.pos + np.array([0,0,1])*(ttrans[2,3] + vacuum/2) - reconA.cell[2,2]
+        pos = b.pos + np.array([0,0,1])*(ttrans[2,3] - max_thickness + vacuum/2) - reconA.cell[2,2]
         interface.add_atom(*pos, b.type)
 
     for a in reconA:
@@ -396,7 +400,7 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
     if minimize:
         print("==>Ready to start optimmization<==")
 
-        result = optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, filename, outdir)
+        result = optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, outdir)
         pickle.dump(result, open(outdir+"/intoptimization.dat","wb"))
         
     else:
@@ -444,7 +448,9 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
         print("Optimal angle between structures:", np.mod(peak_thetas[k]*180/np.pi,360/sym))
         print("Volume stretching factor (det(T)):", la.det(ttrans[k,:2,:2]))
         print("Cell volume ratio (initial cell volume)/(final cell volume):", mulA * la.det(Acell)/(mulB * la.det(Bcell)))
-
+        print("Final inplane distortion (T):")
+        print(ttrans[k,:2,:2])
+        
         print()
         print("-----------PERIODIC CELL-----------")
         print()
@@ -512,6 +518,6 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
             
         if switched:
             dispStruc[k], ttrans[k,:,:3], vec_classes[k] = switchDispStruc(dispStruc[k], ttrans[k,:,:3], vec_classes[k])
-            ttrans[k,:2,3] = -ttrans[k,:2,:2].dot(ttrans[k,:2,3])
+            ttrans[k,:,3] = -ttrans[k,:,:3].dot(ttrans[k,:,3])
                 
     return ttrans, dispStruc, vec_classes, dmin.min()
