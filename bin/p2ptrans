@@ -17,7 +17,7 @@ def readOptions():
     parser.add_argument("-c","--crystal", dest="crystfile", type=str, default='./cryst.in', help="Parameter file for crystllography analysis")
     parser.add_argument("-o","--outdir",dest="outdir", type=str, default='.', help="Output directory")
     parser.add_argument("-u","--use",dest="use", type=str, default=None, help="Use previously calculated data")
-    parser.add_argument("-m","--minimize",dest="minimize",action="store_true", default=False, help="Rerun minimization using the parameters stored in the folder provided with the -u option")
+    parser.add_argument("-m","--minimize",dest="minimize",action="store_true", default=False, help="Force new optimization even if data is available")
     parser.add_argument("-s","--switch",dest="switch",action="store_true", default=False, help="Map the larger cell on the smaller cell")
     parser.add_argument("-r","--noprim",dest="prim",action="store_false", default=True, help="Finds the primitive cell at the beginning") #TMP
     parser.add_argument("-a","--anim",dest="anim",action="store_true", default=False, help="Produce the animation") #TMP
@@ -35,12 +35,11 @@ def readOptions():
     interactive = options.interactive
     if options.use == None:
         use = False
-        minimize = True
         outdir = options.outdir
     else:
         use = True
-        minimize = options.minimize
         outdir = options.use
+    minimize = options.minimize
     switch = options.switch
     prim = options.prim
     anim = options.anim

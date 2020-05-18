@@ -148,10 +148,13 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
                         z[-1].append(diruvw.dot(A[i].pos))
                     idx.remove(i)
 
-        if surface is not None:
-            break
+            if surface is not None:
+                if surface is "bottom":
+                    inplane[-1] = inplane[-1][::-1]
+                break
+            
         idx = idx[1:]
-
+        
     if len(z) > 1:
         if z[0][-1] - z[-1][0] + cell2D[2,2] < max_thickness:
             for a in A:
@@ -177,8 +180,8 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
         for k,a in enumerate(A):
             pos = cell2D.dot(la.inv(cell3D)).dot(a.pos-A[ix[0]].pos)
             if (surface is None or
-                ((surface is "top" and pos[2] < 0 + tol) or
-                (surface is "bottom" and pos[2] > 0 - tol))):
+                ((surface is "top" and pos[2] > 0 - tol) or
+                 (surface is "bottom" and pos[2] < tmpstruc[-1].pos[2] + tol))):
                 reconstructure[j].add_atom(*(into_cell(pos,reconstructure[j].cell)), a.type)
                 
         # Removes structures that are trivially the same
@@ -245,7 +248,7 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, out
     Bpos = np.asfortranarray(Bpos)
     t_time = time.time()
     print("Optimizing... (this may take several hours)")
-    print("Check progress in %s"%(outdir+"/progress.txt"))
+    print("Check progress in %s"%(outdir+"/progress.txt"), flush=True)
     result = tr.intoptimization(sym, n_iter, Apos, Bpos, A.cell, la.inv(A.cell),
                                 atoms, switched, filename, outdir)
     Apos_map, Bpos, Bposst, n_map, natA, class_list, ttrans, rtrans, dmin, stats, n_peaks, peak_thetas = result
@@ -404,8 +407,12 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
         pickle.dump(result, open(outdir+"/intoptimization.dat","wb"))
         
     else:
-        print("==>Gathering optimization data from %s<=="%(outdir))
-        result = pickle.load(open(outdir+"/intoptimization.dat","rb"))
+        try:
+            print("==>Gathering optimization data from %s<=="%(outdir))
+            result = pickle.load(open(outdir+"/intoptimization.dat","rb"))
+        except FileNotFoundError:
+            result = optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, outdir)
+            pickle.dump(result, open(outdir+"/intoptimization.dat","wb"))
         
     Apos, Apos_map, Bpos, Bposst, n_map, natA, class_list, ttrans, rtrans, dmin, stats, n_peaks, peak_thetas, atoms, atom_types, foundcell, origin = result
 
@@ -448,9 +455,8 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
         print("Optimal angle between structures:", np.mod(peak_thetas[k]*180/np.pi,360/sym))
         print("Volume stretching factor (det(T)):", la.det(ttrans[k,:2,:2]))
         print("Cell volume ratio (initial cell volume)/(final cell volume):", mulA * la.det(Acell)/(mulB * la.det(Bcell)))
-        print("Final inplane distortion (T):")
-        print(ttrans[k,:2,:2])
-        
+        eig, _ = la.eig(ttrans[k,:2,:2].T.dot(ttrans[k,:2,:2]))        
+        print("In-plane stretching: %f %f"%(np.sqrt(eig[0]), np.sqrt(eig[1])))
         print()
         print("-----------PERIODIC CELL-----------")
         print()

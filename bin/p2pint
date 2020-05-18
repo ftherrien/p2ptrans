@@ -41,7 +41,7 @@ def readOptions():
     parser.add_argument("-p","--param", dest="filename", type=str, default='./p2p.in', help="Parameter file")
     parser.add_argument("-o","--outdir",dest="outdir", type=str, default='.', help="Output directory")
     parser.add_argument("-u","--use",dest="use", type=str, default=None, help="Use previously calculated data")
-    parser.add_argument("-m","--minimize",dest="minimize",action="store_true", default=False, help="Rerun minimization using the parameters stored in the folder provided with the -u option")
+    parser.add_argument("-m","--minimize",dest="minimize",action="store_true", default=False, help="Force new optimization even if data is available")
     parser.add_argument("-t","--test",dest="test",action="store_true", default=False, help="Tests the input file and prepares the run, you can continue this run with the -u [directory] -r option")
     parser.add_argument("-b","--surface-only",dest="surface",action="store_true", default=False, help="Only uses the first termination from the bottom")
     parser.add_argument("-s","--sym",dest="sym",type=int, default=1, help="Max rotational symmetry of the two phases")
@@ -58,12 +58,11 @@ def readOptions():
     interactive = options.interactive
     if options.use == None:
         use = False
-        minimize = True
         outdir = options.outdir
     else:
         use = True
-        minimize = options.minimize
         outdir = options.use
+    minimize = options.minimize
     test = options.test
     n_iter = options.n_iter
     sym = options.sym
@@ -132,7 +131,7 @@ def main():
         for poscarfile in fileA:
             print(poscarfile)
             listA.append((poscarfile, readSurface(read.poscar(poscarfile), planeA,
-                                                  ruleA, surface=top, max_thickness=max_thickness)))
+                                                  ruleA, surface=bottom, max_thickness=max_thickness)))
         print("Number of A structures:", len(listA))
         
         listB = []
@@ -140,7 +139,7 @@ def main():
         for poscarfile in fileB:
             print(poscarfile)
             listB.append((poscarfile, readSurface(read.poscar(poscarfile), planeB,
-                                                  ruleB, surface=bottom, max_thickness=max_thickness)))
+                                                  ruleB, surface=top, max_thickness=max_thickness)))
         print("Number of B structures:", len(listB))
             
         try:
@@ -164,8 +163,6 @@ def main():
                 for l, (B, mapB) in enumerate(termsB):
                     term_outdir = file_outdir + "/term_%03d-%03d"%(k,l)
                     os.makedirs(term_outdir, exist_ok=True)
-                    print("A", A)
-                    print("B", B)
                     ttrans, dispStruc, vec_classes, dmin = findMatchingInterfaces(A, B, ncell, n_iter,
                                                                                   sym=sym, filename=filename,
                                                                                   interactive=interactive,
