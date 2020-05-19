@@ -562,6 +562,10 @@ contains
          Apos, &
          Bpos ! Bpos ordered according to the mapping
 
+    double precision, dimension(size(Bpos,2)) :: &
+         d_in, d_cur, & ! Individual distances
+         lam, lam_prev
+
     double precision, dimension(3,size(Bpos,2)) :: &
          E ! position matrix
 
@@ -587,12 +591,10 @@ contains
          param
 
     double precision :: &
+         planedist, &
          dist, &
          dist_prev, &
          dist_init, &
-         d_in, d_cur, &
-         lam, &
-         lam_prev, &
          nat
 
     integer :: &
@@ -601,37 +603,46 @@ contains
     nat = dble(size(Apos,2))
 
     ones = 1.0d0
-
-    lam = 1000.0d0
+    
+    lam = 0.0d0
     dist = 0.0d0
     dist_prev = tol+1
     tmat_prev = tmat
     vec_prev = vec
-    d_in = distance(Apos, Bpos, tmat, vec, pot, param)
-
+    d_in = sqrt(sum((Apos - free_trans(Bpos,tmat,vec))**2,1))
+    planedist = distance(Apos, Bpos, tmat, vec, "E2D", 0.0d0)
+    
     j=0
     do while (j < n_iter .and. abs(dist - dist_prev) > tol)
        j=j+1
        
        dist_prev = dist
-       d_cur = distance(Apos, Bpos, tmat, vec, pot, param) - d_in
-       dist = distance(Apos, Bpos, tmat, vec, "E2D", 0.0d0) + lam * d_cur
+       d_cur = sqrt(sum((Apos - free_trans(Bpos,tmat,vec))**2,1))
+       dist = distance(Apos, Bpos, tmat, vec, "E2D", 0.0d0) + dot_product(lam, d_cur - d_in)
 
        if (j==1) then
           dist_prev = dist + tol + 1.0d0
           dist_init = dist
        endif
 
-       ! print*, dist, dist_prev - dist, "FREE", j
+       ! print*, dist, &
+       !      distance(Apos, Bpos, tmat, vec, "E2D", 0.0d0), &
+       !      dot_product(lam, d_cur - d_in), &
+       !      distance(Apos, Bpos, tmat, vec, pot, param), &
+       !      dist_prev - dist, "LAG", j
 
        E = derivative(Apos, Bpos, tmat, vec, "E2D", 0.0d0) &
-            + lam * derivative(Apos, Bpos, tmat, vec, pot, param)
+            + spread(lam,1,3)*derivative(Apos, Bpos, tmat, vec, "Euclidean", 0.0d0)
 
-       if(dist > dist_prev .or. abs(dist_init) < 1.0d-8) then
+       ! The condition is different here because we assume that we start somewhat close to the global minimum
+       ! Since we are so close to 0 we have to allow some variation of the distance around the minimum as
+       ! the minimization travels on the saddle
+       if (dist > planedist .or. abs(dist_init) < 1.0d-8) then
           dist_init = 10 * dist_init
           tmat = tmat_prev
           vec = vec_prev
           lam = lam_prev
+          
        else
 
           tmat_prev = tmat
@@ -644,18 +655,16 @@ contains
              tmat = tmat + rate1 * dist / dist_init * matmul(E,transpose(Bpos))
           endif
 
-          vec = vec   + rate2 * dist / dist_init * matmul(E,ones)
+          vec = vec + rate2 * dist / dist_init * matmul(E,ones)
           
-          lam = lam + rate2 * dist / dist_init * d_cur
+          lam = lam + ( d_cur - d_in )
 
-          ! print*, lam, dist, dist_init, d_cur
-          
        endif
-
+          
     enddo
 
-    ! print*, "free", j, dist, lam, distance(Apos, Bpos, tmat, vec, pot, param), &
-         distance(Apos, Bpos, tmat, vec, "E2D", 0.0d0)
+    ! print*, "Lagrange", j, dist, lam, distance(Apos, Bpos, tmat, vec, pot, param), &
+    !      distance(Apos, Bpos, tmat, vec, "E2D", 0.0d0)
 
   end subroutine lagrange
   
@@ -2794,6 +2803,7 @@ contains
             tol, pot, param)
 
        if (trim(pot)=="LJ") then
+          print*, "LAGRANGE ADJUST"
           call lagrange(.true., tmat, vec, Apos_mapped, Bpos_opt, n_ana*1000, &
                rate1, rate2, tol, pot, param)
        endif
