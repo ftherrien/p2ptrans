@@ -118,38 +118,35 @@ def crystallography(tmat, A, B, ccellA, ccellB, planehkl, diruvw, fileA="input 1
     from findMatching and you want the strain directions from the initial to the final structure you must use
     la.inv(tmat) and inverse the order of A and B. The idea is that tmat, the input, is the transformation
     gradient matrix between A and B"""
-
+    
     print("----------CRYSTALLOGRAPHY----------")
     print()
     eigval, U, P, Q = strainDirs(tmat, ftf=ftf)
 
     print("Strain Directions in %s (%s) coordinates:"%(B.name, fileB))
     print("    d1    d2    d3    ")
-    printMatAndDir(P, ccellA)
+    printMatAndDir(P, ccellB)
     print()
     print("Strain Directions in %s (%s) coordinates:"%(A.name, fileA))
     print("    d1    d2    d3    ")
-    printMatAndDir(Q, ccellB)
+    printMatAndDir(Q, ccellA)
     print()
     print("Strains + 1 (eigenvalues)")
     print("    e1    e2    e3    ")
     print(' '.join(["% 5.3f"%(val) for val in eigval])) 
     print()
 
-    rcellA = la.inv(ccellA) #Reciprocal cell
-    rcellB = la.inv(ccellB) #Reciprocal cell
-
     planeHab, ratio = findHabit(U, P, eigval)
         
     print("Uniformly strained planes:")
     print()
-    print("Exact plane in %s (%s) coordinates:"%(B.name, fileB))
-    print("(+): (% 6.4f, % 6.4f, % 6.4f)"%(*ccellB.dot(planeHab[:,0]),))
-    print("(-): (% 6.4f, % 6.4f, % 6.4f)"%(*ccellB.dot(planeHab[:,1]),))
+    print("Exact plane hkl in %s (%s) coordinates:"%(B.name, fileB))
+    print("(+): (% 6.4f, % 6.4f, % 6.4f)"%(*ccellB.T.dot(planeHab[:,0]),))
+    print("(-): (% 6.4f, % 6.4f, % 6.4f)"%(*ccellB.T.dot(planeHab[:,1]),))
     print()
-    print("Closest uvw:")
-    print("(+): (% d, % d, % d)"%(*find_uvw(planeHab[:,1:2], rcellB),))
-    print("(-): (% d, % d, % d)"%(*find_uvw(planeHab[:,0:1], rcellB),))
+    print("Closest hkl:")
+    print("(+): (% d, % d, % d)"%(*find_uvw(planeHab[:,0:1], la.inv(ccellB.T)),))
+    print("(-): (% d, % d, % d)"%(*find_uvw(planeHab[:,1:2], la.inv(ccellB.T)),))
     print()
 
     R = findR(U, P=P, planeHab=planeHab, ratio=ratio)
@@ -161,7 +158,7 @@ def crystallography(tmat, A, B, ccellA, ccellB, planehkl, diruvw, fileA="input 1
     resDiruvw = np.zeros((2,3))
     for i in range(2):
         orMat[i,:,:] = Q.dot(P.T).dot(R[i,:,:].T)
-        resPlanehkl[i,:] = ccellB.dot(orMat[i,:,:].dot(rcellA.dot(planehkl)))
+        resPlanehkl[i,:] = ccellB.T.dot(orMat[i,:,:].dot(la.inv(ccellA.T).dot(planehkl)))
         resDiruvw[i,:] = la.inv(ccellB).dot(orMat[i,:,:].dot(ccellA.dot(diruvw)))
     print("%s (%s) // %s (%s)"%(B.name, fileB, A.name, fileA))
     print("(+): (% 2d, % 2d, % 2d) [% 2d, % 2d, % 2d] // (% 6.4f, % 6.4f, % 6.4f) [% 6.4f, % 6.4f, % 6.4f]"%(*planehkl, *diruvw, *resPlanehkl[0,:], *resDiruvw[0,:]))
@@ -171,7 +168,7 @@ def crystallography(tmat, A, B, ccellA, ccellB, planehkl, diruvw, fileA="input 1
     resPlanehklClose = np.zeros((2,3))
     resDiruvwClose = np.zeros((2,3))
     for i in range(2):
-        resPlanehklClose[i,:] = find_uvw(rcellB.dot(resPlanehkl[i,:].reshape((3,1))), rcellB).T[0]
+        resPlanehklClose[i,:] = find_uvw(la.inv(ccellB.T).dot(resPlanehkl[i,:].reshape((3,1))), la.inv(ccellB.T)).T[0]
         resDiruvwClose[i,:] = find_uvw(ccellB.dot(resDiruvw[i,:].reshape((3,1))), ccellB).T[0]
     print("(+): (% 2d, % 2d, % 2d) [% 2d, % 2d, % 2d] //  (% d, % d, % d) [% d, % d, % d]"%(*planehkl, *diruvw, *resPlanehklClose[0,:], *resDiruvwClose[0,:]))
     print("(-): (% 2d, % 2d, % 2d) [% 2d, % 2d, % 2d] //  (% d, % d, % d) [% d, % d, % d]"%(*planehkl, *diruvw, *resPlanehklClose[1,:], *resDiruvwClose[1,:]))
@@ -180,13 +177,13 @@ def crystallography(tmat, A, B, ccellA, ccellB, planehkl, diruvw, fileA="input 1
     print("Orientation Relationship in thin films:")
     print()
     orMat = Q.dot(P.T)
-    resPlanehkl = ccellB.dot(orMat.dot(rcellA.dot(planehkl)))
+    resPlanehkl = ccellB.T.dot(orMat.dot(la.inv(ccellA.T).dot(planehkl)))
     resDiruvw = la.inv(ccellB).dot(orMat.dot(ccellA.dot(diruvw)))
     print("%s (%s) // %s (%s)"%(B.name, fileB, A.name, fileA))
     print("(% 2d, % 2d, % 2d) [% 2d, % 2d, % 2d] // (% 6.4f, % 6.4f, % 6.4f) [% 6.4f, % 6.4f, % 6.4f]"%(*planehkl, *diruvw, *resPlanehkl, *resDiruvw))
     print()
     print("Approximate low index OR")
-    resPlanehklClose = find_uvw(rcellB.dot(resPlanehkl.reshape((3,1))), rcellB).T[0]
+    resPlanehklClose = find_uvw(la.inv(ccellB.T).dot(resPlanehkl.reshape((3,1))), la.inv(ccellB.T)).T[0]
     resDiruvwClose = find_uvw(ccellB.dot(resDiruvw.reshape((3,1))), ccellB).T[0]
     print("(% 2d, % 2d, % 2d) [% 2d, % 2d, % 2d] //  (% d, % d, % d) [% d, % d, % d]"%(*planehkl, *diruvw, *resPlanehklClose, *resDiruvwClose))
     print()

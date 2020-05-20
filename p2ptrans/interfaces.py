@@ -18,10 +18,10 @@ def find_type(a, rule):
                 newtype.append(key+"-"+str(i))
     return newtype
         
-def find_basis(diruvw, ccell, tol=tol, maxi=10):
+def find_basis(dircart, ccell, tol=tol, maxi=10):
     """ Finds a new cell for the structure where the specified plane is in the z direction """
 
-    vectors = [diruvw*1000]
+    vectors = [dircart*1000]
     inplane = []
     rangeijk = np.arange(-maxi,maxi+1)
     rangeijk = rangeijk[np.argsort(abs(rangeijk))]
@@ -30,14 +30,14 @@ def find_basis(diruvw, ccell, tol=tol, maxi=10):
             for k in rangeijk:
                 if [i,j,k] != [0,0,0]: #Non-zero?
                     pos = ccell.dot(np.array([i,j,k]))
-                    if abs(diruvw.dot(pos)) < tol: #In plane?
+                    if abs(dircart.dot(pos)) < tol: #In plane?
                         inplane.append(pos)
-                    elif la.norm(np.cross(diruvw, pos)) < tol: #Is it parallel to uvw?
+                    elif la.norm(np.cross(dircart, pos)) < tol: #Is it parallel to uvw?
                         if la.norm(pos) < la.norm(vectors[0]) and pos.dot(vectors[0]) > 0: # Is it shorter?
                             vectors[0] = pos
                             
-    if np.allclose(vectors[0], diruvw*1000, 1e-12):
-        raise RuntimeError("Could not find lattice point in the specified direction:", diruvw)
+    if np.allclose(vectors[0], dircart*1000, 1e-12):
+        raise RuntimeError("Could not find lattice point in the specified direction:", dircart)
     
     # Make an array
     inplane = np.array(inplane).T
@@ -114,18 +114,18 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
     if ccell is None:
         ccell = A.cell
         
-    diruvw = la.inv(ccell.T).dot(planehkl) # Transforms hkl into uvw
+    dircart = la.inv(ccell.T).dot(planehkl) # Transforms hkl into cartesian coord
 
-    diruvw = diruvw/la.norm(diruvw)
+    dircart = dircart/la.norm(dircart)
 
     if surface is None:
         A = primitive(A, primtol) # Find the primitive cell
     
-    cell2D, cell3D = find_basis(diruvw, A.cell, tol=tol, maxi=maxi) #Create a new cell with diruvw as z
+    cell2D, cell3D = find_basis(dircart, A.cell, tol=tol, maxi=maxi) #Create a new cell with dircart as z
 
     A = supercell(A, cell3D) # Reorganize the atoms in the new cell 
 
-    z = [diruvw.dot(a.pos) for a in A]
+    z = [dircart.dot(a.pos) for a in A]
 
     idx = list(np.argsort(z))
 
@@ -140,12 +140,12 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
         c=c+1
         if A[idx[0]].type in ruleset:
             inplane.append([idx[0]])
-            z.append([diruvw.dot(A[idx[0]].pos)])
+            z.append([dircart.dot(A[idx[0]].pos)])
             for i in idx[1:]:
-                if abs(diruvw.dot(A[idx[0]].pos) - diruvw.dot(A[i].pos)) < max_thickness:
+                if abs(dircart.dot(A[idx[0]].pos) - dircart.dot(A[i].pos)) < max_thickness:
                     if A[i].type in ruleset:
                         inplane[-1].append(i)
-                        z[-1].append(diruvw.dot(A[i].pos))
+                        z[-1].append(dircart.dot(A[i].pos))
                     idx.remove(i)
 
             if surface is not None:
