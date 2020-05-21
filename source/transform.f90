@@ -2419,6 +2419,7 @@ contains
        Apos, na, Bpos, nb, &
        Acell, iAcell, &
        atoms, n_atoms, &
+       switched, &
        filename, outdir)
 
     integer, intent(in) :: &
@@ -2459,6 +2460,9 @@ contains
          n_A, &
          n_peaks
 
+    logical, intent(in) :: &
+         switched
+    
     double precision, intent(in), dimension(3,3) :: &
          Acell, & ! Unit cell of A
          iAcell
@@ -2607,7 +2611,11 @@ contains
     remap = .true.
     pot = "LJ"
     param = 2.5d0
-    zdist = param
+    if (switched) then
+       zdist = - param - maxval(Bpos(3,:))
+    else
+       zdist = param + maxval(Apos(3,:))
+    endif
     check = .false.
     vecrep = 10
     min_prom = 0.6d0

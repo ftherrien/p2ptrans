@@ -244,19 +244,39 @@ def makeStructures(cell, atoms, atom_types, natB, pos_in_struc, class_list):
     
     # Make a pylada structure
     cell_coord = np.mod(la.inv(cell).dot(pos_in_struc[1])+tol,1)-tol
+    cell_coord_dest = np.mod(la.inv(cell).dot(pos_in_struc[0])+tol,1)-tol
     dispStruc = Structure(cell)
     incell = []
-
+    dest = []
+    
     # Goes thtough the unique atomic positions found in 1 cell
     for idx, disp in zip(*uniqueclose(cell_coord, tol)):
         for i in idx:
             if np.allclose(pos_in_struc[1][:,i], cell.dot(disp), atol=tol):
-                incell.append((i,pos_in_struc[1][:,i]))
-                break
+                for d in dest:
+                    if np.allclose(d, cell_coord_dest[:,i], atol=tol):
+                        break
+                else:
+                    # If the position is in the first cell and
+                    # the destination (dest) of the atom does not already exist
+                    # The position is added to the structure
+                    dest.append(cell_coord_dest[:,i])
+                    incell.append((i,pos_in_struc[1][:,i]))
+                    break
         else:
-            i = np.argmin(la.norm(np.array([pos_in_struc[1][:,j] for j in idx]),axis=1))
-            incell.append((idx[i],cell.dot(disp)))
-
+            # If no satisfactory atom is found in the first cell, the algorithm looks
+            # for equivalent atoms in other cells starting from the points closest
+            # to the origin
+            idx2 = np.argsort(la.norm(np.array([pos_in_struc[1][:,j] for j in idx]),axis=1))
+            for i in idx2:
+                for d in dest:
+                    if np.allclose(d, cell_coord_dest[:,idx[i]], atol=tol):
+                        break
+                else:
+                    dest.append(cell_coord_dest[:,idx[i]])
+                    incell.append((idx[i],cell.dot(disp)))
+                    break
+            
     # Adds the atoms to the structure and creates a new vec_classes based on the actual
     # atmic positions in the final structure
     atom_list = []
@@ -404,7 +424,7 @@ def optimizationLoop(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir):
         Bpos = np.asfortranarray(Bpos)
         t_time = time.time()
         print("Optimizing... (this may take several hours)")
-        print("Check progress in %s"%(outdir+"/progress.txt"))
+        print("Check progress in %s"%(outdir+"/progress.txt"), flush=True)
         result = tr.fastoptimization(Apos, Bpos, Acell, la.inv(Acell),
                                      atoms, filename, outdir)
         Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, vec = result
@@ -552,8 +572,12 @@ def findMatching(A, B, ncell,
         pickle.dump(result, open(outdir+"/fastoptimization.dat","wb"))
         
     else:
-        print("==>Gathering optimization data from %s<=="%(outdir))
-        result = pickle.load(open(outdir+"/fastoptimization.dat","rb"))
+        try:
+            print("==>Gathering optimization data from %s<=="%(outdir))
+            result = pickle.load(open(outdir+"/fastoptimization.dat","rb"))
+        except FileNotFoundError:
+            result = optimizationLoop(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir)
+            pickle.dump(result, open(outdir+"/fastoptimization.dat","wb"))
 
     Apos, Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, atoms, atom_types, foundcell, origin = result
         

@@ -41,12 +41,13 @@ def readOptions():
     parser.add_argument("-p","--param", dest="filename", type=str, default='./p2p.in', help="Parameter file")
     parser.add_argument("-o","--outdir",dest="outdir", type=str, default='.', help="Output directory")
     parser.add_argument("-u","--use",dest="use", type=str, default=None, help="Use previously calculated data")
-    parser.add_argument("-m","--minimize",dest="minimize",action="store_true", default=False, help="Rerun minimization using the parameters stored in the folder provided with the -u option")
+    parser.add_argument("-m","--minimize",dest="minimize",action="store_true", default=False, help="Force new optimization even if data is available")
     parser.add_argument("-t","--test",dest="test",action="store_true", default=False, help="Tests the input file and prepares the run, you can continue this run with the -u [directory] -r option")
     parser.add_argument("-b","--surface-only",dest="surface",action="store_true", default=False, help="Only uses the first termination from the bottom")
     parser.add_argument("-s","--sym",dest="sym",type=int, default=1, help="Max rotational symmetry of the two phases")
     parser.add_argument("-l","--layers", dest="layers", type=int, default=1, help="Number of layers in the interface structure")
     parser.add_argument("-v","--vacuum", dest="vacuum", type=float, default=10, help="Thickness of vaccum")
+    parser.add_argument("-w","--width", dest="width", type=float, default=None, help="Maximum width of corregated surface to optimize")
 
     options = parser.parse_args()
     fileA, planeA, ruleA = readRule(options.A)
@@ -57,24 +58,24 @@ def readOptions():
     interactive = options.interactive
     if options.use == None:
         use = False
-        minimize = True
         outdir = options.outdir
     else:
         use = True
-        minimize = options.minimize
         outdir = options.use
+    minimize = options.minimize
     test = options.test
     n_iter = options.n_iter
     sym = options.sym
     vacuum = options.vacuum
     layers = options.layers
     surface = options.surface
+    max_thickness = options.width
             
-    return fileA, fileB, planeA, planeB, ruleA, ruleB, ncell, n_iter, filename, interactive, savedisplay, outdir, use, minimize, test, n_iter, sym, vacuum, layers, surface
+    return fileA, fileB, planeA, planeB, ruleA, ruleB, ncell, n_iter, filename, interactive, savedisplay, outdir, use, minimize, test, n_iter, sym, vacuum, layers, surface, max_thickness
 
 def main():
 
-    (fileA, fileB, planeA, planeB, ruleA, ruleB, ncell, n_iter, filename, interactive, savedisplay, outdir, use, minimize, test, n_iter, sym, vacuum, layers, surface) = readOptions()
+    (fileA, fileB, planeA, planeB, ruleA, ruleB, ncell, n_iter, filename, interactive, savedisplay, outdir, use, minimize, test, n_iter, sym, vacuum, layers, surface, max_thickness) = readOptions()
     
     # START
     print(" ________    _______  ________   ")   
@@ -130,7 +131,7 @@ def main():
         for poscarfile in fileA:
             print(poscarfile)
             listA.append((poscarfile, readSurface(read.poscar(poscarfile), planeA,
-                                                  ruleA, surface=top)))
+                                                  ruleA, surface=bottom, max_thickness=max_thickness)))
         print("Number of A structures:", len(listA))
         
         listB = []
@@ -138,7 +139,7 @@ def main():
         for poscarfile in fileB:
             print(poscarfile)
             listB.append((poscarfile, readSurface(read.poscar(poscarfile), planeB,
-                                                  ruleB, surface=bottom)))
+                                                  ruleB, surface=top, max_thickness=max_thickness)))
         print("Number of B structures:", len(listB))
             
         try:

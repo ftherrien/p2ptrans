@@ -76,15 +76,15 @@ Now that we have the bottom (substrate) and top structures, we need to specify t
 
    p2pint -T POSCAR_Si [1,1,0] 1 Si -B POSCAR_SiC [0,0,1] 1 Si
 
-Here we defined Si as the top structure (`-T`) and its corresponding h,k,l as (110). We defined SiC as the bottom structure (substrate) (`-B`) with the (001) interfacial plane. The rest of the command determines the bonding rule we set it as: `1 Si` which means "the first group is composed of Si". This will associate, and therefore, bond any atom labeled Si. To bond carbon with silicon instead, the command would have been:
+Here we defined Si as the top structure (``-T``) and its corresponding h,k,l as (110). We defined SiC as the bottom structure (substrate) (``-B``) with the (001) interfacial plane. The rest of the command determines the bonding rule we set it as: ``1 Si``for both the top and the bottom which means "Si is part of the 1st type of bond". This will associate, and therefore, bond the Si atoms in both structures. To bond carbon with silicon instead, the command would have been:
 
 .. code-block:: console
 
    p2pint -T POSCAR_Si [1,1,0] 1 Si -B POSCAR_SiC [0,0,1] 1 C
 
-.. note:: If a termination had two different types of atoms (which is not the case here) then the rules could be: `-B POSCAR_AB [h,k,l] 1 A 2 B` and `-T POSCAR_CD [h,k,l] 1 C 2 D` which would bond A with C and B with D at the interface between AB and CD. Similarly, we could bond A and B to C with `-B POSCAR_AB [h,k,l] 1 A B` and `-T POSCAR_CD [h,k,l] 1 C`.    
+.. note:: If a termination had two different types of atoms (which is not the case here) then the rules could be: ``-B POSCAR_AB [h,k,l] 1 A 2 B`` and ``-T POSCAR_CD [h,k,l] 1 C 2 D`` which would bond A with C and B with D at the interface between AB and CD. Similarly, one could bond A and B to C with ``-B POSCAR_AB [h,k,l] 1 A B`` and ``-T POSCAR_CD [h,k,l] 1 C``. If you want a specific type of atom to bond to two or more other atoms you can specify it by indicating the number of bond it can form before the type of element, e.g. ``-B POSCAR_AB [h,k,l] 1 3A`` means that the atom A can form up to 3 bonds.
    
-If you would like to store the output files in a subdirectory (e.g. `outputdir`) just add `-o outputdir`:
+If you would like to store the output files in a subdirectory (e.g. ``outputdir``) just add ``-o outputdir``:
 
 .. code-block:: console
 
@@ -95,8 +95,8 @@ This should take about 10 min to run on a laptop. p2pint will automatically use 
 .. note:: If you do not want p2pint to use all the available threads on the computer, limit the number of threads woth:
 	  
    .. code-block:: console
-
-   OMP_NUM_THREADS=1 p2pint -T POSCAR_Si [1,1,0] 1 Si -B POSCAR_SiC [0,0,1] 1 Si
+   
+      OMP_NUM_THREADS=1 p2pint -T POSCAR_Si [1,1,0] 1 Si -B POSCAR_SiC [0,0,1] 1 Si
 
 Analyzing the output
 ^^^^^^^^^^^^^^^^^^^^
@@ -120,20 +120,25 @@ This is the number of atoms that will be mapped together, i.e it is the size of 
    Looking for periodic cell for peak 0...
    Found cell!
 
-Contrary to p2ptrans, p2pint can look for the best results instead of only looking the absolute minimal distance. Each potential result represents a peak in the distance vs. angle plot. By default, however, this functionality is turned off and p2pint will only give one peak, corresponding to the optimal result. `Found cell!` indicates that p2pint has found the cell of correspondence (Interface Cell) between the two structures.
+Contrary to p2ptrans, p2pint can look for the best results instead of only looking the absolute minimal distance. Each potential result represents a peak in the distance vs. angle plot. By default, however, this functionality is turned off and p2pint will only give one peak, corresponding to the optimal result. ``Found cell!`` indicates that p2pint has found the cell of correspondence (Interface Cell) between the two structures.
 
 .. code-block:: console
 
    -------OPTIMIZATION RESULTS FOR PEAK 0--------
-   
-   Number of classes: 8
-   Number of mapped atoms: 64
-   Total distance between structures: -59.99274481751023
-   Optimal angle between structures: 270.0201544091763
-   Volume stretching factor (det(T)): 0.9858178881599341
-   Cell volume ratio (initial cell volume)/(final cell volume): 0.7887531650921741
 
+   Number of classes: 8
+   Number of mapped atoms: 50
+   Total distance between structures: -0.09168486691094771 ( -47.121009043696 )
+   Optimal angle between structures: 242.6019448122653
+   Volume stretching factor (det(T)): 0.9860348231038032
+   Cell volume ratio (initial cell volume)/(final cell volume): 0.7887531650921741
+   
 This block summarizes the result of the optimization. The number of classes is the number of types of connections i.e. the number of different "bonds" that were found. The total distance between the structures is the measure of how compatible they are with this choice of potential (lennard-Jones by default). The volume stretching factor indicates how much strain there is in the first layer of the top structure. The cell volume ratio indicates the ratio of specific areas of the two interfacial planes. Note that since this is a semi-coherent interface the specific area of the two planes is very different, i.e the lattices *do not match* in the conventional sense of lattice matching.
+
+.. note::
+
+   You may not necessarily obtain the exact same result to numerical precision since p2pint uses a random exploration method to find the global minimum. Additionally, the structures have a 6-fold rotational symmetry, which mean every angle that is different by a multiple of 60 is also optimal. 
+
 
 .. code-block:: console
 
@@ -162,7 +167,7 @@ For each termination three POSCARs are created: (1,2) Representation of Si and S
 
    VESTA POSCAR_SiC-POSCAR_Si/term_000-000/peak_000/var_000-000/POSCAR_interface
 
-You can adjust the number of layers of materials on each side of the interface with the `-l` option and you can adjust the amount of vacuum with the `-v` option.
+You can adjust the number of layers of materials on each side of the interface with the ``-l`` option and you can adjust the amount of vacuum with the ``-v`` option.
 
 At this point your output directory should have the following structure:
 
@@ -219,13 +224,13 @@ At this point your output directory should have the following structure:
 Visualizing the result
 ^^^^^^^^^^^^^^^^^^^^^^
 
-When running p2pint, the result is saved in different files in the output directory. p2ptrans can be rerun without having to reoptimize the result. To run p2ptrans in interactive mode (`-i`) and use the previous result (`-u`) simply run:
+When running p2pint, the result is saved in different files in the output directory. p2ptrans can be rerun without having to reoptimize the result. To run p2ptrans in interactive mode (``-i``) and use the previous result (``-u``) simply run:
 
 .. code-block:: console
 
    p2pint -i -u .
 
-The period indicates that the output is in the current directory (.), if you specified a different directory with the `-o` option you must provide the path to that directory. To save the images instead of displaying them:
+The period indicates that the output is in the current directory (.), if you specified a different directory with the ``-o`` option you must provide the path to that directory. To save the images instead of displaying them:
 
 .. code-block:: console
 
@@ -258,7 +263,7 @@ We are now ready to run the calculation:
 
 	     p2pint -u newoutdir -m
 
-	  The -m option used in concert with the -u option will use (`-u`) the parameters found in ``newoutdir`` and run the distance minimization (`-m`) on them. This will yield exactly the same results as the previous command.
+	  The -m option used in concert with the -u option will use (``-u``) the parameters found in ``newoutdir`` and run the distance minimization (``-m``) on them. This will yield exactly the same results as the previous command.
 
 The calculation should less than hour on a modern computer (9 min on 4-core Intel Core i7). If you are on a cluster, you can simply put the previous line in a submission script. p2ptrans is parallelized with OpenMP; it will automatically use all the cores in one node but cannot use multiple nodes.
 
