@@ -1,4 +1,5 @@
 from .config import *
+import math
 
 def scale(A):
     A.cell = float(A.scale)*A.cell
@@ -28,11 +29,8 @@ def lcm(x, y):
    return lcm
 
 def gcd(x, y):
-    """This function implements the Euclidian algorithm
-    to find G.C.D. of two numbers"""
-    while(y):
-        x, y = y, x % y
-    return x
+    """Find the greatest common divisor of two numbers"""
+    return math.gcd(x, y)
 
 def normal(A):
     return A/np.ones((3,1)).dot(la.norm(A, axis=0).reshape((1,np.shape(A)[1])))
