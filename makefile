@@ -13,6 +13,6 @@ fmodules: $(files)
 	$(COMP2) -c $(flags) -m p2ptrans.$@ $(files) only: $(functions)
 
 gfortran: $(files) source/lap.f90
-	$(COMP) -c -fPIC -fopenmp -Wall source/lap.f90 $(files)
+	$(COMP) -c -fPIC -fopenmp -Wall -O2 source/lap.f90 $(files)
 clean:
 	rm -f *.mod *.so
