@@ -14,7 +14,7 @@ def readOptions():
     parser.add_argument("-i","--interactive",dest="interactive",action="store_true", default=False, help="Enables interactive display")
     parser.add_argument("-d","--disp",dest="savedisplay",action="store_true", default=False, help="Saves figures")
     parser.add_argument("-p","--param", dest="filename", type=str, default='./p2p.in', help="Parameter file")
-    parser.add_argument("-c","--crystal", dest="crystfile", type=str, default='./cryst.in', help="Parameter file for crystllography analysis")
+    parser.add_argument("-c","--crystal", dest="crystfile", type=str, default='./cryst.in', help="Parameter file for crystallography analysis")
     parser.add_argument("-o","--outdir",dest="outdir", type=str, default='.', help="Output directory")
     parser.add_argument("-u","--use",dest="use", type=str, default=None, help="Use previously calculated data")
     parser.add_argument("-m","--minimize",dest="minimize",action="store_true", default=False, help="Force new optimization even if data is available")
@@ -110,7 +110,7 @@ def main():
         # Save the parameters for the use function
         pickle.dump((A, B, ncell, filecontent, switch, prim, vol), open(outdir+"/param.dat","wb"))
 
-    print("=>Reading crsytal analysis parameters<=") 
+    print("=>Reading crystal analysis parameters<=") 
     ccell1, ccell2, planehkl, diruvw = analysis.readCrystParam(crystfile)
     print()
           
@@ -139,7 +139,7 @@ def main():
         
     # Showing some of the steps
     if interactive or savedisplay:
-        print("Displaying Frames...")
+        print("Displaying frames...")
         for i in range(n_frames):
             display.make_fig(int(i*n_steps/(n_frames-1)), Tpos, color_array,
                      transStruc, atom_types, spgList, outdir, savedisplay, False)
