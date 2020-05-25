@@ -401,7 +401,7 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
         return None, None, None, None
 
     if minimize:
-        print("==>Ready to start optimmization<==")
+        print("==>Ready to start optimization<==")
 
         result = optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, outdir)
         pickle.dump(result, open(outdir+"/intoptimization.dat","wb"))
@@ -421,7 +421,7 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
     nat = np.shape(Apos)[1] // np.sum(atoms)
     
     if interactive or savedisplay:
-        print("Displaying Statistics...")
+        print("Displaying statistics...")
         if interactive:
             print("(Close the display window to continue)")
         displayStats(stats, n_iter, peak_thetas, ttrans, dmin, n_peaks, sym, interactive, savedisplay, outdir)
@@ -472,7 +472,7 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
 
         # Show and/or save interactive display of optimal result
         if savedisplay or interactive:
-            print("Displaying Optimal Connections...")
+            print("Displaying optimal connections...")
             if interactive:
                 print("(Close the display window to continue)")
             displayOptimalResult(Apos, Bpos[k,:,:], Bposst[k,:,:], bonds_total, bonds, class_list[k,:],
