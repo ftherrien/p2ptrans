@@ -215,7 +215,7 @@ def makeSphere(A, ncell, *atom_types, twoD=False):
         raise ValueError("The only optional argument must be atom_types")
 
 def uniqueclose(closest, tol):
-    """ For a 3xn matrix of coordinates returns an array of unique cooridnates and their
+    """ For a 3xn matrix of coordinates returns an array of unique coordinates and their
     index in the original matrix"""
     unique = []
     idx = []
@@ -466,10 +466,10 @@ def findMatching(A, B, ncell,
     and the transformation cell.
 
     Parameters: 
-    A,B (Structure): Crystal Structures in the Pylada format  
+    A,B (Structure): Crystal structures in the Pylada format  
 
-    ncell (int): Minimal number of unit cells in the set of point (It is automatically adjusted so that there is the 
-    same number of atoms in each sphere
+    ncell (int): Minimal number of unit cells in the set of point (automatically adjusted so that there is the 
+    same number of atoms in each sphere)
 
     Optional Parameters:
     fileA, fileB (str): Location of file associated with the structure (display purposes only)
@@ -554,8 +554,8 @@ def findMatching(A, B, ncell,
     initSpg = get_spacegroup(to_spglib(A), symprec=0.3, angle_tolerance=3.0)
     finalSpg = get_spacegroup(to_spglib(B), symprec=0.3, angle_tolerance=3.0)
             
-    print("Initial SpaceGroup in optimization:", initSpg)
-    print("Final SpaceGroup in optimization:", finalSpg)
+    print("Initial spacegroup in optimization:", initSpg)
+    print("Final spacegroup in optimization:", finalSpg)
 
     print("Number of %s (%s) cells in sphere:"%(A.name, fileA), mulA*ncell)
     print("Number of %s (%s) cells in sphere:"%(B.name, fileB), mulB*ncell)
@@ -612,7 +612,7 @@ def findMatching(A, B, ncell,
 
     # Show and/or save interactive display of optimal result
     if savedisplay or interactive:
-        print("Displaying Optimal Connections...")
+        print("Displaying optimal connections...")
         if interactive:
             print("(Close the display window to continue)")
         displayOptimalResult(Apos, Bpos, Bposst, disps_total, disps, class_list, vec_classes_estimate,
