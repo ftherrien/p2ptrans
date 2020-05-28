@@ -64,7 +64,7 @@ contains
          Bpos
 
     double precision, dimension(size(Apos,2)) :: &
-         P
+         P, Enorm
 
     double precision, dimension(3, size(Apos,2)) :: &
          E, E1
@@ -81,6 +81,8 @@ contains
     double precision, intent(in) :: &
          param ! Parameter of the potential
 
+    integer :: i
+    
     select case (pot)
     case ("LJ")
        E = Apos - free_trans(Bpos,mat,vec)
@@ -88,12 +90,27 @@ contains
        E = -E*spread(P,1,3)
     case ("Euclidean")
        E = Apos - free_trans(Bpos,mat,vec)
-       E = E / spread(sqrt(sum(E**2,1)),1,3)
+       Enorm = sqrt(sum(E**2,1))
+
+       do i=1,size(Apos,2)
+          if (Enorm(i) > 1.0d-12) then
+             E(:,i) = E(:,i) / Enorm(i)
+          endif
+       enddo
+    
     case ("E2D")
        E = Apos - free_trans(Bpos,mat,vec)
        E1 = 0
        E1(1:2,:) = E(1:2,:)
-       E = E1 / spread(sqrt(sum(E1**2,1)),1,3)
+
+       Enorm = sqrt(sum(E1**2,1))
+       
+       do i=1,size(Apos,2)
+          if (Enorm(i) > 1.0d-12) then
+             E(:,i) = E1(:,i) / Enorm(i)
+          endif
+       enddo
+
     end select
 
   end function derivative
