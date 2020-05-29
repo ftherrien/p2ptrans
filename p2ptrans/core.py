@@ -566,7 +566,7 @@ def findMatching(A, B, ncell,
         return None, None, None
     
     if minimize:
-        print("==>Ready to start optimmization<==")
+        print("==>Ready to start optimization<==")
 
         result = optimizationLoop(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir)
         pickle.dump(result, open(outdir+"/fastoptimization.dat","wb"))
