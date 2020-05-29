@@ -1,5 +1,5 @@
 from .config import *
-import math
+import numpy.gcd as np.gcd
 from itertools import product
 
 def scale(A):
@@ -31,7 +31,7 @@ def lcm(x, y):
 
 def gcd(x, y):
     """Find the greatest common divisor of two numbers"""
-    return math.gcd(x, y)
+    return np.gcd(x, y)
 
 def normal(A):
     return A/np.ones((3,1)).dot(la.norm(A, axis=0).reshape((1,np.shape(A)[1])))
