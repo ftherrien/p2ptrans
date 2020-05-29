@@ -71,11 +71,17 @@ def readOptions():
     surface = options.surface
     max_thickness = options.width
             
-    return fileA, fileB, planeA, planeB, ruleA, ruleB, ncell, n_iter, filename, interactive, savedisplay, outdir, use, minimize, test, n_iter, sym, vacuum, layers, surface, max_thickness
+    return fileA, fileB, planeA, planeB, ruleA, ruleB, ncell, n_iter, filename, interactive, savedisplay, outdir, use, minimize, test, sym, vacuum, layers, surface, max_thickness
 
-def main():
-
-    (fileA, fileB, planeA, planeB, ruleA, ruleB, ncell, n_iter, filename, interactive, savedisplay, outdir, use, minimize, test, n_iter, sym, vacuum, layers, surface, max_thickness) = readOptions()
+def main(fileA, fileB, planeA, planeB, ruleA, ruleB,
+         ncell=100, n_iter=1000, filename='./p2p.in', interactive=False, savedisplay=False, outdir='.', # os.getcwd()?
+         use=None, minimize=False, test=False, sym=1, vacuum=10, layers=1, surface=False, max_thickness=None):
+    
+    if (use == None) or (use == False):
+        use = False
+    else:
+        outdir = use
+        use = True
     
     # START
     print(r" ________    _______  ________   ")   
@@ -205,6 +211,6 @@ def main():
                 
     print("p2pint finished successfully")
 
-
-main()
+if __name__ == "__main__":
+    main(*readOptions())
 

@@ -50,10 +50,17 @@ def readOptions():
     
     return fileA, fileB, ncell, filename, interactive, savedisplay, outdir, use, switch, prim, anim, vol, minimize, test, crystfile, n_steps
 
-def main():
+def main(fileA, fileB,
+         ncell=300, filename='./p2p.in', interactive=False, savedisplay=False, outdir='.', # os.getcwd()?
+         use=None, switch=False, prim=True, anim=False, vol=False, minimize=False, test=False, crystfile='./cryst.in', n_steps=60):
 
-    (fileA, fileB, ncell, filename, interactive, savedisplay, outdir,
-     use, switch, prim, anim, vol, minimize, test, crystfile, n_steps) = readOptions()
+    if (use == None) or (use == False):
+        use = False
+    else:
+        outdir = use
+        use = True
+
+
 
     # START
     print(r" ________    _______  ________   ")   
@@ -156,4 +163,5 @@ def main():
         
     print("p2ptrans finished successfully")
 
-main()
+if __name__ == '__main__':
+    main(*readOptions())
