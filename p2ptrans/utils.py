@@ -36,7 +36,6 @@ def gcd(x, y):
         x, y = y, x % y
     return x
 
-
 def normal(A):
     return A/np.ones((3,1)).dot(la.norm(A, axis=0).reshape((1,np.shape(A)[1])))
  
