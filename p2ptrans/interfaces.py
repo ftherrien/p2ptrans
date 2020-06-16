@@ -22,6 +22,7 @@ def find_basis(dircart, ccell, tol=tol, maxi=10):
     """ Finds a new cell for the structure where the specified plane is in the z direction """
 
     vectors = [dircart*1000]
+    tmpz = dircart*1000
     inplane = []
     rangeijk = np.arange(-maxi,maxi+1)
     rangeijk = rangeijk[np.argsort(abs(rangeijk))]
@@ -35,9 +36,16 @@ def find_basis(dircart, ccell, tol=tol, maxi=10):
                     elif la.norm(np.cross(dircart, pos)) < tol: #Is it parallel to uvw?
                         if la.norm(pos) < la.norm(vectors[0]) and pos.dot(vectors[0]) > 0: # Is it shorter?
                             vectors[0] = pos
+                    else:
+                        if la.norm(pos) < la.norm(tmpz) and pos.dot(tmpz) > 0: # Is it shorter?
+                            tmpz = pos
                             
     if np.allclose(vectors[0], dircart*1000, 1e-12):
-        raise RuntimeError("Could not find lattice point in the specified direction:", dircart)
+        print("WARNING: Could not find lattice point in the specified z direction:", dircart)
+        vectors[0] = tmpz
+
+    if len(inplane) < 3:
+        raise RuntimeError("The termination plane specified could not be found with maxi = %d"%maxi)
     
     # Make an array
     inplane = np.array(inplane).T
@@ -68,24 +76,29 @@ def find_basis(dircart, ccell, tol=tol, maxi=10):
     
         cell3D[:,int(not idd)] = cell3D.dot(inplane_cell[:,np.argmin(abs(inplane_cell[int(not idd),:]))])
 
+    cell3D[:,2] = dircart
     cell3D = gruber(cell3D)
     
     for i in range(2):
-        if np.allclose(cell3D[:,i], vectors[0], atol=1e-12):
-            cell3D[:,i], cell3D[:,2] = -cell3D[:,2], deepcopy(cell3D[:,i])
+        if np.allclose(cell3D[:,i], dircart, atol=1e-12):
+            cell3D[:,i], cell3D[:,2] = -cell3D[:,2], vectors[0]
+            break
 
-        if np.allclose(cell3D[:,i], -vectors[0], atol=1e-12):
-            cell3D[:,i], cell3D[:,2] = deepcopy(cell3D[:,2]), -cell3D[:,i]
-
-    if np.allclose(cell3D[:,2], -vectors[0], atol=1e-12):
-        cell3D[:,2] = -cell3D[:,2]
+        if np.allclose(cell3D[:,i], -dircart, atol=1e-12):
+            cell3D[:,i], cell3D[:,2] = deepcopy(cell3D[:,2]), vectors[0]
+            break
+    else:
+        cell3D[:,2] = vectors[0]
             
     if la.det(cell3D) < 0:
         cell3D[:,0] = -cell3D[:,0]
         
     cell2D = np.array([[la.norm(cell3D[:,0]),0,0],
                        [cell3D[:,0].dot(cell3D[:,1])/la.norm(cell3D[:,0]),la.norm(np.cross(cell3D[:,0],cell3D[:,1]))/la.norm(cell3D[:,0]),0],
-                       [0,0,la.norm(cell3D[:,2])]]).T
+                       [cell3D[:,0].dot(cell3D[:,2])/la.norm(cell3D[:,0]),
+                        la.norm(cell3D[:,2])**2 - cell3D[:,0].dot(cell3D[:,2])**2/la.norm(cell3D[:,0])**2
+                        - la.det(cell3D)**2/la.norm(np.cross(cell3D[:,0],cell3D[:,1]))**2,
+                        la.det(cell3D)/la.norm(np.cross(cell3D[:,0],cell3D[:,1]))]]).T
     
     return cell2D, cell3D
 
@@ -272,7 +285,7 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, out
     origin = [None]*n_peaks
     
     for i in range(n_peaks): 
-        
+
         ttrans[i,:,3] = ttrans[i,:,3] - ttrans[i,:,:3].dot(centroidB) + centroidA
         
         print("Looking for periodic cell for peak %d..."%(i))        
@@ -364,7 +377,7 @@ def createPoscar(A, B, reconA, reconB, ttrans, dispStruc, outdir=".", layers=1, 
     for a in reconA:
         pos = a.pos + np.array([0,0,1])*(vacuum/2) - reconA.cell[2,2]
         interface.add_atom(*pos, a.type)
-    
+
     write.poscar(supercell(interface, interface.cell), vasp5=True, file=outdir + "/POSCAR_interface")
 
 

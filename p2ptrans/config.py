@@ -33,6 +33,6 @@ vac = 10
 PoscarDirName = "/TransPOSCARS"
 viewDirs = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 size = 3
-habit = False
+habit = None
 n_frames = 5
 

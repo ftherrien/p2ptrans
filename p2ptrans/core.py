@@ -9,6 +9,7 @@ from .format_spglib import from_spglib, to_spglib
 from .fmodules import tiling as t
 from .display import displayOptimalResult, makeGif, displayTransCell, make_anim, make_fig, printMatAndDir
 from .utils import lcm, find_uvw, normal, rotate, PCA, makeInitStruc
+from .analysis import findR, strainDirs
 
 def find_cell(class_list, positions, tol = 1e-5, frac_shell = 0.5, frac_correct = 0.95, max_count=1000, minvol = 1e-5):
     
@@ -325,7 +326,7 @@ def switchDispStruc(dispStruc, tmat, vec_classes):
         
     
 def produceTransition(n_steps, tmat, dispStruc, vec_classes, outdir,
-                      display):
+                      display, habit=habit):
 
     initStruc = makeInitStruc(dispStruc, vec_classes)
 
@@ -340,15 +341,18 @@ def produceTransition(n_steps, tmat, dispStruc, vec_classes, outdir,
     
     os.makedirs(outdir+PoscarDirName, exist_ok=True)
 
-    itmat = rotate(la.inv(tmat).dot(initStruc.cell), initStruc.cell).dot(la.inv(tmat))
-    
+    if habit is None:
+        itmat = rotate(la.inv(tmat).dot(initStruc.cell), initStruc.cell).dot(la.inv(tmat))
+    else:
+        _, itmat, _, _ = strainDirs(la.inv(tmat))
+        
+        
     spgList = []
     transStruc = [] 
     for i in range(n_steps+1):
-        if habit:
-            curMat = find_R_RU(curMat).dot(curMat)
-        else:
-            curMat = (itmat-np.eye(3))*i/n_steps + np.eye(3)
+        curMat = (itmat-np.eye(3))*i/n_steps + np.eye(3)
+        if habit is not None:
+            curMat = findR(curMat)[habit].dot(curMat)
         curStruc = Structure(curMat.dot(initStruc.cell))
         for j,a in enumerate(dispStruc):
             curDisp = vec_classes[int(a.type)]*i/n_steps
@@ -358,7 +362,7 @@ def produceTransition(n_steps, tmat, dispStruc, vec_classes, outdir,
         write.poscar(curStruc, vasp5=True, file=outdir+PoscarDirName+"/POSCAR_%03d"%i) # Write resulting structure in POSCAR
         spgList.append(get_spacegroup(to_spglib(curStruc), symprec=0.3, angle_tolerance=3.0))
         transStruc.append(curStruc)
-
+        
         if display:
             color_array.append([])
             Tpos.append([])

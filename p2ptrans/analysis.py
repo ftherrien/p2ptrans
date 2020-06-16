@@ -89,9 +89,11 @@ def findHabit(U, P, eigval):
 
 def findR(U, P=None, planeHab=None, ratio=None):
 
+    if np.all(U==np.eye(3)):   
+        return np.array([U,U])
+    
     if planeHab is None or ratio is None or P is None:
-        eigval, P = la.eig(U)
-        U = P.dot(np.diag(eigval)).dot(P.T)
+        eigval, U, P, Q = strainDirs(U)
         planeHab, ratio = findHabit(U, P, eigval)
     
     V = np.zeros((2,3,3))
@@ -99,11 +101,13 @@ def findR(U, P=None, planeHab=None, ratio=None):
     R = np.zeros((2,3,3))
     
     for i in range(2):
-        V[i,:,0] = ratio*P[:,0] + (1-2*i)*P[:,2]
-        V[i,:,1] = P[:,1]
-        V[i,:,2] = planeHab[:,i]/la.norm(planeHab[:,i]) 
-    
+        V[i,:,0] = ratio*P[:,0] - (1-2*i)*P[:,2]
+        V[i,:,0] = V[i,:,0]/la.norm(V[i,:,0])
+        V[i,:,1] = -(1-2*i)*P[:,1]
+        V[i,:,2] = planeHab[:,i]/la.norm(planeHab[:,i])
+        
         M[i,:,:2] = U.dot(V[i,:,:2])
+        M[i,:,:2] = M[i,:,:2]/la.norm(M[i,:,0])
         M[i,:,2] = np.cross(M[i,:,0], M[i,:,1])
         M[i,:,2] = M[i,:,2] / la.norm(M[i,:,2])
 
