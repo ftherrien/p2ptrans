@@ -187,9 +187,14 @@ def main():
                             for j, reconstructureB in  enumerate(mapB):
                                 
                                 print("Creating POSCARS for peak %d, bottom term. %d, top term %d"%(k, i, j))
-                    
+                                
+                                
                                 var_outdir = peak_outdir + "/var_%03d-%03d"%(i,j)
-                                os.makedirs(var_outdir, exist_ok=True)                        
+                                os.makedirs(var_outdir, exist_ok=True)
+
+                                if layers != 1 and surface:
+                                    layers = 1
+                                    print("Warning: You cannot change the number of layers when using the --surface-only option")
                                 
                                 createPoscar(A, B, reconstructureA, reconstructureB, ttrans[k,:,:],
                                              dispStruc[k], outdir=var_outdir,
