@@ -757,10 +757,15 @@ contains
          dist, &
          dist_prev, &
          dist_init, &
-         nat
+         nat, &
+         sum_pot, &
+         sum_grad
 
     integer :: &
-         j, i ! Iterator
+         j, i, k ! Iterator
+
+    double precision, parameter :: &
+         c = 0.001
 
     nat = dble(size(Apos,2))
 
@@ -775,14 +780,22 @@ contains
        j=j+1
        
        dist_prev = dist
-       dist = distance(Apos, Bpos, tmat, vec, pot, param)
+
+       sum_pot = 0.0d0
+       do k=1,size(Apos,2)
+          if (abs(Apos(3,k) - dot_product(tmat(3,:),Bpos(:,k)) - vec(3,1)) < param) then
+             sum_pot = sum_pot + c/(2**6 - 1)*(param**6/(Apos(3,k) - dot_product(tmat(3,:),Bpos(:,k)) - vec(3,1))**6 - 1.0)
+          endif
+       enddo
+       
+       dist = distance(Apos, Bpos, tmat, vec, pot, param) + sum_pot
 
        if (j==1) then
           dist_prev = dist + tol + 1.0d0
           dist_init = dist
        endif
 
-       ! print*, dist, dist_prev - dist, "FREE", j
+       ! print*, dist, vec(3,1), dist_prev - dist, "FREE", j
 
        E = derivative(Apos, Bpos, tmat, vec, pot, param)
 
@@ -795,7 +808,20 @@ contains
 
           do i=1,3
              if (idx(i)) then
-                vec(i,1) = vec(i,1)   + rate2 * dist / dist_init * sum(E(i,:))
+                if (i==3) then
+
+                   sum_grad = 0.0d0
+                   do k=1,size(Apos,2)
+                      if (abs(Apos(3,k) - dot_product(tmat(3,:),Bpos(:,k)) - vec(3,1)) < param) then
+                         sum_grad = sum_grad + 6*c/(2**6 -1)*param**6 / &
+                              (Apos(3,k) - dot_product(tmat(3,:), Bpos(:,k)) - vec(3,1))**7
+                      endif
+                   enddo
+                   
+                   vec(i,1) = vec(i,1) + rate2 * dist / dist_init * ( sum(E(i,:)) + sum_grad )
+                else
+                   vec(i,1) = vec(i,1) + rate2 * dist / dist_init * sum(E(i,:))
+                endif
              endif
           enddo
        endif
@@ -1440,12 +1466,17 @@ contains
          tmat_local, &
          tmat_local_reset
 
+    double precision, dimension(2,2) :: &
+         tt
+    
     double precision :: &
          dist_cur, &
          dist_cur_rot, &
          mul_vec, &
          diag, &
-         dt_tmat
+         dt_tmat, &
+         eig1, &
+         eig2
 
     double precision, allocatable, dimension(:) :: &
          dist_min
@@ -1522,10 +1553,10 @@ contains
           
           if (twodim) then
 
-             angles_local(1) = tmat_local(1,2)*2*pi ! Using tmat local as a radnom number
+             angles_local(1) = tmat_local(1,2)*2*pi ! Using tmat local as a rasdom number
              angles_local(2:3) = 0.0d0
 
-             tmat_local = (1.0d0 + 0.05d0 * tmat_local(1,1)) ** (1.0d0/2.0d0) * eye()
+             tmat_local = (1.0d0 + 0.1d0 * max_vol * (2 * tmat_local(1,1) - 1)) ** (1.0d0/2.0d0) * eye()
              tmat_local(:,3) = 0.0d0
              tmat_local(3,:) = 0.0d0
              tmat_local(3,3) = 1.0d0
@@ -1533,7 +1564,7 @@ contains
              tmat_local_reset = matmul(rot_mat(angles_local), tmat_local)
              
           else
-             tmat_local = max_vol * (tmat_local - 0.5d0)
+             tmat_local = (1.0d0 + max_vol) * (tmat_local - 0.5d0)
 
              dt_tmat = det(tmat_local,3)
 
@@ -1599,14 +1630,20 @@ contains
              
              dist_cur = distance(Apos_mapped, Bpos_opt, tmat_local, vec_local, pot, param)
              dist_cur_rot = distance(Apos_mapped, Bpos_opt, rot_mat(angles_local), vec_rot_local, pot, param)
-             
-             write(13,"(A, I4, A, I6, A, I6, A, F8.3, A, F8.3)") &
-                  "Opt dist found for thread", thread,", iteration", j,".",vl,":", &
-                  dist_cur, " ", dist_cur_rot
-             flush(13)
 
              if (twodim) then
-                if (abs(det(tmat_local,3) - 1.0d0) < max_vol) then
+                tt = matmul(transpose(tmat_local(1:2,1:2)), tmat_local(1:2,1:2))
+                eig1 = (tt(1,1)+tt(2,2))/2 + sqrt(((tt(1,1)-tt(2,2))/2)**2 +&
+                     tt(1,2)*tt(2,1))
+                eig2 = (tt(1,1)+tt(2,2))/2 - sqrt(((tt(1,1)-tt(2,2))/2)**2 +&
+                     tt(1,2)*tt(2,1))
+                if (abs(det(tmat_local,3) - 1.0d0) < max_vol .and. &
+                     abs(eig1 - 1) < max_vol .and. &
+                     abs(eig2 - 1) < max_vol) then
+                   write(13,"(A, I4, A, I6, A, I6, A, F8.3, A, F8.3)") &
+                        "Opt dist found for thread", thread,", iteration", j,".",vl,":", &
+                        dist_cur, " ", dist_cur_rot
+                   flush(13)
                    if (vl == 1 .or. dist_cur < stats(j,3)) then !TMP vec
                       stats(j,1) = angles_local(1)
                       stats(j,2) = det(tmat_local,3)
@@ -1623,8 +1660,15 @@ contains
                    endif
                 endif
              else
+
+                write(13,"(A, I4, A, I6, A, I6, A, F8.3, A, F8.3)") &
+                     "Opt dist found for thread", thread,", iteration", j,".",vl,":", &
+                     dist_cur, " ", dist_cur_rot
+                flush(13)
+                
                 if (dist_cur_rot + dist_cur < dist_min(thread)) then ! TMP TESTING
                    ! if (dist_cur < dist_min(thread)) then ! TMP TESTING
+                   
                    dist_min(thread) = dist_cur_rot + dist_cur
                    tmat_min(:,:,thread) = tmat_local
                    vec_min(:,thread) = vec_local
@@ -2203,7 +2247,7 @@ contains
     integer, intent(in), dimension(n_atoms) :: &
          atoms !Number of atoms of each type
 
-    double precision, intent(out) :: &
+    double precision, dimension(3), intent(out) :: &
          dmin
 
     double precision, intent(out), dimension(3) :: &
@@ -2218,7 +2262,8 @@ contains
          tol, &
          tol_class, &
          tol_std, &
-         max_vol
+         max_vol, &
+         dmin_half
 
     double precision, intent(out), dimension(3,3) :: &
          tmat ! Transformation matrix
@@ -2446,8 +2491,15 @@ contains
     Bpos_out_stretch(:,1:n_out) = Bpos_opt_stretch
     Apos_out(:,1:n_out) = Apos_mapped
 
-    dmin = distance(Apos_mapped, rBpos_opt,eye(),zeros,"Euclidean",0.0d0)
+    dmin(1) = distance(Apos_mapped, rBpos_opt,eye(),zeros,"Euclidean",0.0d0)
 
+    dmin_half = distance(Apos_mapped(:, 1:int(n_out/2)), rBpos_opt(:, 1:int(n_out/2)), eye(), zeros, "Euclidean", 0.0d0)
+       
+    dmin(2) = (dmin(1)/n_out - dmin_half/int(n_out/2))/(n_out**(1.0/4.0) - int(n_out/2)**(1.0/4.0))
+
+    dmin(3) = dmin(1)/n_out - dmin(1)*n_out**(1.0/4.0)
+       
+    
     ! ! Print the cost matrix
     ! mat = cost(Apos,Bpos,n)   
     ! write(13,"(10(F5.3,X))") mat
@@ -2528,7 +2580,7 @@ contains
     integer, intent(in), dimension(n_atoms) :: &
          atoms !Number of atoms of each type
 
-    double precision, intent(out), dimension(n_iter) :: &
+    double precision, intent(out), dimension(n_iter,3) :: &
          dmin
 
     double precision, intent(out), dimension(n_iter,3) :: &
@@ -2547,7 +2599,8 @@ contains
     double precision :: &
          tol, &
          tol_class, &
-         tol_std
+         tol_std, &
+         dmin_half
 
     double precision, dimension(n_iter) :: &
          dists, &
@@ -2850,6 +2903,12 @@ contains
 
        write(13,*) "/======== Classification ========\\"
 
+       center_vec = sum(free_trans(Bpos_opt,tmat,vec) - Apos_mapped,2) / n_out
+
+       vec(1:2) = vec(1:2) - center_vec(1:2)
+       
+       vec(3) = zdist
+       
        call classification(.true., Apos, Bpos, Apos_mapped, Bpos_opt, & ! Output
             tmat, vec, & ! Output
             classes_list, &
@@ -2860,27 +2919,25 @@ contains
             n_ana, n_out, &
             tol, tol_class, tol_std, &
             trim(pot), param)
-       
-       ! Reshift after classification
-       call analytical_gd_vec((/.true., .true., .true./), tmat, vec, Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
-            tol, pot, param)
 
+       center_vec = sum(free_trans(Bpos_opt,tmat,vec) - Apos_mapped,2) / n_out
+
+       vec(1:2) = vec(1:2) - center_vec(1:2)
+       
        if (trim(pot)=="LJ") then
           
-          do i=1,3
-
-          center_vec = sum(free_trans(Bpos_opt,tmat,vec) - Apos_mapped,2) / n_out
-
-          vec(1:2) = vec(1:2) - center_vec(1:2)
-             
           vec(3) = zdist
 
-          call analytical_gd_vec((/.true., .true., .true./), tmat, vec, Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
-            tol, pot, param)
-          
-          enddo
+          call analytical_gd_vec((/.true., .true., .true./), tmat, vec, &
+               Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
+               tol, pot, param)
+
+       else
+
+          vec(3) = vec(3) - center_vec(3)
           
        endif
+
 
        angles(1) = 0.0d0
        
@@ -2928,7 +2985,29 @@ contains
        Bpos_out_stretch(k,:,1:n_out) = Bpos_opt_stretch
        Apos_out(k,:,1:n_out) = Apos_mapped
 
-       dmin(k) = distance(Apos_mapped, Bpos_opt_stretch, eye(), zeros, trim(pot), param)
+       dmin(k,1) = distance(Apos_mapped, rBpos_opt, eye(), zeros, trim(pot), param)
+
+       select case (trim(pot))
+       case ("LJ")
+
+       dmin(k,2) = dmin(k,1) / n_out
+
+       dmin(k,3) = 0.0d0
+       
+       case("Euclidean")
+
+       call analytical_gd_rot(.true., angles, vec_rot, Apos_mapped(:, 1:int(n_out/2)), &
+            rBpos_opt(:, 1:int(n_out/2)), &
+            n_ana*1000, rate1, rate2, tol, pot, param)
+          
+       dmin_half = distance(Apos_mapped(:, 1:int(n_out/2)), rBpos_opt(:, 1:int(n_out/2)), &
+            rot_mat(angles), vec_rot, trim(pot), param)
+       
+       dmin(k,2) = (dmin(k,1)/n_out - dmin_half/int(n_out/2))/(n_out**(1.0/4.0) - int(n_out/2)**(1.0/4.0))
+
+       dmin(k,3) = dmin(k,1)/n_out - dmin(k,1)*n_out**(1.0/4.0)
+
+       end select
        
        ! ! Print the cost matrix
        ! mat = cost(Apos,Bpos,n)   

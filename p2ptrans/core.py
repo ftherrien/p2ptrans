@@ -590,7 +590,8 @@ def findMatching(A, B, ncell,
     print()
     print("Number of classes:", len(np.unique(class_list)))
     print("Number of mapped atoms:", n_map)
-    print("Total distance between structures:", dmin) 
+    print("Total distance between structures:", dmin[0],
+          "(%f N^(4/3) + %f N)"%(dmin[1],dmin[2])) 
     print("Volume stretching factor (det(T)):", la.det(tmat))
     print("Cell volume ratio (initial cell volume)/(final cell volume):", mulA * la.det(Acell)/(mulB * la.det(Bcell)))
 

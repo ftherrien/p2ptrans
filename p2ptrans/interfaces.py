@@ -266,13 +266,13 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, out
     
     ttrans = ttrans[:n_peaks,:,:]
     rtrans = rtrans[:n_peaks,:,:]
-    dmin = dmin[:n_peaks]
+    dmin = dmin[:n_peaks,:]
     
     foundcell = [None]*n_peaks
     origin = [None]*n_peaks
     
     for i in range(n_peaks): 
-
+        
         ttrans[i,:,3] = ttrans[i,:,3] - ttrans[i,:,:3].dot(centroidB) + centroidA
         
         print("Looking for periodic cell for peak %d..."%(i))        
@@ -364,8 +364,8 @@ def createPoscar(A, B, reconA, reconB, ttrans, dispStruc, outdir=".", layers=1, 
     for a in reconA:
         pos = a.pos + np.array([0,0,1])*(vacuum/2) - reconA.cell[2,2]
         interface.add_atom(*pos, a.type)
-
-    write.poscar(interface, vasp5=True, file=outdir + "/POSCAR_interface")
+    
+    write.poscar(supercell(interface, interface.cell), vasp5=True, file=outdir + "/POSCAR_interface")
 
 
 def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", interactive=False,
@@ -424,7 +424,7 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
         print("Displaying statistics...")
         if interactive:
             print("(Close the display window to continue)")
-        displayStats(stats, n_iter, peak_thetas, ttrans, dmin, n_peaks, sym, interactive, savedisplay, outdir)
+        displayStats(stats, n_iter, peak_thetas, ttrans, dmin[:,0], n_peaks, sym, interactive, savedisplay, outdir)
         print()
 
     dispStruc = [None]*n_peaks
@@ -437,21 +437,14 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
         if savedisplay:
             os.makedirs(outcur, exist_ok=True)
 
-        # Distance per area
-        if switched:
-            Area = n_map*la.det(B.cell[:2,:2])/len(B)
-        else:
-            Area = n_map*la.det(B.cell[:2,:2])*la.det(ttrans[k, :2, :2])/len(B)
-
-        dmin_abs = dmin[k]
-        dmin[k] = dmin[k] / Area
+        area = n_map/len(B)*la.det(B.cell[:2,:2])
             
         print()
         print("-------OPTIMIZATION RESULTS FOR PEAK %d--------"%k)
         print()
         print("Number of classes:", len(np.unique(class_list[k,:])))
         print("Number of mapped atoms:", n_map)
-        print("Total distance between structures:", dmin[k], "(", dmin_abs, ")")
+        print("Total distance between structures:", dmin[k,0], dmin[k,1], dmin[k,1]/area)
         print("Optimal angle between structures:", np.mod(peak_thetas[k]*180/np.pi,360/sym))
         print("Volume stretching factor (det(T)):", la.det(ttrans[k,:2,:2]))
         print("Cell volume ratio (initial cell volume)/(final cell volume):", mulA * la.det(Acell)/(mulB * la.det(Bcell)))
@@ -526,4 +519,4 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
             dispStruc[k], ttrans[k,:,:3], vec_classes[k] = switchDispStruc(dispStruc[k], ttrans[k,:,:3], vec_classes[k])
             ttrans[k,:,3] = -ttrans[k,:,:3].dot(ttrans[k,:,3])
                 
-    return ttrans, dispStruc, vec_classes, dmin.min()
+    return ttrans, dispStruc, vec_classes, dmin[:,1].min()/area
