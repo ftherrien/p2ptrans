@@ -862,8 +862,8 @@ contains
     do while (j < n_iter .and. abs(dist - dist_prev) > tol)
        j=j+1
 
-       tmat(1,1) = (ratio + tmat(1,2)*(tmat(2,1)*tmat(3,3)-tmat(3,1)*tmat(2,3)) + &
-            - tmat(1,3)*(tmat(2,1)*tmat(3,2)-tmat(2,2)*tmat(3,1))) &
+       tmat(1,1) = (ratio + tmat(1,2)*(tmat(2,1)*tmat(3,3)-tmat(3,1)*tmat(2,3)) - &
+            tmat(1,3)*(tmat(2,1)*tmat(3,2)-tmat(2,2)*tmat(3,1))) &
             / (tmat(2,2)*tmat(3,3) - tmat(3,2)*tmat(2,3))
 
        dist_prev = dist
@@ -1844,6 +1844,7 @@ contains
        atoms, n_atoms, rate1, rate2, &
        n_ana, n_out, &
        tol, tol_class, tol_std, &
+       init_class, &
        pot, param)
 
     logical, intent(in) :: &
@@ -1858,6 +1859,7 @@ contains
          rate1, &  ! Rate of the gradient descent for angles
          rate2, &     ! Rate of the gradient descent for displacement
          tol, tol_class, &
+         init_class, & ! Initial class separation criteria
          tol_std
 
     integer, intent(in):: &
@@ -1928,7 +1930,7 @@ contains
 
 
     center_vec = 0.0d0
-    tol_adjust = 1.0d0
+    tol_adjust = init_class
     std = 1.0d0
     classes_list = 0
     classes_list_prev = 1
@@ -2088,8 +2090,11 @@ contains
          tol, &
          tol_class, &
          tol_std, &
+         init_class, &
          max_vol, &
          dmin_half
+         init_class, &
+         max_vol
 
     double precision, intent(out), dimension(3,3) :: &
          tmat ! Transformation matrix
@@ -2148,9 +2153,11 @@ contains
          check, &
          savebest, &
          usebest, &
-         remap
+         remap, &
+         init_class
 
     ! Namelist default values
+    init_class = 1.0d0
     tol = 1.0d-4
     tol_std = tol*1.0d-3
     tol_class = 1.0d-3
@@ -2292,6 +2299,7 @@ contains
          atoms, n_atoms, rate1, rate2, &
          n_ana, n_out, &
          tol, tol_class, tol_std, &
+         init_class, &
          "Euclidean", 0.0d0)
 
     call analytical_gd_rot(.false., angles, vec_rot, Apos_mapped, Bpos_opt, &
@@ -2425,7 +2433,8 @@ contains
          tol, &
          tol_class, &
          tol_std, &
-         dmin_half
+         dmin_half, &
+         init_class
 
     double precision, dimension(n_iter) :: &
          dists, &
@@ -2523,11 +2532,13 @@ contains
          check, &
          vecrep, &
          zdist, &
-         min_prom
+         min_prom, &
+         init_class
 
     tol = 1.0d-6
     tol_std = tol*1.0d-3
     tol_class = 1.0d-3
+    init_class = 1.0d0
     rate1 = 1.0d2
     rate2 = 1.0d2
     fracA = 0.0d0
@@ -2742,6 +2753,7 @@ contains
             atoms, n_atoms, rate1, rate2, &
             n_ana, n_out, &
             tol, tol_class, tol_std, &
+            init_class, &
             trim(pot), param)
 
        center_vec = sum(free_trans(Bpos_opt,tmat,vec) - Apos_mapped,2) / n_out
