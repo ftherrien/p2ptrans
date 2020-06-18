@@ -635,22 +635,20 @@ contains
           vec_prev = vec
 
           do i=1,3
-             if (idx(i)) then
-                if (i==3) then
+            if (i==3) then
           
-                   sum_grad = 0.0d0
-                   do k=1,size(Apos,2)
-                      if (abs(Apos(3,k) - dot_product(tmat(3,:),Bpos(:,k)) - vec(3,1)) < param) then
-                         sum_grad = sum_grad + 6*c/(2**6 -1)*param**6 / &
-                              (Apos(3,k) - dot_product(tmat(3,:), Bpos(:,k)) - vec(3,1))**7
-                      endif
-                   enddo
-                   
-                   vec(i,1) = vec(i,1) + rate2 * dist / dist_init * ( sum(E(i,:)) + sum_grad )
-                else
-                   vec(i,1) = vec(i,1) + rate2 * dist / dist_init * sum(E(i,:))
-                endif
-             endif
+               sum_grad = 0.0d0
+               do k=1,size(Apos,2)
+                  if (abs(Apos(3,k) - dot_product(tmat(3,:),Bpos(:,k)) - vec(3,1)) < param) then
+                     sum_grad = sum_grad + 6*c/(2**6 -1)*param**6 / &
+                          (Apos(3,k) - dot_product(tmat(3,:), Bpos(:,k)) - vec(3,1))**7
+                  endif
+               enddo
+               
+               vec(i,1) = vec(i,1) + rate2 * dist / dist_init * ( sum(E(i,:)) + sum_grad )
+            else
+               vec(i,1) = vec(i,1) + rate2 * dist / dist_init * sum(E(i,:))
+            endif
           enddo
        endif
 
@@ -2093,8 +2091,6 @@ contains
          init_class, &
          max_vol, &
          dmin_half
-         init_class, &
-         max_vol
 
     double precision, intent(out), dimension(3,3) :: &
          tmat ! Transformation matrix
@@ -2764,7 +2760,7 @@ contains
           
           vec(3) = zdist
 
-          call analytical_gd_vec((/.true., .true., .true./), tmat, vec, &
+          call analytical_gd_vec(tmat, vec, &
                Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
             tol, pot, param)
 

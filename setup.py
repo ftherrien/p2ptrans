@@ -4,7 +4,7 @@ from numpy.distutils.core import setup, Extension
 mod = Extension(name='p2ptrans.fmodules', sources=['source/lap.f90', 'source/utils.f90', 'source/tiling.f90', 'source/potential.f90', 'source/transform.f90'], extra_f90_compile_args=["-fopenmp","-O3"], extra_link_args=['-lgomp'], f2py_options=["only:","munkres", "free_trans", "rot_mat", "center", "eye", "norm", "split", "det", "sort", "sphere", "circle", "distance", "derivative", "intoptimization", "fastoptimization", ":"])
 
 setup(name='p2ptrans',
-      version='1.2.0',
+      version='1.3.1',
       description='An algorithm to match crystal structures',
       url='https://github.com/ftherrien/p2ptrans',
       author='Felix Therrien',
