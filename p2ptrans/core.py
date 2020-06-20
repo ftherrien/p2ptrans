@@ -464,7 +464,7 @@ def findMatching(A, B, ncell,
                  interactive=False, savedisplay=False,
                  outdir='output',
                  switch= False, prim=True,
-                 vol=False, minimize=True, test= False, primtol=primtol):
+                 vol=False, minimize=False, test= False, primtol=primtol):
     """ 
     This function finds the best matching between two given structures and returns the transformation matrix
     and the transformation cell.

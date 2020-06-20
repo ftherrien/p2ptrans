@@ -757,7 +757,7 @@ contains
 
 
           E = Apos_class - free_trans(Bpos_class,tmat,vec)
-          E = E - matmul(reshape(sum(E,2),(/3,1/))/size(E,2), ones)
+          E = E - matmul(reshape(sum(E,2),(/3,1/)), ones)/size(E,2)
 
           tmat_grad = tmat_grad + rate1 * std_prev / std_init * matmul(E,transpose(Bpos_class))
           vec_grad = vec_grad + rate2 * std_prev / std_init * matmul(E,transpose(ones))

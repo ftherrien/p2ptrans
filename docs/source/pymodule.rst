@@ -20,6 +20,7 @@ vacuum.
    A, equivTermA = termSi[0]    
    B, equivTermB = termSiC[0]
 
-   ttrans, dispStruc, vec_classes = findMatchingInterfaces(A, B, 130, 1000) # Run the minimization algorithm with 130 cells and 1000*10 random initializations
+   ttrans, dispStruc, vec_classes, dmin = findMatchingInterfaces(A, B, 130, 1000) # Run the minimization algorithm with 130 cells and 1000*10 random initializations
    
-   createPoscar(A, B, equivTermA[0], equivTermB[0], ttrans[0,:,:], dispStruc[0], lay=3, vac=0) # Creates the interface POSCAR for the first variant of termination of A and B
+   createPoscar(A, B, equivTermA[0], equivTermB[0], ttrans[0,:,:], dispStruc[0], layers=3, vacuum=0) # Creates the interface POSCAR for the first variant of termination of A and B
+   

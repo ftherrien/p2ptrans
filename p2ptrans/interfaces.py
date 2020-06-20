@@ -142,7 +142,7 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
 
     idx = list(np.argsort(z))
 
-    if surface is "bottom":
+    if surface == "bottom":
         idx = idx[::-1]
         
     inplane = []
@@ -162,7 +162,7 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
                     idx.remove(i)
 
             if surface is not None:
-                if surface is "bottom":
+                if surface == "bottom":
                     inplane[-1] = inplane[-1][::-1]
                 break
             
@@ -193,8 +193,8 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
         for k,a in enumerate(A):
             pos = cell2D.dot(la.inv(cell3D)).dot(a.pos-A[ix[0]].pos)
             if (surface is None or
-                ((surface is "top" and pos[2] > 0 - tol) or
-                 (surface is "bottom" and pos[2] < tmpstruc[-1].pos[2] + tol))):
+                ((surface == "top" and pos[2] > 0 - tol) or
+                 (surface == "bottom" and pos[2] < tmpstruc[-1].pos[2] + tol))):
                 reconstructure[j].add_atom(*(into_cell(pos,reconstructure[j].cell)), a.type)
                 
         # Removes structures that are trivially the same
@@ -383,7 +383,7 @@ def createPoscar(A, B, reconA, reconB, ttrans, dispStruc, outdir=".", layers=1, 
 
 def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", interactive=False,
                            savedisplay=False, outdir='.',
-                           minimize=True, test=False):
+                           minimize=False, test=False):
 
     # Make sure the scale is 1 for both structures
     A = scale(A)
