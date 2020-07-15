@@ -1040,7 +1040,7 @@ contains
 
   subroutine gradient_descent_explore(twodim, angles, vec, Apos, Bpos, cell, icell, &
        fracA, fracB, atoms, n_atoms, n_iter, n_ana, n_conv, rate1, rate2, tol, zdist, &
-       pot, param)
+       pot, param, outdir)
     ! New Gradient Descent Random
 
     ! Randomly prepare the structures and then minimize the distance with respect to a rotation
@@ -1106,7 +1106,15 @@ contains
          pos
 
     character*(*), intent(in) :: &
-         pot
+         pot, &
+         outdir
+
+    character*200 :: &
+         cont_filename
+
+    logical :: &
+         file_exists
+    
     double precision, intent(in) :: &
          param
 
@@ -1129,7 +1137,7 @@ contains
     !$omp parallel default(private) shared(dist_min, &
     !$omp angles_min, vec_min, angles, vec) &
     !$omp firstprivate(zdist, pot, param, twodim, n_iter, mul_vec, cell, fracA, fracB, tol, &
-    !$omp icell, n_conv, n_ana, Apos, Bpos, rate1, rate2, atoms, n_atoms)
+    !$omp icell, n_conv, n_ana, Apos, Bpos, rate1, rate2, atoms, n_atoms, outdir)
 
     call init_random_seed()
 
@@ -1143,8 +1151,31 @@ contains
 
     thread = OMP_get_thread_num() + 1
 
-    dist_min(thread) = sum(sqrt(sum((Apos - Bpos)**2,1)))
+    write(cont_filename, "(A, A, I0, A)") outdir, "/continue_", thread, ".dat"
+    
+    inquire(file=trim(cont_filename), exist=file_exists)
+    
+    if (file_exists) then
+    
+       open(20+thread, file = trim(cont_filename), access="stream")
 
+       read(20+thread) angles_min(:,thread), vec_min(:,thread), dist_min(thread)
+
+       close(20+thread)
+  
+    else
+
+       angles_min(:,thread) = 0.0d0
+       vec_min(:,thread) = 0.0d0
+       dist_min(thread) = sum(sqrt(sum((Apos - Bpos)**2,1)))
+
+    endif
+    
+    open(20+thread, file=trim(cont_filename), status='replace', access="stream")
+
+    write(20+thread) angles_min(:,thread), vec_min(:,thread), dist_min(thread)
+    flush(20+thread)
+    
     !$omp do
     do j=1, n_iter
 
@@ -1201,10 +1232,15 @@ contains
           dist_min(thread) = dist_cur
           angles_min(:,thread) = angles_local
           vec_min(:,thread) = vec_local
+          write(20+thread, pos=1) angles_min(:,thread), vec_min(:,thread), dist_min(thread)
+          flush(20+thread)
        endif
 
     enddo
     !$omp end do
+
+    close(20+thread, status='delete')
+    
     !$omp barrier
     !$omp single
 
@@ -1364,8 +1400,7 @@ contains
 
     thread = OMP_get_thread_num() + 1
 
-    ! dist_min(thread) = sum(sqrt(sum((Apos - Bpos)**2,1)))
-    dist_min(thread) = 2*sum(sqrt(sum((Apos - Bpos)**2,1))) ! TMP TESTING
+    dist_min(thread) = 2*sum(sqrt(sum((Apos - Bpos)**2,1))) ! A large number
 
     !$omp do
     do j=1, n_iter
@@ -2243,7 +2278,7 @@ contains
 
              call gradient_descent_explore(.false., angles, vec, Apos, Bpos, Acell, iAcell, &
                   fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2, tol, &
-                  0.0d0, "Euclidean", 0.0d0)
+                  0.0d0, "Euclidean", 0.0d0, trim(outdir))
           endif
 
           tmat = rot_mat(angles)
@@ -2618,7 +2653,7 @@ contains
 
              call gradient_descent_explore(.true., angles, vec, Apos, Bpos, Acell, iAcell, &
                   fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2, tol, &
-                  zdist, trim(pot), param)
+                  zdist, trim(pot), param, trim(outdir))
 
              tmat = rot_mat(angles)
              

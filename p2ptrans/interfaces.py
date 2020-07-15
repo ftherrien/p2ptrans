@@ -227,8 +227,10 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
         for a in strucs[i]:
             a.type=a.type.split("-")[0]
         strucs[i] = reshift(strucs[i])
-                    
-    return list(zip(strucs, recMap))    
+
+    list3D = [cell3D.dot(la.inv(cell2D))]*len(strucs)
+        
+    return list(zip(strucs, recMap, list3D))    
 
 def reshift(struc):
     """Reshift the z axis to the last position in the matrix and makes it positive"""
@@ -383,7 +385,7 @@ def createPoscar(A, B, reconA, reconB, ttrans, dispStruc, outdir=".", layers=1, 
 
 def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", interactive=False,
                            savedisplay=False, outdir='.',
-                           minimize=False, test=False):
+                           minimize=False, test=False, A3D=np.eye(3), B3D=np.eye(3)):
 
     # Make sure the scale is 1 for both structures
     A = scale(A)
@@ -421,8 +423,8 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
         
     else:
         try:
-            print("==>Gathering optimization data from %s<=="%(outdir))
             result = pickle.load(open(outdir+"/intoptimization.dat","rb"))
+            print("==>Gathered optimization data from %s<=="%(outdir))
         except FileNotFoundError:
             result = optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, outdir)
             pickle.dump(result, open(outdir+"/intoptimization.dat","wb"))
@@ -512,10 +514,10 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
         print("Number of %s cells in IC:"%(B.name), abs(la.det(dispStruc[k].cell[:2,:2])/(la.det(ttrans[k,:,:3].dot(B.cell)[:2,:2]))))
         print()
         print("IC in %s coordinates:"%(B.name))
-        printMatAndDir(la.inv(ttrans[k,:,:3]).dot(dispStruc[k].cell), np.eye(3))
+        printMatAndDir(B3D.dot(la.inv(ttrans[k,:,:3]).dot(dispStruc[k].cell)), np.eye(3))
         print()
         print("IC in %s coordinates:"%(A.name))
-        printMatAndDir(dispStruc[k].cell, np.eye(3))
+        printMatAndDir(A3D.dot(dispStruc[k].cell), np.eye(3))
         print()    
 
         if interactive or savedisplay:

@@ -577,8 +577,8 @@ def findMatching(A, B, ncell,
         
     else:
         try:
-            print("==>Gathering optimization data from %s<=="%(outdir))
             result = pickle.load(open(outdir+"/fastoptimization.dat","rb"))
+            print("==>Gathered optimization data from %s<=="%(outdir))
         except FileNotFoundError:
             result = optimizationLoop(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir)
             pickle.dump(result, open(outdir+"/fastoptimization.dat","wb"))

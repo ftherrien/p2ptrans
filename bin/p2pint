@@ -159,8 +159,8 @@ def main():
             nameB = nameB.rsplit(".",1)[0].rsplit("/",1)[-1]
             file_outdir = outdir + "/%s-%s"%(nameA, nameB)
             os.makedirs(file_outdir, exist_ok=True)
-            for k, (A, mapA) in enumerate(termsA):
-                for l, (B, mapB) in enumerate(termsB):
+            for k, (A, mapA, A3D) in enumerate(termsA):
+                for l, (B, mapB, B3D) in enumerate(termsB):
                     term_outdir = file_outdir + "/term_%03d-%03d"%(k,l)
                     os.makedirs(term_outdir, exist_ok=True)
                     ttrans, dispStruc, vec_classes, dmin = findMatchingInterfaces(A, B, ncell, n_iter,
@@ -168,7 +168,8 @@ def main():
                                                                                   interactive=interactive,
                                                                                   savedisplay=savedisplay,
                                                                                   outdir=term_outdir,
-                                                                                  minimize=minimize, test=test)
+                                                                                  minimize=minimize, test=test,
+                                                                                  A3D=A3D, B3D=B3D)
                     dists.append(dmin)
                     filedists.append(term_outdir)
                     
