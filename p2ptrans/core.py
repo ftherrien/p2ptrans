@@ -358,7 +358,7 @@ def produceTransition(n_steps, tmat, dispStruc, vec_classes, outdir,
             curDisp = vec_classes[int(a.type)]*i/n_steps
             curPos = curMat.dot((initStruc[j].pos - curDisp).reshape((3,1)))
             curStruc.add_atom(*(curPos.T.tolist()[0]),initStruc[j].type)
-            curStruc.name = '{:.0%} {}, {:.0%} {}'.format(i/n_steps, a_name, 1 - i/n_steps, b_name)
+            curStruc.name = '{:.0%} {}, {:.0%} {}'.format(1 - i/n_steps, a_name, i/n_steps, b_name)
             # curStruc = supercell(curStruc, curStruc.cell)
         write.poscar(curStruc, vasp5=True, file=outdir+PoscarDirName+"/POSCAR_%03d"%i) # Write resulting structure in POSCAR
         spgList.append(get_spacegroup(to_spglib(curStruc), symprec=0.3, angle_tolerance=3.0))
