@@ -326,7 +326,7 @@ def switchDispStruc(dispStruc, tmat, vec_classes):
         
     
 def produceTransition(n_steps, tmat, dispStruc, vec_classes, outdir,
-                      display, habit=habit, a_name='A', b_name='B'):
+                      display, habit=habit, a_name='Initial', b_name='Final'):
 
     initStruc = makeInitStruc(dispStruc, vec_classes)
 
