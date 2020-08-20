@@ -136,7 +136,8 @@ def main():
         
     print("=>Producing the steps along the transition<=")
     result = produceTransition(n_steps, tmat, dispStruc, vec_classes,
-                               outdir, anim or savedisplay or interactive)
+                               outdir, anim or savedisplay or interactive,
+                               a_name=A.name, b_name=B.name)
     transStruc, spgList, Tpos, color_array, atom_types = result
     
     print("Spacegroups along the transition:")
