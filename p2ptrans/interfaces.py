@@ -92,12 +92,13 @@ def find_basis(dircart, ccell, tol=tol, maxi=10):
             
     if la.det(cell3D) < 0:
         cell3D[:,0] = -cell3D[:,0]
+
+    vtmp = cell3D[:,1] - cell3D[:,0].dot(cell3D[:,1])*cell3D[:,0] / la.norm(cell3D[:,0])**2
         
     cell2D = np.array([[la.norm(cell3D[:,0]),0,0],
                        [cell3D[:,0].dot(cell3D[:,1])/la.norm(cell3D[:,0]),la.norm(np.cross(cell3D[:,0],cell3D[:,1]))/la.norm(cell3D[:,0]),0],
                        [cell3D[:,0].dot(cell3D[:,2])/la.norm(cell3D[:,0]),
-                        la.norm(cell3D[:,2])**2 - cell3D[:,0].dot(cell3D[:,2])**2/la.norm(cell3D[:,0])**2
-                        - la.det(cell3D)**2/la.norm(np.cross(cell3D[:,0],cell3D[:,1]))**2,
+                        cell3D[:,2].dot(vtmp)/la.norm(vtmp),
                         la.det(cell3D)/la.norm(np.cross(cell3D[:,0],cell3D[:,1]))]]).T
     
     return cell2D, cell3D
@@ -121,7 +122,7 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
                 rule[key].append(v)
                 
     ruleset = set([a for b in list(rule.values()) for a in b]) # Set of atoms named in the rule
-    
+
     A = scale(A)
     
     if ccell is None:
@@ -135,9 +136,9 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
         A = primitive(A, primtol) # Find the primitive cell
     
     cell2D, cell3D = find_basis(dircart, A.cell, tol=tol, maxi=maxi) #Create a new cell with dircart as z
-
+    
     A = supercell(A, cell3D) # Reorganize the atoms in the new cell 
-
+    
     z = [dircart.dot(a.pos) for a in A]
 
     idx = list(np.argsort(z))
@@ -183,7 +184,7 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
     for j,ix in enumerate(inplane):
 
         tmpstruc = Structure(cell2D)
-        reconstructure[j] = deepcopy(tmpstruc)
+        reconstructure[j] = Structure(cell2D)
         for t in find_type(A[ix[0]], rule):
             tmpstruc.add_atom(0,0,0,t)
         for i in ix[1:]:
@@ -196,6 +197,7 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
                 ((surface == "top" and pos[2] > 0 - tol) or
                  (surface == "bottom" and pos[2] < tmpstruc[-1].pos[2] + tol))):
                 reconstructure[j].add_atom(*(into_cell(pos,reconstructure[j].cell)), a.type)
+                
                 
         # Removes structures that are trivially the same
         for i, s in enumerate(strucs):
@@ -220,7 +222,6 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
             strucs.append(tmpstruc)
 
             recMap.append([reconstructure[j]])
-
             
     for i in range(len(strucs)):
         strucs[i] = primitive(strucs[i], primtol)
@@ -300,6 +301,7 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, out
         if foundcell[i] is not None:
             print("Found cell!")
             tmpcell = np.eye(3)
+            tmpcell[:,2] = A.cell[:,2] + B.cell[:,2]
             tmpcell[:2,:2] = foundcell[i]
             foundcell[i] = deepcopy(tmpcell) 
         else:
@@ -323,9 +325,9 @@ def createPoscar(A, B, reconA, reconB, ttrans, dispStruc, outdir=".", layers=1, 
     for b in reconB:
         b.pos = ttrans[:,:3].dot(b.pos) + shift
 
-    if la.det(A.cell) <  la.det(reconA.cell):
+    if la.det(A.cell[:2,:2]) <  la.det(reconA.cell[:2,:2]):
         dispA = deepcopy(dispStruc.cell)
-        dispA[2,2] = A.cell[2,2]
+        dispA[:,2] = A.cell[:,2]
         SdA = la.inv(A.cell).dot(dispA)
         SrA = la.inv(A.cell).dot(reconA.cell)
     
@@ -334,9 +336,9 @@ def createPoscar(A, B, reconA, reconB, ttrans, dispStruc, outdir=".", layers=1, 
     else:
         SA = np.eye(3)
 
-    if la.det(B.cell) <  la.det(reconB.cell):
+    if la.det(B.cell[:2,:2]) <  la.det(reconB.cell[:2,:2]):
         dispB = deepcopy(dispStruc.cell)
-        dispB[2,2] = B.cell[2,2]
+        dispB[:,2] = B.cell[:,2]
         SdB = la.inv(ttrans[:,:3].dot(B.cell)).dot(dispB)
         SrB = la.inv(ttrans[:,:3].dot(B.cell)).dot(reconB.cell)
     
@@ -373,11 +375,11 @@ def createPoscar(A, B, reconA, reconB, ttrans, dispStruc, outdir=".", layers=1, 
     interface = Structure(newA)
     interface.cell[2,2] = reconB.cell[2,2] - reconA.cell[2,2] + ttrans[2,3] - max_thickness + vacuum
     for b in reconB:
-        pos = b.pos + np.array([0,0,1])*(ttrans[2,3] - max_thickness + vacuum/2) - reconA.cell[2,2]
+        pos = b.pos + np.array([0,0,1])*(ttrans[2,3] - max_thickness + vacuum/2 - reconA.cell[2,2])
         interface.add_atom(*pos, b.type)
 
     for a in reconA:
-        pos = a.pos + np.array([0,0,1])*(vacuum/2) - reconA.cell[2,2]
+        pos = a.pos + np.array([0,0,1])*(vacuum/2 - reconA.cell[2,2])
         interface.add_atom(*pos, a.type)
 
     write.poscar(supercell(interface, interface.cell), vasp5=True, file=outdir + "/POSCAR_interface")
@@ -404,7 +406,7 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
 
     switched = False
     if abs(mulA*la.det(Acell)) > abs(mulB*la.det(Bcell)):
-        A, mulA, Acell, B, mulB, Bcell = B, mulB, Bcell, A, mulA, Acell
+        A, mulA, Acell, A3D, B, mulB, Bcell, B3D = B, mulB, Bcell, B3D, A, mulA, Acell, A3D
         switched = True
 
     print("Number of %s cells in disk:"%(A.name), mulA*ncell)

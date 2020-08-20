@@ -48,6 +48,7 @@ def readOptions():
     parser.add_argument("-l","--layers", dest="layers", type=int, default=1, help="Number of layers in the interface structure")
     parser.add_argument("-v","--vacuum", dest="vacuum", type=float, default=10, help="Thickness of vaccum")
     parser.add_argument("-w","--width", dest="width", type=float, default=None, help="Maximum width of corregated surface to optimize")
+    parser.add_argument("--version", dest="version", action="store_true", default=False, help="Show installed version of p2p")
 
     options = parser.parse_args()
     fileA, planeA, ruleA = readRule(options.A)
@@ -70,13 +71,19 @@ def readOptions():
     layers = options.layers
     surface = options.surface
     max_thickness = options.width
-            
-    return fileA, fileB, planeA, planeB, ruleA, ruleB, ncell, n_iter, filename, interactive, savedisplay, outdir, use, minimize, test, n_iter, sym, vacuum, layers, surface, max_thickness
+    showversion = options.version
+    
+    return fileA, fileB, planeA, planeB, ruleA, ruleB, ncell, n_iter, filename, interactive, savedisplay, outdir, use, minimize, test, n_iter, sym, vacuum, layers, surface, max_thickness, showversion
 
 def main():
 
-    (fileA, fileB, planeA, planeB, ruleA, ruleB, ncell, n_iter, filename, interactive, savedisplay, outdir, use, minimize, test, n_iter, sym, vacuum, layers, surface, max_thickness) = readOptions()
-    
+    (fileA, fileB, planeA, planeB, ruleA, ruleB, ncell, n_iter, filename, interactive, savedisplay, outdir, use, minimize, test, n_iter, sym, vacuum, layers, surface, max_thickness, showversion) = readOptions()
+
+    if showversion:
+        from p2ptrans import __version__
+        print(__version__)
+        return
+        
     # START
     print(" ________    _______  ________   ")   
     print("|\\   __  \\  /  ___  \\|\\   __  \\  ")

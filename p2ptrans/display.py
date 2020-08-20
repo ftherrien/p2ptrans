@@ -61,7 +61,7 @@ def displayStats(stats, n_iter, peak_thetas, ttrans, dmin, n_peaks, sym, interac
     for i in range(n_iter-size):
         meanrun[i] = np.mean(dists[i:i+size])
             
-    ax[1].plot(angles[size//2:-size//2],meanrun, 'gray')
+    ax[1].plot(angles[size//2:len(angles)-size//2],meanrun, 'gray')
 
     for i in range(n_peaks):
         ax[1].scatter(np.mod(180*peak_thetas[i]/np.pi,360/sym), dmin[i], marker="X", c="red")
