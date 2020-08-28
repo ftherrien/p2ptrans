@@ -211,16 +211,4 @@ The calculation should take a couple of hours on a modern computer. If you are o
 	  This will tell you how many initial random steps have completed, by default p2ptrans will do 1000 initial random steps.
 
 **At the end of this calculation you should obtain the result presented in the article.**
-
-Crystallography
-^^^^^^^^^^^^^^^
-
-Coming soon!
-
-
-Fine-tuning the optimization
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Coming soon!
-
    

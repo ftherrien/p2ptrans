@@ -115,7 +115,7 @@ def findR(U, P=None, planeHab=None, ratio=None):
         
     return R
 
-def crystallography(tmat, A, B, ccellA, ccellB, planehkl, diruvw, fileA="input 1", fileB="input 2", ftf=True):
+def crystallography(tmat, A, B, ccellA=np.eye(3), ccellB=np.eye(3), planehkl=[1,0,0], diruvw=[1,0,0], fileA="input 1", fileB="input 2", ftf=True):
 
     """ This function does the crystallographic analysis using the deformation matrix tmat. It displays 
     strain directions, habit plane and OR given that tmat.dot(TC^(A)) = TC^(B). If you are using the result

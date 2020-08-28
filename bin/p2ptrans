@@ -8,21 +8,21 @@ from p2ptrans import *
 def readOptions():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-I","--initial",dest="A",type=str, default='./POSCAR_A', help="Initial Structure")
-    parser.add_argument("-F","--final",dest="B",type=str, default='./POSCAR_B', help="Final Structure")
-    parser.add_argument("-n","--ncell",dest="ncell",type=int, default=300, help="Number of cells to tile")
-    parser.add_argument("-i","--interactive",dest="interactive",action="store_true", default=False, help="Enables interactive display")
-    parser.add_argument("-d","--disp",dest="savedisplay",action="store_true", default=False, help="Saves figures")
-    parser.add_argument("-p","--param", dest="filename", type=str, default='./p2p.in', help="Parameter file")
-    parser.add_argument("-c","--crystal", dest="crystfile", type=str, default='./cryst.in', help="Parameter file for crystallography analysis")
+    parser.add_argument("-I","--initial",dest="A",type=str, default='./POSCAR_A', help="Initial Structure. It must be a POSCAR")
+    parser.add_argument("-F","--final",dest="B",type=str, default='./POSCAR_B', help="Final Structure. It must be a POSCAR")
+    parser.add_argument("-n","--ncell",dest="ncell",type=int, default=300, help="Minimum number of cells to tile")
+    parser.add_argument("-i","--interactive",dest="interactive",action="store_true", default=False, help="Enable interactive display")
+    parser.add_argument("-d","--disp",dest="savedisplay",action="store_true", default=False, help="Save figures")
+    parser.add_argument("-p","--param", dest="filename", type=str, default='./p2p.in', help="Name of the parameter file")
+    parser.add_argument("-c","--crystal", dest="crystfile", type=str, default='./cryst.in', help="Name of the parameter file for crystallography analysis")
     parser.add_argument("-o","--outdir",dest="outdir", type=str, default='.', help="Output directory")
-    parser.add_argument("-u","--use",dest="use", type=str, default=None, help="Use previously calculated data")
+    parser.add_argument("-u","--use",dest="use", type=str, default=None, help="Use previously calculated data in USEDIR")
     parser.add_argument("-m","--minimize",dest="minimize",action="store_true", default=False, help="Force new optimization even if data is available")
-    parser.add_argument("-s","--switch",dest="switch",action="store_true", default=False, help="Map the larger cell on the smaller cell")
-    parser.add_argument("-r","--noprim",dest="prim",action="store_false", default=True, help="Finds the primitive cell at the beginning") #TMP
-    parser.add_argument("-a","--anim",dest="anim",action="store_true", default=False, help="Produce the animation") #TMP
+    parser.add_argument("-s","--switch",dest="switch",action="store_true", default=False, help="Map the larger cell on the smaller cell instead of the opposite")
+    parser.add_argument("-r","--noprim",dest="prim",action="store_false", default=True, help="Do not try to find the primitive cell of the input structures")
+    parser.add_argument("-a","--anim",dest="anim",action="store_true", default=False, help="Produce an animation of the transition")
     parser.add_argument("-v","--vol",dest="vol",action="store_true", default=False, help="Make the two (stochiometric) cells equal in volume")
-    parser.add_argument("-t","--test",dest="test",action="store_true", default=False, help="Tests the input file and prepares the run, you can continue this run with the -u [directory] -r option")
+    parser.add_argument("-t","--test",dest="test",action="store_true", default=False, help="Test the input file and prepare the run. You can continue this run with the -u USEDIR option")
     parser.add_argument("-f","--frames",dest="n_steps",type=int,default=60, help="Number of intermediate structures to create")
     parser.add_argument("--version", dest="version", action="store_true", default=False, help="Show installed version of p2p")
 

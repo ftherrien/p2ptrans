@@ -29,6 +29,13 @@ On certain systems, the pylada installation fails with ``error: ‘v’ does not
 
 .. toctree::
    :maxdepth: 1
+   :caption: Documentation
+
+   p2ptrans
+   p2pint
+
+.. toctree::
+   :maxdepth: 1
    :caption: Tutorials
 
    martensite

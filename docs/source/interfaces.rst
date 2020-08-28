@@ -2,7 +2,7 @@ Interfaces
 ==========
 
 This tutorial will show how to obtain the results presented in this paper: `Therrien, Félix, Peter Graf, and Vladan Stevanović. "Matching crystal structures atom-to-atom." The Journal of Chemical Physics 152.7 (2020): 074106.
-<https://aip.scitation.org/doi/abs/10.1063/1.5131527>`_.
+<https://aip.scitation.org/doi/abs/10.1063/1.5131527>`_
 
 This assumes that you have installed p2ptrans (see :ref:`install`).
 
@@ -76,7 +76,7 @@ Now that we have the bottom (substrate) and top structures, we need to specify t
 
    p2pint -T POSCAR_Si [1,1,0] 1 Si -B POSCAR_SiC [0,0,1] 1 Si
 
-Here we defined Si as the top structure (``-T``) and its corresponding h,k,l as (110). We defined SiC as the bottom structure (substrate) (``-B``) with the (001) interfacial plane. The rest of the command determines the bonding rule we set it as: ``1 Si``for both the top and the bottom which means "Si is part of the 1st type of bond". This will associate, and therefore, bond the Si atoms in both structures. To bond carbon with silicon instead, the command would have been:
+Here we defined Si as the top structure (``-T``) and its corresponding h,k,l as (110). We defined SiC as the bottom structure (substrate) (``-B``) with the (001) interfacial plane. The rest of the command determines the bonding rule we set it as: ``1 Si`` for both the top and the bottom which means "Si is part of the 1st type of bond". This will associate, and therefore, bond the Si atoms in both structures. To bond carbon with silicon instead, the command would have been:
 
 .. code-block:: console
 
