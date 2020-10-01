@@ -2360,9 +2360,9 @@ contains
 
     dmin_half = distance(Apos_mapped(:, 1:int(n_out/2)), rBpos_opt(:, 1:int(n_out/2)), eye(), zeros, "Euclidean", 0.0d0)
        
-    dmin(2) = (dmin(1)/n_out - dmin_half/int(n_out/2))/(n_out**(1.0/4.0) - int(n_out/2)**(1.0/4.0))
+    dmin(2) = (dmin(1)/n_out - dmin_half/int(n_out/2))/(n_out**(1.0/3.0) - int(n_out/2)**(1.0/3.0))
 
-    dmin(3) = dmin(1)/n_out - dmin(1)*n_out**(1.0/4.0)
+    dmin(3) = dmin(1)/n_out - dmin(2)*n_out**(1.0/3.0)
 
     ! ! Print the cost matrix
     ! mat = cost(Apos,Bpos,n)   

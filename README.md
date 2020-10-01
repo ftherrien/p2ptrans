@@ -6,7 +6,7 @@ p2ptrans allows you to find the best matching between two crystal structures.
 
 ## Latest Updates
 
-Current version: 1.3.4 (8.20.2020)
+Current version: 1.3.5 (10.01.2020)
 
 **8.28.2020**: More detailed documentation is now available for [p2ptrans](https://p2ptrans.readthedocs.io/en/latest/p2ptrans.html) and [p2pint](https://p2ptrans.readthedocs.io/en/latest/p2pint.html).  
 **4.20.2020**: Documentation is available for Interface Matching and for using p2ptrans as a python module  
