@@ -27,11 +27,9 @@ vacuum.
 Script Example for Transformations
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-This script was used to create a transforming martensite plate sandwiched between two austenite slabs for figure 3 of `Therrien and Vladan Stevanović. "Minimization of atomic displacements as a guiding principle of the martensitic phase transformation", Physical Review Letters (Accepted) <https://arxiv.org/abs/1912.11915>`_.
+This script was used to create a transforming martensite plate sandwiched between two austenite slabs for figure 3 of `Therrien and Vladan Stevanović. "Minimization of atomic displacements as a guiding principle of the martensitic phase transformation", Physical Review Letters 125, 125502, (2020) <https://link.aps.org/doi/10.1103/PhysRevLett.125.125502>`_.
 
 .. code-block:: python
-
-   from p2ptrans.interfaces import read, readSurface, findMatchingInterfaces, createPoscar
 
    import p2ptrans as p2p
    import numpy as np
@@ -50,7 +48,7 @@ This script was used to create a transforming martensite plate sandwiched betwee
 
    # Find best matching between A and B (from A to B)
    # Use minimize=False to avoid reoptimizing if there is already a result in "opt_dir"
-   tmat, dispStruc, vec_classes = p2p.findMatching(A,B, 600, outdir="opt_dir", minimize=False)
+   tmat, dispStruc, vec_classes, dmin = p2p.findMatching(A,B, 600, outdir="opt_dir", minimize=False)
 
    # Find the habit plane (planeHab) using the crystallography function
    # tmat transforms B into A, so we use la.inv(tmat) to get strain directions in coordinates of A

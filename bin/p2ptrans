@@ -121,7 +121,7 @@ def main():
     ccell1, ccell2, planehkl, diruvw = analysis.readCrystParam(crystfile)
     print()
           
-    tmat, dispStruc, vec_classes = findMatching(A, B, ncell, fileA=fileA, fileB=fileB,
+    tmat, dispStruc, vec_classes, _ = findMatching(A, B, ncell, fileA=fileA, fileB=fileB,
                                                 ccellA=ccell1, ccellB=ccell2,
                                                 filename=filename, interactive=interactive,
                                                 savedisplay=savedisplay, outdir=outdir,

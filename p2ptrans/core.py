@@ -467,14 +467,12 @@ def findMatching(A, B, ncell,
                  switch= False, prim=True,
                  vol=False, minimize=False, test= False, primtol=primtol):
     """ 
-    This function finds the best matching between two given structures and returns the transformation matrix
-    and the transformation cell.
+    This function finds the best matching between two given structures and returns the transformation matrix and the transformation cell.
 
     Parameters: 
     A,B (Structure): Crystal structures in the Pylada format  
 
-    ncell (int): Minimal number of unit cells in the set of point (automatically adjusted so that there is the 
-    same number of atoms in each sphere)
+    ncell (int): Minimal number of unit cells in the set of point (automatically adjusted so that there is the same number of atoms in each sphere)
 
     Optional Parameters:
     fileA, fileB (str): Location of file associated with the structure (display purposes only)
@@ -489,9 +487,7 @@ def findMatching(A, B, ncell,
 
     outdir (str): Location of the output directory
 
-    switch (bool): Switch the direction of the transformation during the minimization.
-    By default the minimization will be made from the structure with the lowest density to the structure
-    with the highest desnity.
+    switch (bool): Switch the direction of the transformation during the minimization. By default the minimization will be done from the structure with the lowest density to the structure with the highest desnity.
 
     prim (bool): Make the structures primitive before creating the spheres
 
@@ -507,6 +503,8 @@ def findMatching(A, B, ncell,
     (Structure): Transformtation cell. a.type indicates the types of displacement, a.atom indicates the atom
     
     (list): List of 3D vectors corresponding to different types of displacements
+
+    (np.array(3)): Final distance (dmin), Estimate of G_1, estimate of K_1
     """
     
     os.makedirs(outdir, exist_ok=True)
@@ -568,7 +566,7 @@ def findMatching(A, B, ncell,
     print()
 
     if test:
-        return None, None, None
+        return None, None, None, None
     
     if minimize:
         print("==>Ready to start optimization<==")
@@ -672,4 +670,4 @@ def findMatching(A, B, ncell,
     if switched:
         dispStruc, tmat, vec_classes = switchDispStruc(dispStruc, tmat, vec_classes)
         
-    return tmat, dispStruc, vec_classes
+    return tmat, dispStruc, vec_classes, dmin

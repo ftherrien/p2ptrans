@@ -331,7 +331,6 @@ contains
     M = rot_mat(angles)
     dist = 0.0d0
     dist_prev = tol + 1.0d0
-    dist_2prev = dist_prev
     angles_prev = angles
     vec_prev = vec
 
@@ -2125,7 +2124,8 @@ contains
          tol_std, &
          init_class, &
          max_vol, &
-         dmin_half
+         dmin_half, &
+         t
 
     double precision, intent(out), dimension(3,3) :: &
          tmat ! Transformation matrix
@@ -2225,8 +2225,9 @@ contains
     n_frac = int(fracB*size(Apos,2)/sum(atoms))
     n_A = int(fracA*size(Apos,2)/sum(atoms))
     n_out = n_frac * sum(atoms)
-    Apos_out = 0
-    Bpos_out = 0
+    Apos_out = 0.0d0
+    Bpos_out = 0.0d0
+    angles = 0.0d0
 
     allocate(Apos_mapped(3,n_out), Bpos_opt(3,n_out), &
          Apos_mapped_prev(3,n_out), &
@@ -2279,9 +2280,10 @@ contains
              call gradient_descent_explore(.false., angles, vec, Apos, Bpos, Acell, iAcell, &
                   fracA, fracB, atoms,n_atoms,n_iter, n_ana, n_conv, rate1, rate2, tol, &
                   0.0d0, "Euclidean", 0.0d0, trim(outdir))
-          endif
 
-          tmat = rot_mat(angles)
+             tmat = rot_mat(angles)
+             
+          endif
           
           if (trim(savebest)/="") then
              open(12, file = trim(savebest))
@@ -2333,9 +2335,18 @@ contains
          init_class, &
          "Euclidean", 0.0d0)
 
+    vec_rot = 0.0d0
+
+    ! This is only to get closer since angles start from scratch.
+    ! It needs more strict convergence since this is only three points
+    call analytical_gd_rot(.false., angles, vec_rot, tmat, eye(), &
+         100000, 1.0d0, 1.0d0, tol/100, "Euclidean", 0.0d0)
+    
+    vec_rot = vec
+    
     call analytical_gd_rot(.false., angles, vec_rot, Apos_mapped, Bpos_opt, &
          n_ana*1000, rate1, rate2, tol, "Euclidean", 0.0d0)
-
+    
     rBpos_opt = free_trans(Bpos_opt, rot_mat(angles), vec_rot)
 
     write(13,*) "Final rmat"
@@ -2357,7 +2368,7 @@ contains
     Apos_out(:,1:n_out) = Apos_mapped
 
     dmin(1) = distance(Apos_mapped, rBpos_opt,eye(),zeros,"Euclidean",0.0d0)
-
+    
     dmin_half = distance(Apos_mapped(:, 1:int(n_out/2)), rBpos_opt(:, 1:int(n_out/2)), eye(), zeros, "Euclidean", 0.0d0)
        
     dmin(2) = (dmin(1)/n_out - dmin_half/int(n_out/2))/(n_out**(1.0/3.0) - int(n_out/2)**(1.0/3.0))

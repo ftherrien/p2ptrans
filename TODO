@@ -1,7 +1,9 @@
 All
 
 P Comment functions with python headers
+- Convergence criteria with gradient instead of distance
 - Exact tmat volume correspondance
+- p2ptrans + pathfinder: allways find an answer (could include exact tmat)
 - Cleanup tolerances
 - Create test suite, jarvis
 - Implement GPU-Acceleration
@@ -19,13 +21,13 @@ X Install as a command line function
 
 2D
 
-P Section functions in p2ptrans.py as in python3D code
+X Section functions in p2ptrans.py as in python3D code
 X Merge 2D with 3D suh that there is p2pint.py (interfaces, 2D) and p2ptrans.py (transformation, 3D)
    The two programs should be using some of the same functions
 X Modify setup.py accordingly
-- Makes sure names are not changed when using supercell
-- Remove duplicates in reconstructures as they are added
-- Better folder management
+X Makes sure names are not changed when using supercell
+X Remove duplicates in reconstructures as they are added
+X Better folder management
 - Automatic symmetry detection
 
 DOCS
