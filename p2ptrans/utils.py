@@ -110,6 +110,14 @@ def makeInitStruc(dispStruc, vec_classes):
         initStruc.add_atom(*(a.pos+vec_classes[int(a.type)]),a.atom)
     return initStruc
 
+def makeFinalStruc(dispStruc, tmat):
+    itmat = rotate(la.inv(tmat).dot(dispStruc.cell), dispStruc.cell).dot(la.inv(tmat))
+
+    finalStruc = Structure(itmat.dot(dispStruc.cell))
+    for a in dispStruc:
+        finalStruc.add_atom(*itmat.dot(a.pos), a.atom)
+    return finalStruc
+
 def is_integer(cell, tol):
    return np.allclose(cell, np.round(cell), atol=tol)
 
