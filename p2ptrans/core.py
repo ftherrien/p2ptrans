@@ -16,6 +16,7 @@ def find_cell(class_list, positions, tol = 1e-5, frac_shell = 0.5, frac_correct 
     cm = np.mean(positions, axis=1).reshape((np.shape(positions)[0],1)) # Centroid
 
     for loop in [0,1]:
+        missed = 0
         for i in np.unique(class_list):
             pos = positions[:, class_list == i] # All positions of type i
             center = np.argmin(la.norm(pos, axis = 0)) # Index of most centered atom
@@ -127,6 +128,8 @@ def find_cell(class_list, positions, tol = 1e-5, frac_shell = 0.5, frac_correct 
                                 aposSphere = np.sum(norms < frac_shell * np.max(norms) - tol)
                                 
                                 if  genSphere == aposSphere:
+                                    if missed > 0:
+                                        print("WARNING: Could not find periodic cell using %d of the displacements. Increase sample size if you can afford it or use results with care."%(missed))
                                     return newcell, origin
                     else:
                         continue
@@ -134,8 +137,9 @@ def find_cell(class_list, positions, tol = 1e-5, frac_shell = 0.5, frac_correct 
                 else:
                     continue
                 break
-            print("WARNING: Could not find periodic cell using displacement %d. Increase sample size or use results with care."%i)
-        print("WARNING: Could not find cell using shortest distances, trying random order") 
+            missed+=1
+        if not loop:    
+            print("WARNING: Could not find cell using order of shortest distances, trying random order") 
     print("WARNING: Could not find periodic cell for any displacement. Increase sample size.")                
     return None, None
 
@@ -598,9 +602,6 @@ def findMatching(A, B, ncell,
     print("Volume stretching factor (det(T)):", la.det(tmat))
     print("Cell volume ratio (initial cell volume)/(final cell volume):", mulA * la.det(Acell)/(mulB * la.det(Bcell)))
 
-    print()
-    print("-----------PERIODIC CELL-----------")
-    print()
     # Displacements without stretching (for plotting)
     disps_total = Apos_map - Bpos
 
@@ -608,8 +609,8 @@ def findMatching(A, B, ncell,
     disps = Apos_map - Bposst
 
     # Classes of vectors and their value
-    vec_classes_estimate = np.array([np.mean(disps[:,class_list==d_type], axis=1) for d_type in np.unique(class_list)])
-
+    vec_classes_estimate = np.array([np.mean(disps[:,class_list==d_type], axis=1) for d_type in np.unique(class_list)])    
+    
     # Run the PCA analysis if turned on
     if pca:
         print("PCA found %d classes"%PCA(disps))
@@ -629,8 +630,14 @@ def findMatching(A, B, ncell,
 
     # End program if a periodic cell couldn't be found earlier
     if foundcell is None:
-        raise RuntimeError("Could not find good displacement cell. Increase system size")
+        if switched:
+            tmat = la.inv(tmat)
+        return tmat, None, None, dmin
 
+    print()
+    print("-----------PERIODIC CELL-----------")
+    print()
+    
     pos_in_struc = [None]*2
     pos_in_struc[0] = Apos_map - origin.dot(np.ones((1,np.shape(Apos_map)[1])))
     pos_in_struc[1] = Bposst - origin.dot(np.ones((1,np.shape(Bposst)[1])))

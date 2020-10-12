@@ -129,11 +129,17 @@ def main():
                                                 minimize=minimize, test=test)
     
     if test:
+        print("Test run completed, rerun with: p2ptrans -u %s -m"%outdir)
+        print()
         return
     
     eigval, U, P, Q, planeHab = analysis.crystallography(la.inv(tmat), B, A, ccell2, ccell1, planehkl,
                                                          diruvw, fileA=fileB, fileB=fileA)
-        
+
+    if dispStruc is None:
+        print("p2ptrans finished successfully, but could not find a periodic cell")
+        return
+    
     print("=>Producing the steps along the transition<=")
     result = produceTransition(n_steps, tmat, dispStruc, vec_classes,
                                outdir, anim or savedisplay or interactive,
