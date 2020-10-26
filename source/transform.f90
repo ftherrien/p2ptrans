@@ -1423,7 +1423,9 @@ contains
              tmat_local_reset = matmul(rot_mat(angles_local), tmat_local)
              
           else
-             tmat_local = (1.0d0 + max_vol) * (tmat_local - 0.5d0)
+             vol = .true. 
+             
+             tmat_local = (1.0d0 + max_vol) * (tmat_local - 0.5d0) ! TDOO: Is this optimal? 
 
              dt_tmat = det(tmat_local,3)
 
@@ -1529,7 +1531,6 @@ contains
                    dist_min(thread) = dist_cur_rot + dist_cur
                    tmat_min(:,:,thread) = tmat_local
                    vec_min(:,thread) = vec_local
-                   vol = .true.
                 endif
              endif
 
