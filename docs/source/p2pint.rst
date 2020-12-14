@@ -51,7 +51,7 @@ More parameters can be specified to p2pint via a parameter file. This file is in
 
    &input2d
    tol = 1.0d-6
-   tol_std = tol*1.0d-3
+   tol_std = 1.0d-9 ! If not specified: tol_std = tol*1.0d-3
    tol_class = 1.0d-3
    init_class = 1.0d0
    fracA = 0.0d0
@@ -63,7 +63,7 @@ More parameters can be specified to p2pint via a parameter file. This file is in
    findpeaks = .false.
    free = .true.
    max_vol = 0.08d0
-   savebest = trim(outdir)//"/best2d.dat"
+   savebest = "best2d.dat" ! If not specified: savebest = trim(outdir)//"/best2d.dat"
    usebest = .false.
    remap = .true.
    pot = "LJ"
