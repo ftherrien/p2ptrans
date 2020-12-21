@@ -19,7 +19,7 @@ Optional arguments:
   -T, --top TOP_STRUCTURE
                         Structure at the top, miller indices and chemistry rule. This structure will be strained.  Format: *TOP_STRUCTURE [h,k,l] 1 EL11 [EL12 ...] [2 EL21 [EL22 ...] ...]* Ex: POSCAR_B [1,1,0] 1 C
   -n, --ncell NCELL
-                        Number of cells to tile *DEFAULT: 300*
+                        Number of cells to tile *DEFAULT: 100*
   -N, --niter N_ITER
                         Number of random initial deformation matrices. *DEFAULT: 1000*
   -i, --interactive     Enable interactive display

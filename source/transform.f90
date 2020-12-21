@@ -621,7 +621,7 @@ contains
           dist_init = dist
        endif
 
-       ! print*, dist, vec(3,1), dist_prev - dist, "FREE", j
+       print*, dist, vec(3,1), dist_prev - dist, "FREE", j, tmat, vec, pot, param
 
        E = derivative(Apos, Bpos, tmat, vec, pot, param)
 
@@ -2598,11 +2598,6 @@ contains
     remap = .true.
     pot = "LJ"
     param = 2.5d0
-    if (switched) then
-       zdist = - param - maxval(Bpos(3,:))
-    else
-       zdist = param + maxval(Apos(3,:))
-    endif
     check = .false.
     vecrep = 10
     min_prom = 0.6d0
@@ -2618,6 +2613,12 @@ contains
        close (11)
     endif
 
+    if (switched) then
+       zdist = - param - maxval(Bpos(3,:))
+    else
+       zdist = param + maxval(Apos(3,:))
+    endif
+    
     n_frac = int(fracB*size(Apos,2)/sum(atoms))
     n_A = int(fracA*size(Apos,2)/sum(atoms))
     n_out = n_frac*sum(atoms)
@@ -2809,7 +2810,9 @@ contains
 
           call analytical_gd_vec(tmat, vec, &
                Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
-            tol, pot, param)
+               tol, pot, param)
+
+          print*, "FINAL:", vec(3)
 
        else
 

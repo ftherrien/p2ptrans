@@ -99,7 +99,7 @@ def find_cell(class_list, positions, tol = 1e-5, frac_shell = 0.5, frac_correct 
         
                             genPos = []
                             # If the fractions on generated atoms is greater than frac_correct
-                            if float(n_map)/float(len(class_list)) > frac_correct:
+                            if float(n_map)/float(len(class_list)) >= frac_correct:
                                 # Generate a parallelepieped that contains the apos sphere
                                 xMax = int(np.max(apos[0,:]))+1
                                 xMin = int(np.min(apos[0,:]))-1
@@ -131,6 +131,10 @@ def find_cell(class_list, positions, tol = 1e-5, frac_shell = 0.5, frac_correct 
                                     if missed > 0:
                                         print("WARNING: Could not find periodic cell using %d of the displacements. Increase sample size if you can afford it or use results with care."%(missed))
                                     return newcell, origin
+                                else:
+                                    print("There should be %d atoms within %f but the cell produces %d (frac_shell)"%(aposSphere, frac_shell*np.max(norms), genSphere)) 
+                            else:
+                                print(count, "Not enough atoms are mapped to this cell %f (frac_correct = %f)"%(float(n_map)/float(len(class_list)), frac_correct))
                     else:
                         continue
                     break
@@ -233,7 +237,7 @@ def uniqueclose(closest, tol):
         if not there:
             unique.append(line)
             idx.append([i])
-    return (np.array(idx), np.array(unique))
+    return (idx, unique)
 
 def makeStructures(cell, atoms, atom_types, natB, pos_in_struc, class_list):
     """Make the displacement structure from the repeating unit cell"""

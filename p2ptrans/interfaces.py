@@ -18,8 +18,8 @@ def find_type(a, rule):
                 newtype.append(key+"-"+str(i))
     return newtype
         
-def find_basis(dircart, ccell, tol=tol, maxi=10):
-    """ Finds a new cell for the structure where the specified plane is in the z direction """
+def find_basis(dircart, ccell, tol=tol, maxi=10, primitive = False):
+    """ Finds a new cell for the structure where a and b are orthogonal to dircart"""
 
     vectors = [dircart*1000]
     tmpz = dircart*1000
@@ -37,8 +37,9 @@ def find_basis(dircart, ccell, tol=tol, maxi=10):
                         if la.norm(pos) < la.norm(vectors[0]) and pos.dot(vectors[0]) > 0: # Is it shorter?
                             vectors[0] = pos
                     else:
-                        if la.norm(pos) < la.norm(tmpz) and pos.dot(tmpz) > 0: # Is it shorter?
-                            tmpz = pos
+                        if dircart.dot(pos) > 0:
+                            if (primitive and (dircart.dot(pos) + tol < dircart.dot(tmpz) or (abs(dircart.dot(pos) - dircart.dot(tmpz)) < tol and la.norm(pos) < la.norm(pos)))) or (not primitive and la.norm(pos) < la.norm(tmpz)):
+                                tmpz = pos
                             
     if np.allclose(vectors[0], dircart*1000, 1e-12):
         print("WARNING: Could not find lattice point in the specified z direction:", dircart)
@@ -49,19 +50,31 @@ def find_basis(dircart, ccell, tol=tol, maxi=10):
     
     # Make an array
     inplane = np.array(inplane).T
-
-    idx = np.argsort(la.norm(inplane, axis = 0))
-    for i in idx:
-        if len(vectors) < 3 and la.norm(np.cross(vectors[-1], inplane[:,i])) > tol: #Form a basis?
-            vectors.append(inplane[:,i])
-        if len(vectors) == 3:
-            break
+    
+    if primitive:
+        for i in range(len(inplane)):
+            for j in range(i):
+                area = la.norm(np.cross(inplane[:,i], inplane[:,j]))
+                if area > tol:
+                    if len(vectors) == 1:
+                        vectors.append(inplane[:,i])
+                        vectors.append(inplane[:,j])
+                    elif area < la.norm(np.cross(vectors[1], vectors[2])):
+                        vectors[1] = inplane[:,i]
+                        vectors[2] = inplane[:,j]
     else:
-        raise RuntimeError("Could not form a basis with specified uvw with and a maximum of %d unit cells"%(maxi))
+        idx = np.argsort(la.norm(inplane, axis = 0))
+        for i in idx:
+            if len(vectors) < 3 and la.norm(np.cross(vectors[-1], inplane[:,i])) > tol: #Form a basis?
+                vectors.append(inplane[:,i])
+            if len(vectors) == 3:
+                break
+        else:
+            raise RuntimeError("Could not form a basis with specified uvw with and a maximum of %d unit cells"%(maxi))
     
     cell3D = np.array(vectors[::-1]).T
 
-    
+    # I don't think this does anything
     # Expressed in terms of the cell
     inplane_cell = la.inv(cell3D).dot(inplane)
 
@@ -131,23 +144,23 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
     dircart = la.inv(ccell.T).dot(planehkl) # Transforms hkl into cartesian coord
 
     dircart = dircart/la.norm(dircart)
-
+    
     if surface is None:
         A = primitive(A, primtol) # Find the primitive cell
-    
+
     cell2D, cell3D = find_basis(dircart, A.cell, tol=tol, maxi=maxi) #Create a new cell with dircart as z
     
     A = supercell(A, cell3D) # Reorganize the atoms in the new cell 
-    
-    z = [dircart.dot(a.pos) for a in A]
 
+    z = [dircart.dot(a.pos) for a in A]
+    
     idx = list(np.argsort(z))
 
     if surface == "bottom":
         idx = idx[::-1]
         
     inplane = []
-    # Creates a list of list of indices where each list of indices correspond to a possible termination considering the rule
+    # Creates a list of lists of indices where each list of indices correspond to a possible termination considering the rule
     c = 0
     z = []
     while len(idx)>0:
@@ -168,15 +181,16 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
                 break
             
         idx = idx[1:]
-        
+
     if len(z) > 1:
         if z[0][-1] - z[-1][0] + cell2D[2,2] < max_thickness:
+            shift = A[inplane[-1][0]].pos
             for a in A:
-                a.pos = into_cell(a.pos - A[inplane[-1][0]].pos, A.cell)
+                a.pos = into_cell(a.pos - shift, A.cell)
             inplane[0] = inplane.pop() + inplane[0]
     elif len(z) == 0:
         print("WARNING: The structure does not contain the elements specified in the rule")
-        
+    
     strucs = []
     recMap = []
     reconstructure = [None]*len(inplane)
@@ -222,7 +236,7 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
             strucs.append(tmpstruc)
 
             recMap.append([reconstructure[j]])
-            
+
     for i in range(len(strucs)):
         strucs[i] = primitive(strucs[i], primtol)
         for a in strucs[i]:

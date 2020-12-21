@@ -39,22 +39,25 @@ def gcd(x, y):
 def normal(A):
     return A/np.ones((3,1)).dot(la.norm(A, axis=0).reshape((1,np.shape(A)[1])))
  
-def find_uvw(stretch_dir, basis = np.eye(3)):
+def find_uvw(stretch_dir, basis = np.eye(3), size = 10, direction_only=True):
    min_dist = np.ones(3)*1000
    min_uvw = np.zeros((3,np.shape(stretch_dir)[1]))
-   stretch_dir = normal(stretch_dir)
+   if direction_only:
+       stretch_dir = normal(stretch_dir)
    for l,vec in enumerate(stretch_dir.T):
-      for i, j, k in product(np.arange(-10,10), repeat=3):
+      for i, j, k in product(np.arange(-size,size), repeat=3):
          if [i,j,k] != [0,0,0]:
             unit_vec = basis.dot(np.array([i,j,k]))
-            unit_vec = unit_vec/la.norm(unit_vec)
+            if direction_only:
+                unit_vec = unit_vec/la.norm(unit_vec)
             cur_dist = la.norm(unit_vec-vec)
             if cur_dist < min_dist[l]:
                min_dist[l] = cur_dist
                min_uvw[:,l] = np.array([i,j,k], np.int).T
 
-      gcd3 = gcd(min_uvw[0,l],gcd(min_uvw[1,l], min_uvw[2,l]))
-      min_uvw[:,l] = min_uvw[:,l]/gcd3
+      if direction_only:
+          gcd3 = gcd(min_uvw[0,l],gcd(min_uvw[1,l], min_uvw[2,l]))
+          min_uvw[:,l] = min_uvw[:,l]/gcd3
 
    return min_uvw
 
