@@ -8,7 +8,9 @@ module transform
 
   public :: &
        fastoptimization, &
-       intoptimization     
+       intoptimization, &
+       closest, &
+       fixed_tmat
 
   private :: &
        init_random_seed, &
@@ -33,6 +35,8 @@ module transform
   double precision,  parameter :: &
        pi = 3.141592653589793d0  
 
+  ! Rotmin can easily be stuck, it should be replaced
+  ! with a proper RU decomposition
   logical, parameter ::  rotmin = .true.
 
 contains
@@ -143,6 +147,27 @@ contains
 
   end function cost_map
 
+
+  subroutine closest(closest_list, Apos, Bpos, n)
+
+    integer, intent(in) :: &
+         n ! Total number of atoms
+
+    double precision, intent(in), dimension(3,n) :: &
+         Apos, Bpos ! Position of the atoms
+
+    integer, intent(out), dimension(n) :: &
+         closest_list ! Position of the atoms
+
+    double precision, dimension(n,n) :: &
+         cost
+
+    cost = cost_map(Apos, Bpos, n, n, "Euclidean", 0.0d0)
+
+    closest_list =  minloc(cost,2)
+
+  end subroutine closest
+  
   subroutine no_mapping(Apos_mapped, Bpos_opt, Apos, Bpos, fracB, atoms, n_atoms)
 
     ! Consider the order in which the atoms are given to be the mapping, creates
@@ -1868,7 +1893,7 @@ contains
 
   end subroutine remove_slanting
 
-  subroutine classification(twodim, Apos, Bpos, Apos_mapped, Bpos_opt, & ! Output
+  subroutine classification(minimize, twodim, Apos, Bpos, Apos_mapped, Bpos_opt, & ! Output
        tmat, vec, & ! Output
        classes_list, &
        fracA, fracB, n_frac, &
@@ -1939,7 +1964,8 @@ contains
 
     logical, intent(in) :: &
          remap, &
-         check
+         check, &
+         minimize
 
     integer :: &
          n
@@ -1968,12 +1994,13 @@ contains
     classes_list = 0
     classes_list_prev = 1
     j=0
+    
     do while ( std > tol_class .and. j < n_class)
        j = j + 1
 
        write(13,*) "-->", j
 
-       if (remap .and. j/=1) then
+       if ((remap .and. j/=1) .or. .not. minimize) then
 
           if (.not. twodim) then
              ! For interfaces when the potential is not Euclidean, this does not necessarily help
@@ -2030,9 +2057,17 @@ contains
           n_classes(i) = n_classes_trail(i)
        enddo
 
-       call analytical_gd_std(twodim, std, tmat, vec, Apos_mapped, Bpos_opt, &
-            n_classes, classes_list, n_ana*1000, rate1, rate2, tol_std)
+       if (minimize) then
+       
+          call analytical_gd_std(twodim, std, tmat, vec, Apos_mapped, Bpos_opt, &
+               n_classes, classes_list, n_ana*1000, rate1, rate2, tol_std)
 
+       else
+
+          std = 0.0d0
+          
+       endif
+       
        deallocate(n_classes)
 
        write(13,*) "Tolerance for classification:", tol_adjust
@@ -2324,7 +2359,7 @@ contains
 
     write(13,*) "/======== Classification ========\\"
 
-    call classification(.false., Apos, Bpos, Apos_mapped, Bpos_opt, & ! Output
+    call classification(.true., .false., Apos, Bpos, Apos_mapped, Bpos_opt, & ! Output
          tmat, vec, & ! Output
          classes_list, &
          fracA, fracB, n_frac, &
@@ -2788,7 +2823,7 @@ contains
        
        vec(3) = zdist
 
-       call classification(.true., Apos, Bpos, Apos_mapped, Bpos_opt, & ! Output
+       call classification(.true., .true., Apos, Bpos, Apos_mapped, Bpos_opt, & ! Output
             tmat, vec, & ! Output
             classes_list, &
             fracA, fracB, n_frac, &
@@ -2907,4 +2942,336 @@ contains
 
   end subroutine intoptimization
 
+  subroutine fixed_tmat(Apos_out, Bpos_out, Bpos_out_stretch, &
+       n_out, n_A, classes_list_out, vec, dmin, &
+       Apos, na, Bpos, nb, &
+       ttrans, &
+       atoms, n_atoms, &
+       switched, &
+       filename, outdir)
+
+    integer, intent(in) :: &
+         na, nb, & ! Total number of atoms
+         n_atoms ! Number of types of atoms per cell
+
+    double precision :: &
+         rate1, &  ! Rate of the gradient descent for angles
+         rate2     ! Rate of the gradient descent for displacement
+
+    character*200, intent(in) :: &
+         filename, &
+         outdir
+    
+    integer :: &
+         n_ana, &
+         n_conv, &
+         n_adjust, &
+         n_class
+
+    double precision, intent(out), dimension(3) :: &
+         dmin
+
+    double precision, intent(inout), dimension(3,na) :: &
+         Apos ! Position of the atoms
+
+    double precision, intent(inout), dimension(3,nb) :: &
+         Bpos ! Position of the atoms
+
+    double precision, intent(out), dimension(3,na) :: &
+         Apos_out ! Position of the atoms
+
+    double precision, intent(out), dimension(3,nb) :: &
+         Bpos_out, & ! Position of the atoms
+         Bpos_out_stretch
+
+    integer, intent(out) :: &
+         n_out, &
+         n_A
+
+    logical, intent(in) :: &
+         switched
+    
+    double precision :: &
+         fracA, fracB ! Fraction of A and B to use in optimisation
+
+    integer, intent(in), dimension(n_atoms) :: &
+         atoms ! Number of atoms of each type
+
+    double precision, dimension(3) :: &
+         angles, &  ! Rotation axis
+         center_vec
+
+    double precision :: &
+         tol, &
+         tol_class, &
+         tol_std, &
+         dmin_half, &
+         init_class
+
+    double precision, intent(out), dimension(3) :: &
+         vec
+
+    double precision, dimension(3) :: &
+         vec_rot 
+    
+    double precision, intent(in), dimension(3,4) :: &
+         ttrans
+
+    double precision, dimension(3,3) :: &
+         tmat, &! Transformation matrix
+         rtmat
+
+    double precision, allocatable, dimension(:,:) :: &
+         Apos_mapped, Apos_mapped_prev, &
+         Bpos_opt, &
+         tBpos_opt, &
+         Bpos_opt_stretch, & ! position matrix
+         rBpos_opt
+
+    integer :: &
+         i, j, k, &
+         j_in, &
+         id, &
+         n_bins, &
+         n_frac, &
+         vecrep, &
+         n_empty
+
+    double precision, parameter, dimension(3) :: &
+         zeros = (/0.0d0, 0.0d0, 0.0d0/)
+
+    double precision, allocatable, dimension(:) :: &
+         bins
+    
+    integer, allocatable, dimension(:) :: &
+         classes_list, &
+         bin_index
+
+    integer, intent(out), dimension(size(Apos,2)) :: &
+         classes_list_out
+
+    logical :: &
+         remap, &
+         free, &
+         usebest, &
+         exist, &
+         findpeaks, &
+         check
+
+    character*200 :: &
+         savebest, &
+         progressfile
+
+    character*20 :: &
+         pot
+
+    double precision :: &
+         param, &
+         zdist, &
+         max_vol, &
+         size_bin, &
+         min_prom
+
+    namelist /input2d/ &
+         fracA, fracB, &
+         tol, tol_std, &
+         tol_class, &
+         rate1, rate2, &
+         n_ana, &
+         n_conv, n_adjust, &
+         n_class, &
+         max_vol, &
+         free, &
+         savebest, &
+         usebest, &
+         remap, &
+         pot, &
+         param, &
+         findpeaks, &
+         check, &
+         vecrep, &
+         zdist, &
+         min_prom, &
+         init_class
+
+    tol = 1.0d-6
+    tol_std = tol*1.0d-3
+    tol_class = 1.0d-3
+    init_class = 1.0d0
+    rate1 = 1.0d2
+    rate2 = 1.0d2
+    fracA = 0.0d0
+    fracB = 0.25d0
+    n_ana = 300
+    n_conv = 5
+    n_class = 30
+    n_adjust = 10
+    findpeaks = .false.
+    free = .true.
+    max_vol = 0.08d0
+    savebest = trim(outdir)//"/best2d.dat"
+    usebest = .false.
+    remap = .true.
+    pot = "LJ"
+    param = 2.5d0
+    check = .false.
+    vecrep = 10
+    min_prom = 0.6d0
+
+    progressfile = trim(outdir)//"/progress.txt"
+    open(13, file = trim(progressfile), status='replace')
+
+    inquire(file = filename, exist=exist)
+
+    if (exist) then
+       open (unit = 11, file = filename, status = 'OLD')
+       read (11, input2d)
+       close (11)
+    endif
+
+    if (switched) then
+       zdist = - param - maxval(Bpos(3,:))
+    else
+       zdist = param + maxval(Apos(3,:))
+    endif
+    
+    n_frac = int(fracB*size(Apos,2)/sum(atoms))
+    n_A = int(fracA*size(Apos,2)/sum(atoms))
+    n_out = n_frac*sum(atoms)
+    Apos_out = 0
+    Bpos_out = 0
+
+    allocate(Apos_mapped(3,n_out), Bpos_opt(3,n_out), &
+         Apos_mapped_prev(3,n_out), &
+         tBpos_opt(3,n_out), &
+         rBpos_opt(3,n_out), &
+         Bpos_opt_stretch(3,n_out), &
+         classes_list(n_out))
+
+    ! Center both cells at the geometric center
+    call center(Bpos,nb)
+    call center(Apos,na)
+    
+    tmat = ttrans(:,1:3)
+
+    vec = ttrans(:,4)
+
+    classes_list_out = 0
+    angles = 0.0d0
+
+    write(13,*) "/======== Classification ========\\"
+
+
+    Apos_mapped = Apos(:,1:n_out)
+    Bpos_opt = Bpos(:,1:n_out)
+    
+    call classification(.false., .true., Apos, Bpos, Apos_mapped, Bpos_opt, & ! Output
+         tmat, vec, & ! Output
+         classes_list, &
+         fracA, fracB, n_frac, &
+         na, nb, n_class, &
+         remap, check, &
+         atoms, n_atoms, rate1, rate2, &
+         n_ana, n_out, &
+         tol, tol_class, tol_std, &
+         init_class, &
+         trim(pot), param)
+
+       center_vec = sum(free_trans(Bpos_opt,tmat,vec) - Apos_mapped,2) / n_out
+
+       vec(1:2) = vec(1:2) - center_vec(1:2)
+       
+       if (trim(pot)=="LJ") then
+          
+          vec(3) = zdist
+
+          call analytical_gd_vec(tmat, vec, &
+               Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
+               tol, pot, param)
+
+          print*, "FINAL:", vec(3)
+
+       else
+
+          vec(3) = vec(3) - center_vec(3)
+          
+       endif
+
+       call init_random_seed()
+
+       call random_number(angles(1)) ! So that the rotation min doesn't get stuck 
+       
+       ! This step is just to get the "unstretched distance"
+       if (rotmin) then
+          vec_rot = 0.0d0
+          call analytical_gd_rot(.true., angles, vec_rot, tmat, eye(), &
+               100000, 1.0d0, 1.0d0, &
+               tol, "Euclidean", 0.0d0)
+       endif
+
+       write(13,*) "After rotmin"
+       write(13,"(3(F10.6,X))") rot_mat(angles)
+        
+       vec_rot = 0.0d0
+       vec_rot(3) = zdist
+       
+       call analytical_gd_rot(.true., angles, vec_rot, Apos_mapped, Bpos_opt, &
+            n_ana*1000, rate1, rate2, tol, pot, param)
+
+       write(13,*) "Final angle (degrees):", angles(1)*180/pi
+       
+       rBpos_opt = free_trans(Bpos_opt, rot_mat(angles), vec_rot)
+
+       write(13,*) "Final rmat"
+       write(13,"(3(F10.6,X))") rot_mat(angles)
+
+       classes_list_out(1:n_out) = classes_list
+
+       write(13,*) "Final tmat"
+       write(13,"(3(F10.6,X))") tmat
+       
+       Bpos_opt_stretch = free_trans(Bpos_opt, tmat, vec)
+
+       Bpos_out(:,1:n_out) = rBpos_opt
+       Bpos_out_stretch(:,1:n_out) = Bpos_opt_stretch
+       Apos_out(:,1:n_out) = Apos_mapped
+
+       dmin(1) = distance(Apos_mapped, rBpos_opt, eye(), zeros, trim(pot), param)
+
+       select case (trim(pot))
+       case ("LJ")
+
+       dmin(2) = dmin(1) / n_out
+
+       dmin(3) = 0.0d0
+       
+       case("Euclidean")
+
+       call analytical_gd_rot(.true., angles, vec_rot, Apos_mapped(:, 1:int(n_out/2)), &
+            rBpos_opt(:, 1:int(n_out/2)), &
+            n_ana*1000, rate1, rate2, tol, pot, param)
+          
+       dmin_half = distance(Apos_mapped(:, 1:int(n_out/2)), rBpos_opt(:, 1:int(n_out/2)), &
+            rot_mat(angles), vec_rot, trim(pot), param)
+       
+       dmin(2) = (dmin(1)/n_out - dmin_half/int(n_out/2))/(n_out**(1.0/4.0) - int(n_out/2)**(1.0/4.0))
+
+       dmin(3) = dmin(1)/n_out - dmin(1)*n_out**(1.0/4.0)
+
+       end select
+       
+       ! ! Print the cost matrix
+       ! mat = cost(Apos,Bpos,n)   
+       ! write(13,"(10(F5.3,X))") mat
+
+    close(13)
+
+    deallocate(Apos_mapped, Bpos_opt, &
+         Apos_mapped_prev, &
+         tBpos_opt, &
+         Bpos_opt_stretch, &
+         classes_list)
+
+  end subroutine fixed_tmat
+  
 end module transform

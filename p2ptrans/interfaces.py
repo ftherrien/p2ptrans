@@ -7,7 +7,7 @@ from .config import *
 from .fmodules import transform as tr
 from .fmodules import tiling as t
 from .display import displayStats, displayOptimalResult, displayTransCell, printMatAndDir
-from .core import makeSphere, find_cell, makeStructures, switchDispStruc 
+from .core import makeSphere, find_cell, makeStructures, switchDispStruc, find_periodicity 
 from .utils import scale, is_same_struc, lcm, lccell, superize
 
 def find_type(a, rule):
@@ -276,6 +276,7 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, out
     
     Apos = np.asfortranarray(Apos)
     Bpos = np.asfortranarray(Bpos)
+    Bpos_in = deepcopy(Bpos)
     t_time = time.time()
     print("Optimizing... (this may take several hours)")
     print("Check progress in %s"%(outdir+"/progress.txt"), flush=True)
@@ -308,9 +309,32 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, out
         print("Looking for periodic cell for peak %d..."%(i))        
 
         origin[i] = np.zeros((3,1))
+
+
         
         foundcell[i], origin[i][:2,:] = find_cell(class_list[i,:], Bposst[i,:2,:],
                                                          minvol=abs(la.det(B.cell[:2,:2]))/len(B))
+
+
+        if foundcell[i] is None:
+
+            print("Original find_cell failed, trying beta find_periodicity")
+            
+            ttrans[i,:2,:2], foundcell[i] = find_periodicity(ttrans[i,:2,:2], A.cell[:2,:2], B.cell[:2,:2], n=10) # TESTING
+
+            origin[i][:2,:] = np.array([[0],[0]])
+
+            Apos_in = np.asfortranarray(Apos)
+            result = tr.fixed_tmat(Apos_in, Bpos_in, ttrans[i,:,:], atoms, switched, filename, outdir)
+            Apos_map_out, Bpos_out, Bposst_out, _, _, class_list_out, ttrans[i,:,3], dmin[i] = result
+
+            print(result)
+            
+            class_list[i,:] = class_list_out[:n_map]-class_list_out[:n_map].min()
+    
+            Bpos[i,:,:] = Bpos_out[:,:n_map]
+            Bposst[i,:,:] = Bposst_out[:,:n_map]
+            Apos_map[i,:,:] = Apos_map_out[:,:n_map]    
         
         if foundcell[i] is not None:
             print("Found cell!")

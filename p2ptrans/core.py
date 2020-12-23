@@ -147,6 +147,58 @@ def find_cell(class_list, positions, tol = 1e-5, frac_shell = 0.5, frac_correct 
     print("WARNING: Could not find periodic cell for any displacement. Increase sample size.")                
     return None, None
 
+def find_periodicity(tmat, Acell, Bcell, n=1000):
+
+    if len(Acell) == 3:
+        A = t.sphere(Acell, n, [0,0,0])
+        B = t.sphere(tmat.dot(Bcell), n, [0,0,0])
+    else:
+        Acell3 = np.eye(3)
+        Bcell3 = np.eye(3)
+
+        Acell3[:2,:2] = Acell
+        Bcell3[:2,:2] = tmat.dot(Bcell)
+        
+        A = t.circle(Acell3, n, [0,0,0])
+        B = t.circle(Bcell3, n, [0,0,0])
+        
+    Bin = np.round(la.inv(Bcell3).dot(B)).astype(int)
+    
+    closest = tr.closest(np.asfortranarray(A), np.asfortranarray(B)) - 1 # -1 fortran to python 
+    
+    idx = np.argsort(la.norm(A-B[:,closest], axis=0))
+
+    for i in idx:
+        for j in idx[:i]:
+            if len(Acell) == 3:
+                for k in idx[:j]:
+                    newcellA = np.concatenate([A[:,i:i+1], 
+                                               A[:,j:j+1],
+                                               A[:,k:k+1]],axis=1)
+                    newcellB = np.concatenate([Bin[:,closest[i]:closest[i]+1], 
+                                               Bin[:,closest[j]:closest[j]+1], 
+                                               Bin[:,closest[k]:closest[k]+1]],axis=1)
+            else:
+                newcellA = np.concatenate([A[:2,i:i+1], 
+                                           A[:2,j:j+1]],axis=1)
+                newcellB = np.concatenate([Bin[:2,closest[i]:closest[i]+1], 
+                                           Bin[:2,closest[j]:closest[j]+1]],axis=1)
+                
+            if abs(la.det(newcellA)) > tol:
+                break
+            else:
+                continue
+            break
+        else:
+            continue
+        break
+
+    print(newcellA, newcellB)
+
+    tmat = newcellA.dot(la.inv(Bcell.dot(newcellB)))
+
+    return tmat, newcellA
+    
 def makeSphere(A, ncell, *atom_types, twoD=False):
 
     """ 
