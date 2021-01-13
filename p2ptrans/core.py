@@ -5,10 +5,11 @@ from spglib import get_spacegroup
 
 from .config import *
 from .fmodules import transform as tr
+from .fmodules import hungarian as lap
 from .format_spglib import from_spglib, to_spglib
 from .fmodules import tiling as t
 from .display import displayOptimalResult, makeGif, displayTransCell, make_anim, make_fig, printMatAndDir
-from .utils import lcm, find_uvw, normal, rotate, PCA, makeInitStruc
+from .utils import lcm, find_uvw, normal, rotate, PCA, makeInitStruc, product_no_repeat
 from .analysis import findR, strainDirs
 
 def find_cell(class_list, positions, tol = 1e-5, frac_shell = 0.5, frac_correct = 0.95, max_count=1000, minvol = 1e-5):
@@ -129,12 +130,12 @@ def find_cell(class_list, positions, tol = 1e-5, frac_shell = 0.5, frac_correct 
                                 
                                 if  genSphere == aposSphere:
                                     if missed > 0:
-                                        print("WARNING: Could not find periodic cell using %d of the displacements. Increase sample size if you can afford it or use results with care."%(missed))
+                                        print("Could not find periodic cell using %d of the displacements."%(missed))
                                     return newcell, origin
-                                else:
-                                    print("There should be %d atoms within %f but the cell produces %d (frac_shell)"%(aposSphere, frac_shell*np.max(norms), genSphere)) 
-                            else:
-                                print(count, "Not enough atoms are mapped to this cell %f (frac_correct = %f)"%(float(n_map)/float(len(class_list)), frac_correct))
+                                # else:
+                                    # print("There should be %d atoms within %f but the cell produces %d (frac_shell)"%(aposSphere, frac_shell*np.max(norms), genSphere)) 
+                            # else:
+                                # print(count, "Not enough atoms are mapped to this cell %f (frac_correct = %f)"%(float(n_map)/float(len(class_list)), frac_correct))
                     else:
                         continue
                     break
@@ -143,15 +144,20 @@ def find_cell(class_list, positions, tol = 1e-5, frac_shell = 0.5, frac_correct 
                 break
             missed+=1
         if not loop:    
-            print("WARNING: Could not find cell using order of shortest distances, trying random order") 
-    print("WARNING: Could not find periodic cell for any displacement. Increase sample size.")                
+            print("Could not find cell using order of shortest distances, trying random order.") 
+    print("Could not find periodic cell for any displacement using find_cell.")                
     return None, None
 
-def find_periodicity(tmat, Acell, Bcell, n=1000):
+def find_periodicity(tmat, Acell, Bcell, ratio=None, n=1000):
 
+    if ratio is not None:
+        ratio = int(ratio)
+    
     if len(Acell) == 3:
         A = t.sphere(Acell, n, [0,0,0])
         B = t.sphere(tmat.dot(Bcell), n, [0,0,0])
+
+        Bin = np.round(la.inv(tmat.dot(Bcell)).dot(B)).astype(int)
     else:
         Acell3 = np.eye(3)
         Bcell3 = np.eye(3)
@@ -162,41 +168,67 @@ def find_periodicity(tmat, Acell, Bcell, n=1000):
         A = t.circle(Acell3, n, [0,0,0])
         B = t.circle(Bcell3, n, [0,0,0])
         
-    Bin = np.round(la.inv(Bcell3).dot(B)).astype(int)
-    
-    closest = tr.closest(np.asfortranarray(A), np.asfortranarray(B)) - 1 # -1 fortran to python 
-    
-    idx = np.argsort(la.norm(A-B[:,closest], axis=0))
+        Bin = np.round(la.inv(Bcell3).dot(B)).astype(int)
 
-    for i in idx:
-        for j in idx[:i]:
+    cost = tr.closest(np.asfortranarray(A), np.asfortranarray(B))
+
+    cost_orig = cost
+    
+    # cost = cost / np.maximum(la.norm(A, axis=0).reshape((-1,1)).dot(np.ones((1,A.shape[1]))).T, la.norm(B, axis=0).reshape((-1,1)).dot(np.ones((1,B.shape[1]))))
+    
+    idx = np.argsort(cost, axis = None)
+    
+    volA = la.det(Acell)
+    for ii, i in enumerate(idx):
+        ia = i//n
+        ib = i%n
+        for jj, j in enumerate(idx[:ii]):
+            ja = j//n
+            jb = j%n
             if len(Acell) == 3:
-                for k in idx[:j]:
-                    newcellA = np.concatenate([A[:,i:i+1], 
-                                               A[:,j:j+1],
-                                               A[:,k:k+1]],axis=1)
-                    newcellB = np.concatenate([Bin[:,closest[i]:closest[i]+1], 
-                                               Bin[:,closest[j]:closest[j]+1], 
-                                               Bin[:,closest[k]:closest[k]+1]],axis=1)
+                if la.norm(np.cross(A[:,ia], A[:,ja])) > tol and la.norm(np.cross(B[:,ia], B[:,ja])) > tol:
+                    for kk, k in enumerate(idx[:jj]):
+                        ka = k//n
+                        kb = k%n
+                        newcellA = np.concatenate([A[:,ia:ia+1], 
+                                                   A[:,ja:ja+1],
+                                                   A[:,ka:ka+1]],axis=1)
+                        newcellB = np.concatenate([Bin[:,ib:ib+1], 
+                                                   Bin[:,jb:jb+1], 
+                                                   Bin[:,kb:kb+1]],axis=1)
+                        detA = la.det(newcellA)/volA
+                        detB = la.det(newcellB)
+                        if abs(detA) > 1 - tol and abs(detB) > 1 - tol and (ratio is None or int(round(detB/detA)) == ratio):
+                            break
+                    else:
+                        continue
+                    break
             else:
-                newcellA = np.concatenate([A[:2,i:i+1], 
-                                           A[:2,j:j+1]],axis=1)
-                newcellB = np.concatenate([Bin[:2,closest[i]:closest[i]+1], 
-                                           Bin[:2,closest[j]:closest[j]+1]],axis=1)
-                
-            if abs(la.det(newcellA)) > tol:
-                break
-            else:
-                continue
-            break
+                newcellA = np.concatenate([A[:2,ia:ia+1], 
+                                           A[:2,ja:ja+1]],axis=1)
+                newcellB = np.concatenate([Bin[:2,ib:ib+1], 
+                                           Bin[:2,jb:jb+1]],axis=1)
+            
+                detA = la.det(newcellA)/volA
+                detB = la.det(newcellB)
+                if abs(detA) > 1 - tol and abs(detB) > 1 - tol and (ratio is None or int(round(detB/detA)) == ratio):
+                    break
         else:
             continue
         break
-
-    print(newcellA, newcellB)
+    else:
+        print("WARNING: Could not find any suitable cell.")
+        return tmat, None
+    
+    # print("Final distances:", la.norm(newcellA - tmat.dot(Bcell).dot(newcellB), axis=0))
 
     tmat = newcellA.dot(la.inv(Bcell.dot(newcellB)))
+    
+    newcellA = gruber(newcellA)
 
+    if la.det(newcellA) < 0:
+       newcellA[:,0] = -newcellA[:,0]
+    
     return tmat, newcellA
     
 def makeSphere(A, ncell, *atom_types, twoD=False):
@@ -309,41 +341,53 @@ def makeStructures(cell, atoms, atom_types, natB, pos_in_struc, class_list):
     dispStruc = Structure(cell)
     incell = []
     dest = []
+
+    dest_id,_ = uniqueclose(cell_coord_dest, tol)
+    start_id,_ = uniqueclose(cell_coord, tol)
     
-    # Goes thtough the unique atomic positions found in 1 cell
-    for idx, disp in zip(*uniqueclose(cell_coord, tol)):
-        for i in idx:
-            if np.allclose(pos_in_struc[1][:,i], cell.dot(disp), atol=tol):
-                for d in dest:
-                    if np.allclose(d, cell_coord_dest[:,i], atol=tol):
-                        break
-                else:
-                    # If the position is in the first cell and
-                    # the destination (dest) of the atom does not already exist
-                    # The position is added to the structure
-                    dest.append(cell_coord_dest[:,i])
-                    incell.append((i,pos_in_struc[1][:,i]))
-                    break
-        else:
-            # If no satisfactory atom is found in the first cell, the algorithm looks
-            # for equivalent atoms in other cells starting from the points closest
-            # to the origin
-            idx2 = np.argsort(la.norm(np.array([pos_in_struc[1][:,j] for j in idx]),axis=1))
-            for i in idx2:
-                for d in dest:
-                    if np.allclose(d, cell_coord_dest[:,idx[i]], atol=tol):
-                        break
-                else:
-                    dest.append(cell_coord_dest[:,idx[i]])
-                    incell.append((idx[i],cell.dot(disp)))
-                    break
-            
+    destinations = cell.dot(cell_coord_dest[:,[idx[0] for idx in dest_id]])
+
+    start_locs = np.array([idx[0] for idx in start_id], dtype=int)
+
+    size = max(len(dest_id), len(start_id))
+    
+    cost = np.zeros((size, size))
+
+    cost_index = np.zeros((size, size), dtype=int) - 1
+
+    # Finds the best mapping among the possible combinations of mappings
+    mappings_start = [[] for i in range(len(dest_id))]
+    for i, group_dest in enumerate(dest_id):
+        for k, group_start in enumerate(start_id):
+            inter = set(group_dest).intersection(set(group_start))
+            if len(inter) > 0:                    
+                mappings_start[i].append(k)
+                min_dist = None
+                for j in inter:
+                    dist = la.norm(pos_in_struc[1][:,j] - pos_in_struc[0][:,j])
+                    if dist is not None or dist < min_dist:
+                        min_dist = dist
+                        index = j
+                cost[i,k] = min_dist
+                cost_index[i,k] = index
+            else:
+                cost[i,k] = 1000
+                
+    dist, mapping = lap.munkres(cost)
+
+    mapping = mapping - 1
+    
+    incell = np.array([cost_index[i,j] for j,i in enumerate(mapping)], dtype = int)
+    
+    incell = incell[incell!=-1]
+        
     # Adds the atoms to the structure and creates a new vec_classes based on the actual
-    # atmic positions in the final structure
+    # atomic positions in the final structure
     atom_list = []
     vec_classes = [None]*len(set(class_list))
-    for i, disp in incell:
-        vec = pos_in_struc[0][:,i] - pos_in_struc[1][:,i] 
+    for i in incell:
+        disp = pos_in_struc[1][:,i]
+        vec = pos_in_struc[0][:,i] - pos_in_struc[1][:,i]
         ivec = class_list[i]
         if vec_classes[ivec] is None:
             vec_classes[ivec] = vec 
@@ -458,63 +502,88 @@ def produceTransition(n_steps, tmat, dispStruc, vec_classes, outdir,
                 
     return transStruc, spgList, Tpos, color_array, atom_types
 
-def optimizationLoop(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir): 
-    """ This loop will repeat the entire minimization if no periodic cell can be found
-        the final tmat is used to retile the structures (off by default) """
-    tmat = np.eye(3)
+def optimization(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir): 
+    """ Creates the spheres, runs the optimization in finds the cell """
+
     foundcell = None
-    rep = 0
-    while (rep < nrep and foundcell is None):
-        if rep != 0:
-            print("_____RESTARTING_____")
-        
-        rep += 1
     
+    Apos, atomsA, atom_types = makeSphere(A, mulA*ncell) # Create Apos
+    
+    Bpos, atomsB = makeSphere(B, mulB*ncell, atom_types) # Create Bpos
+    
+    assert all(mulA*atomsA == mulB*atomsB)
+    atoms = mulA*atomsA
+    
+    Apos = np.asfortranarray(Apos)
+    Bpos = np.asfortranarray(Bpos)
+    Bpos_in = deepcopy(Bpos)
+    t_time = time.time()
+    print("Optimizing... (this may take several hours)")
+    print("Check progress in %s"%(outdir+"/progress.txt"), flush=True)
+    result = tr.fastoptimization(Apos, Bpos, Acell, la.inv(Acell),
+                                 atoms, filename, outdir)
+    Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, vec = result
+    t_time = time.time() - t_time
+    Bpos = np.asanyarray(Bpos)
+    Apos = np.asanyarray(Apos)
+    
+    print("Mapping time:", t_time)
+    
+    class_list = class_list[:n_map]-class_list[:n_map].min()
+    
+    Bpos = Bpos[:,:n_map]
+    Bposst = Bposst[:,:n_map]
+    Apos_map = Apos_map[:,:n_map]
+
+    dmin_old = dmin
+    tmat_old = tmat
+        
+    print("Trying to find periodicity directly (find_cell):")        
+    foundcell, origin = find_cell(class_list, Bposst, minvol=abs(la.det(Bcell))/len(B), frac_correct = 0.95)
+
+    if foundcell is None:
+
+        print("Trying to find the closest tmat that is commensurate with both cells (find_periodicity)")
+        
+        tmat, foundcell = find_periodicity(tmat, Acell, Bcell, n=1000) # TESTING
+    
+        if n_map < la.det(foundcell)/la.det(Acell)*len(A):
+        
+            print("WARNING: The cell found is larger the the number of mapped atoms!. Initial and final structures will have missing atoms.")
+        
         Apos, atomsA, atom_types = makeSphere(A, mulA*ncell) # Create Apos
-        
-        # Temporarly stretching Bcell, for tiling
-        Btmp = deepcopy(B)
-        Btmp.cell = tmat.dot(B.cell)
-        for b in Btmp:
-            b.pos = tmat.dot(b.pos)
     
-        Bpos, atomsB = makeSphere(Btmp, mulB*ncell, atom_types) # Create Bpos
+        Bpos, atomsB = makeSphere(B, mulB*ncell, atom_types) # Create Bpos
     
-        Bpos = la.inv(tmat).dot(Bpos)
-    
-        assert all(mulA*atomsA == mulB*atomsB)
         atoms = mulA*atomsA
-        
-        Apos = np.asfortranarray(Apos)
-        Bpos = np.asfortranarray(Bpos)
-        t_time = time.time()
-        print("Optimizing... (this may take several hours)")
-        print("Check progress in %s"%(outdir+"/progress.txt"), flush=True)
-        result = tr.fastoptimization(Apos, Bpos, Acell, la.inv(Acell),
-                                     atoms, filename, outdir)
+            
+        origin = np.array([[0],[0],[0]])
+
+        Apos_in = np.asfortranarray(Apos)
+        result = tr.fixed_tmat(Apos_in, Bpos_in, tmat, vec, atoms, filename, outdir)
         Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, vec = result
-        t_time = time.time() - t_time
-        Bpos = np.asanyarray(Bpos)
-        Apos = np.asanyarray(Apos)
-        
-        print("Mapping time:", t_time)
         
         class_list = class_list[:n_map]-class_list[:n_map].min()
     
         Bpos = Bpos[:,:n_map]
         Bposst = Bposst[:,:n_map]
-        Apos_map = Apos_map[:,:n_map] 
+        Apos_map = Apos_map[:,:n_map]
+
+    else:
+        foundcell = Acell.dot(np.round(la.inv(Acell).dot(foundcell)))
+        bfoundcell = np.round(la.inv(tmat.dot(Bcell)).dot(foundcell))
+        tmat = foundcell.dot(la.inv(Bcell.dot(bfoundcell)))
     
-        if abs(abs(la.det(tmat)) - abs(mulA * la.det(Acell)/(mulB * la.det(Bcell)))) > tol_vol and rep < nrep:
-            print("Warning: The volume factor is wrong.")
-            
-        print("Looking for periodic cell...")        
-        foundcell, origin = find_cell(class_list, Bposst, minvol=abs(la.det(Bcell))/len(B))
+    if foundcell is not None:
+        print("Found cell!")
+        if any(tmat-tmat_old) > tol:
+            print("WARNING: tmat changed by more then the set tolerence %e."%(tol))
+        print("Change in distance after tmat adjustment: %f"%(dmin_old-dmin))
+        if abs(la.det(tmat)) != len(A)/len(B):
+            print("WARNING: the optimal mapping is not periodic. This might be physical, check the actual mapping using the interactive mode. A transformation *involving vacancies* will be produced.") 
         
-        if foundcell is not None:
-            print("Found cell!")
-        else:
-            print("Could not find periodic cell")
+    else:
+        print("WARNING: Could not find periodic cell")
 
     return Apos, Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, atoms, atom_types, foundcell, origin
                        
@@ -553,7 +622,7 @@ def findMatching(A, B, ncell,
 
     vol (bool): Make the volumes of the spheres equal
 
-    minimize (bool): Run the minimization (OptimizationLoop) or read a previous result
+    minimize (bool): Run the minimization (optimization()) or read a previous result
 
     test (bool): Display all the parameter without starting the optimization
 
@@ -631,7 +700,7 @@ def findMatching(A, B, ncell,
     if minimize:
         print("==>Ready to start optimization<==")
 
-        result = optimizationLoop(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir)
+        result = optimization(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir)
         pickle.dump(result, open(outdir+"/fastoptimization.dat","wb"))
         
     else:
@@ -639,7 +708,7 @@ def findMatching(A, B, ncell,
             result = pickle.load(open(outdir+"/fastoptimization.dat","rb"))
             print("==>Gathered optimization data from %s<=="%(outdir))
         except FileNotFoundError:
-            result = optimizationLoop(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir)
+            result = optimization(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir)
             pickle.dump(result, open(outdir+"/fastoptimization.dat","wb"))
 
     Apos, Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, atoms, atom_types, foundcell, origin = result
@@ -697,10 +766,12 @@ def findMatching(A, B, ncell,
     pos_in_struc = [None]*2
     pos_in_struc[0] = Apos_map - origin.dot(np.ones((1,np.shape(Apos_map)[1])))
     pos_in_struc[1] = Bposst - origin.dot(np.ones((1,np.shape(Bposst)[1])))
-
+    
     dispStruc, vec_classes = makeStructures(foundcell, atoms, atom_types,
                                natB, pos_in_struc, class_list)
 
+    
+    
     if len(vec_classes) > len(vec_classes_estimate):
         print("WARNING: The number of classes found during the optimization is not sufficent to describe the transformation; increase the classification tolerence (tol_class)")
         print()
@@ -713,13 +784,30 @@ def findMatching(A, B, ncell,
     print("Number of %s (%s) cells in TC:"%(A.name, fileA), abs(la.det(dispStruc.cell)/(la.det(Acell))))
     print("Number of %s (%s) cells in TC:"%(B.name, fileB), abs(la.det(dispStruc.cell)/(la.det(tmat.dot(Bcell)))))
     print()
+    
+    expectedA = int(np.round(abs(la.det(dispStruc.cell)/(la.det(Acell)))))*len(A)
+    expectedB = int(np.round(abs(la.det(dispStruc.cell)/(la.det(tmat.dot(Bcell))))))*len(B)
+    
+    vacA = expectedA - len(dispStruc)
+    vacB = expectedB - len(dispStruc)
+
+    if vacA > 0 and vacB > 0:
+        print("WARNING: There are missing atoms in both structures:")
+        print("%s (%s) is missing %d atoms out of %d"%(A.name, fileA, vacA, expectedA))
+        print("%s (%s) is missing %d atoms out of %d"%(B.name, fileB, vacB, expectedB))
+    elif vacA > 0:
+        print("WARNING: %d vacancies out of %d atomic positions were created in %s (%s) in order to produce a transition"%(vacA, expectedA, A.name, fileA))
+    elif vacB > 0:
+        print("WARNING: %d vacancies out of %d atomic positions were created in %s (%s) in order to produce a transition"%(vacB, expectedB, B.name, fileB))
+    print()
+        
     print("TC in %s (%s) coordinates:"%(B.name, fileB))
     printMatAndDir(la.inv(tmat).dot(dispStruc.cell), ccellB)
     print()
     print("TC in %s (%s) coordinates:"%(A.name, fileA))
     printMatAndDir(dispStruc.cell, ccellA)
-    print()    
-
+    print()
+        
     if interactive or savedisplay:
         if switched:
             direction = "reverse"

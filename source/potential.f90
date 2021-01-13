@@ -36,6 +36,8 @@ contains
     character*(*), intent(in) :: &
          pot
 
+    distance = 0.0d0
+    
     select case (pot)
     case ("LJ")
 

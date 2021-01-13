@@ -312,20 +312,22 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, out
 
 
         
-        foundcell[i], origin[i][:2,:] = find_cell(class_list[i,:], Bposst[i,:2,:],
-                                                         minvol=abs(la.det(B.cell[:2,:2]))/len(B))
+        # foundcell[i], origin[i][:2,:] = find_cell(class_list[i,:], Bposst[i,:2,:],
+        #                                                  minvol=abs(la.det(B.cell[:2,:2]))/len(B))
 
 
         if foundcell[i] is None:
 
             print("Original find_cell failed, trying beta find_periodicity")
             
-            ttrans[i,:2,:2], foundcell[i] = find_periodicity(ttrans[i,:2,:2], A.cell[:2,:2], B.cell[:2,:2], n=10) # TESTING
+            ttrans[i,:2,:2], foundcell[i] = find_periodicity(ttrans[i,:2,:2], A.cell[:2,:2], B.cell[:2,:2], len(A)/len(B), n=100) # TESTING
 
             origin[i][:2,:] = np.array([[0],[0]])
 
+            # ttrans[i,:,3] = ttrans[i,:,3] + np.array([4,4,0]) # changing the origin as an effect on the outcome 
+            
             Apos_in = np.asfortranarray(Apos)
-            result = tr.fixed_tmat(Apos_in, Bpos_in, ttrans[i,:,:], atoms, switched, filename, outdir)
+            result = tr.fixed_tmat_int(Apos_in, Bpos_in, ttrans[i,:,:], atoms, switched, filename, outdir)
             Apos_map_out, Bpos_out, Bposst_out, _, _, class_list_out, ttrans[i,:,3], dmin[i] = result
 
             print(result)

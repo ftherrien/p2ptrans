@@ -10,7 +10,8 @@ module transform
        fastoptimization, &
        intoptimization, &
        closest, &
-       fixed_tmat
+       fixed_tmat, &
+       fixed_tmat_int
 
   private :: &
        init_random_seed, &
@@ -23,7 +24,6 @@ module transform
        analytical_gd_free, &
        analytical_gd_slant, &
        analytical_gd_std, &
-       analytical_gd_vol, &
        gradient_descent_explore, &
        gradient_descent_explore_free, &
        find_peaks, &
@@ -148,7 +148,7 @@ contains
   end function cost_map
 
 
-  subroutine closest(closest_list, Apos, Bpos, n)
+  subroutine closest(cost, Apos, Bpos, n)
 
     integer, intent(in) :: &
          n ! Total number of atoms
@@ -156,15 +156,15 @@ contains
     double precision, intent(in), dimension(3,n) :: &
          Apos, Bpos ! Position of the atoms
 
-    integer, intent(out), dimension(n) :: &
-         closest_list ! Position of the atoms
+    ! integer, intent(out), dimension(n) :: &
+    !      closest_list ! Position of the atoms
 
-    double precision, dimension(n,n) :: &
+    double precision, intent(out), dimension(n,n) :: &
          cost
 
     cost = cost_map(Apos, Bpos, n, n, "Euclidean", 0.0d0)
 
-    closest_list =  minloc(cost,2)
+    ! closest_list =  minloc(cost,2)
 
   end subroutine closest
   
@@ -333,7 +333,6 @@ contains
     double precision :: &
          dist, &
          dist_prev, &
-         dist_2prev, &
          dist_init, &
          s2, s3, & ! Sine of angle 1 and 2
          c2, c3, & ! Cosine of angle 1 and 2
@@ -355,6 +354,7 @@ contains
 
     M = rot_mat(angles)
     dist = 0.0d0
+    dist_init = 0.0d0
     dist_prev = tol + 1.0d0
     angles_prev = angles
     vec_prev = vec
@@ -520,6 +520,7 @@ contains
     ones = 1.0d0
 
     dist = 0.0d0
+    dist_init = 0.0d0
     dist_prev = tol+1
     tmat_prev = tmat
     vec_prev = vec
@@ -623,6 +624,7 @@ contains
     ones = 1.0d0
 
     dist = 0.0d0
+    dist_init = 0.0d0
     dist_prev = tol+1
     vec_prev = vec
     vec_in = vec
@@ -824,108 +826,6 @@ contains
     
   end subroutine analytical_gd_std
 
-  subroutine analytical_gd_vol(tmat, vec, Apos, Bpos, sq, n_iter, rate1, rate2, tol, ratio)
-
-    ! Gradient descent with respect to a linear transformation where the determinant must
-    ! be "ratio"
-    ! ADJUST has not been implemented
-
-    integer, intent(in) :: &
-         n_iter ! Number of atoms
-
-    double precision, intent(in) :: &
-         rate1, & ! Rate for angles
-         rate2, & ! Rate for disp
-         tol, &
-         ratio
-
-    logical, intent(in) :: &
-         sq ! Square distance mode
-
-    double precision, intent(in), dimension(:,:) :: &
-         Apos, &
-         Bpos ! Bpos ordered according to the mapping
-
-    double precision, dimension(3,size(Bpos,2)) :: &
-         E ! position matrix
-
-    double precision, intent(inout), dimension(3,3) :: &         
-         tmat     ! Transformation matrix
-
-    double precision, dimension(3,3) :: &         
-         ddet ! Determinant matrix (cofactor matrix)
-
-    double precision, dimension(2,2) :: &         
-         ttmat ! Determinant matrix (similar to cofactor matrix)
-
-    double precision, intent(inout), dimension(3,1) :: &         
-         vec     ! Translation vector
-
-    double precision, dimension(size(Bpos,2),1) :: &
-         ones
-
-    double precision :: &
-         dist, &
-         dist_prev, &
-         dist_init, &
-         nat
-
-    integer :: &
-         j, k, l ! Iterator
-
-    nat = dble(size(Apos,2))
-
-    ones = 1.0d0
-
-    dist = 0.0d0
-    dist_prev = tol+1
-
-    j=0
-    do while (j < n_iter .and. abs(dist - dist_prev) > tol)
-       j=j+1
-
-       tmat(1,1) = (ratio + tmat(1,2)*(tmat(2,1)*tmat(3,3)-tmat(3,1)*tmat(2,3)) - &
-            tmat(1,3)*(tmat(2,1)*tmat(3,2)-tmat(2,2)*tmat(3,1))) &
-            / (tmat(2,2)*tmat(3,3) - tmat(3,2)*tmat(2,3))
-
-       dist_prev = dist
-       dist = sum(sqrt(sum((Apos - free_trans(Bpos,tmat,vec))**2,1)))
-
-       if (j==1) then
-          dist_init = dist
-       endif
-
-       ! print*, dist, dist_prev - dist, "VOL", j, det(tmat,3)
-
-       E = Apos - free_trans(Bpos,tmat,vec)
-
-       if (.not. sq) then
-          E = E / spread(sqrt(sum(E**2,1)),1,3)
-       endif
-
-       ! Cofactor matrix
-       do k=1,3
-          do l=1,3
-             ttmat(:k-1,:l-1) = tmat(:k-1,:l-1)
-             ttmat(:k-1,l:) = tmat(:k-1,l+1:)
-             ttmat(k:,:l-1) = tmat(k+1:,:l-1)
-             ttmat(k:,l:) = tmat(k+1:,l+1:)
-
-             ddet(k,l) = (1-2*modulo(k+l,2))*det(ttmat,2)
-          enddo
-       enddo
-
-       tmat = tmat + rate1 * dist / dist_init * (matmul(E,transpose(Bpos)) - &
-            dot_product(E(1,:),Bpos(1,:))*ddet/ddet(1,1))
-
-       ! tmat = tmat + rate1 * dist / dist_init * (matmul(E,transpose(Bpos)))
-
-       vec = vec   + rate2 * dist / dist_init * matmul(E,ones)
-
-    enddo
-
-  end subroutine analytical_gd_vol
-
   subroutine analytical_gd_slant(slant, vec, Apos, Bpos, n_iter, rate1, rate2, tol)
 
     ! Gradient descent that minimizes the distance with respect to a slanting matrix:
@@ -999,6 +899,7 @@ contains
 
     slant = eye()
     dist = 0.0d0
+    dist_init = 0.0d0
     dist_prev = tol + 1.0d0
 
     j=0
@@ -2002,7 +1903,7 @@ contains
 
        if ((remap .and. j/=1) .or. .not. minimize) then
 
-          if (.not. twodim) then
+          if (.not. twodim .and. minimize) then
              ! For interfaces when the potential is not Euclidean, this does not necessarily help
              center_vec = sum(free_trans(Bpos_opt,tmat,vec) - Apos_mapped,2) / n_out
           endif
@@ -2160,8 +2061,7 @@ contains
          tol_std, &
          init_class, &
          max_vol, &
-         dmin_half, &
-         t
+         dmin_half
 
     double precision, intent(out), dimension(3,3) :: &
          tmat ! Transformation matrix
@@ -2397,7 +2297,9 @@ contains
     ! Reshift after classification
     center_vec = sum(free_trans(Bpos_opt,tmat,vec) - Apos_mapped,2) / n_out
 
-    Bpos_opt_stretch = free_trans(Bpos_opt,tmat,vec - center_vec)
+    vec = vec - center_vec
+    
+    Bpos_opt_stretch = free_trans(Bpos_opt,tmat,vec)
 
     Bpos_out(:,1:n_out) = rBpos_opt
     Bpos_out_stretch(:,1:n_out) = Bpos_opt_stretch
@@ -2431,6 +2333,282 @@ contains
 
   end subroutine fastoptimization
 
+    subroutine fixed_tmat(Apos_out, Bpos_out, Bpos_out_stretch, & ! Output
+       n_out, n_A, classes_list_out, & ! Output
+       tmat, dmin, vec, & ! Output
+       Apos, na, Bpos, nb, &
+       tmat_in, vec_in, &
+       atoms, n_atoms, &
+       filename, outdir)
+
+    integer, intent(in) :: &
+         na, nb, & ! Total number of atoms
+         n_atoms ! Number of types of atoms per cell
+
+    double precision :: &
+         rate1, &  ! Rate of the gradient descent for angles
+         rate2     ! Rate of the gradient descent for displacement
+
+    integer :: &
+         n_iter, &   ! Number of iteration of the gradient descent
+         n_ana, &
+         n_conv, &
+         n_adjust, &
+         n_class
+
+    character*200, intent(in) :: &
+         filename, &
+         outdir
+
+    double precision, intent(inout), dimension(3,na) :: &
+         Apos ! Position of the atoms
+
+    double precision, intent(inout), dimension(3,nb) :: &
+         Bpos ! Position of the atoms
+
+    double precision, intent(out), dimension(3,na) :: &
+         Apos_out ! Position of the atoms
+
+    double precision, intent(out), dimension(3,nb) :: &
+         Bpos_out, & ! Position of the atoms
+         Bpos_out_stretch
+
+    integer, intent(out) :: &
+         n_out, &
+         n_A
+
+    double precision :: &
+         fracA, fracB ! Fraction of A and B to use in optimisation
+
+    integer, intent(in), dimension(n_atoms) :: &
+         atoms !Number of atoms of each type
+
+    double precision, dimension(3), intent(out) :: &
+         dmin
+
+    double precision, intent(out), dimension(3) :: &
+         vec        ! Translation vector
+
+    double precision, intent(in), dimension(3) :: &
+         vec_in        ! Translation vector
+
+    double precision, dimension(3) :: &
+         vec_rot, & ! Translation vector for the rotated unstretched matrix
+         angles  ! Rotation angles
+
+    double precision :: &
+         tol, &
+         tol_class, &
+         tol_std, &
+         init_class, &
+         max_vol, &
+         dmin_half
+
+    double precision, intent(in), dimension(3,3) :: &
+         tmat_in ! Transformation matrix
+    
+    double precision, intent(out), dimension(3,3) :: &
+         tmat ! Transformation matrix
+
+    double precision, allocatable, dimension(:,:) :: &
+         Apos_mapped, Bpos_opt, &
+         Apos_mapped_prev, &
+         tBpos_opt, &
+         rBpos_opt, &
+         Bpos_opt_stretch  ! position matrix
+
+    integer, intent(out), dimension(size(Apos,2)) :: &         
+         classes_list_out
+
+    integer, allocatable, dimension(:) :: &
+         classes_list, &
+         classes_list_prev, &
+         n_classes_trail
+
+    integer :: &
+         n_frac
+
+    double precision, allocatable, dimension(:,:) :: &
+         stats, &
+         vecs
+    
+    double precision, allocatable, dimension(:,:,:) :: &
+         tmats
+
+    logical :: &
+         slanting, &
+         remap, &
+         free, &
+         check, &
+         usebest, &
+         exist
+
+    character*200 :: &
+         savebest, &
+         progressfile
+
+    double precision, parameter, dimension(3) :: &
+         zeros = (/0.0d0, 0.0d0, 0.0d0/)
+
+
+    namelist /input/ &
+         fracA, fracB, &
+         tol, tol_std, &
+         tol_class, &
+         rate1, rate2, &
+         slanting, &
+         n_iter, n_ana, &
+         n_conv, n_adjust, &
+         n_class, &
+         max_vol, free, &
+         check, &
+         savebest, &
+         usebest, &
+         remap, &
+         init_class
+
+    ! Namelist default values
+    init_class = 1.0d0
+    tol = 1.0d-4
+    tol_std = tol*1.0d-3
+    tol_class = 1.0d-3
+    rate1 = 1.0d-3
+    rate2 = 1.0d-3
+    slanting = .false.
+    fracA = 0.09d0
+    fracB = 0.3d0
+    n_iter = 1000
+    n_ana = 300
+    n_conv = 5
+    n_class = 30
+    n_adjust = 10
+    max_vol = 4.0d0
+    free = .false.
+    check = .false.
+    savebest = trim(outdir)//"/best.dat"
+    usebest = .false.
+    remap = .true.
+
+
+    progressfile = trim(outdir)//"/progress.txt"
+    open(13, file = trim(progressfile), status='replace')
+
+    inquire(file = filename, exist=exist)
+
+    if (exist) then
+       open (unit = 11, file = filename, status = 'OLD')
+       read (11, input)
+       close (11)
+    endif
+
+
+    n_frac = int(fracB*size(Apos,2)/sum(atoms))
+    n_A = int(fracA*size(Apos,2)/sum(atoms))
+    n_out = n_frac * sum(atoms)
+    Apos_out = 0.0d0
+    Bpos_out = 0.0d0
+    angles = 0.0d0
+
+    allocate(Apos_mapped(3,n_out), Bpos_opt(3,n_out), &
+         Apos_mapped_prev(3,n_out), &
+         tBpos_opt(3,n_out), &
+         rBpos_opt(3,n_out), &
+         Bpos_opt_stretch(3,n_out), &
+         classes_list(n_out), &
+         classes_list_prev(n_out), &
+         n_classes_trail(n_out), &
+         stats(n_iter,3), &
+         vecs(n_iter,3), &
+         tmats(n_iter,3,3))
+
+
+    ! Center both cells at the geometric center
+    call center(Bpos,nb)
+    call center(Apos,na)
+
+
+    tmat = tmat_in
+    
+    vec = vec_in
+
+    write(13,*) "/======== Classification ========\\"
+
+    Apos_mapped = Apos(:,1:n_out)
+    Bpos_opt = Bpos(:,1:n_out)
+    
+    call classification(.false., .false., Apos, Bpos, Apos_mapped, Bpos_opt, & ! Output
+         tmat, vec, & ! Output
+         classes_list, &
+         fracA, fracB, n_frac, &
+         na, nb, n_class, &
+         remap, check, &
+         atoms, n_atoms, rate1, rate2, &
+         n_ana, n_out, &
+         tol, tol_class, tol_std, &
+         tol_class, &
+         "Euclidean", 0.0d0)
+
+    vec_rot = 0.0d0
+
+    call init_random_seed()
+
+    call random_number(angles) ! So that the rotation min doesn't get stuck                                             
+    
+    ! This is only to get closer since angles start from scratch.
+    ! It needs more strict convergence since this is only three points
+    call analytical_gd_rot(.false., angles, vec_rot, tmat, eye(), &
+         100000, 1.0d0, 1.0d0, tol/100, "Euclidean", 0.0d0)
+    
+    vec_rot = vec
+    
+    call analytical_gd_rot(.false., angles, vec_rot, Apos_mapped, Bpos_opt, &
+         n_ana*1000, rate1, rate2, tol, "Euclidean", 0.0d0)
+    
+    rBpos_opt = free_trans(Bpos_opt, rot_mat(angles), vec_rot)
+
+    write(13,*) "Final rmat"
+    write(13,"(3(F7.3,X))") rot_mat(angles)
+
+    classes_list_out = 0
+    classes_list_out(1:n_out) = classes_list
+
+    write(13,*) "Final tmat"
+    write(13,"(3(F7.3,X))") tmat
+    
+    Bpos_opt_stretch = free_trans(Bpos_opt,tmat,vec)
+
+    Bpos_out(:,1:n_out) = rBpos_opt
+    Bpos_out_stretch(:,1:n_out) = Bpos_opt_stretch
+    Apos_out(:,1:n_out) = Apos_mapped
+
+    dmin(1) = distance(Apos_mapped, rBpos_opt,eye(),zeros,"Euclidean",0.0d0)
+    
+    dmin_half = distance(Apos_mapped(:, 1:int(n_out/2)), rBpos_opt(:, 1:int(n_out/2)), eye(), zeros, "Euclidean", 0.0d0)
+       
+    dmin(2) = (dmin(1)/n_out - dmin_half/int(n_out/2))/(n_out**(1.0/3.0) - int(n_out/2)**(1.0/3.0))
+
+    dmin(3) = dmin(1)/n_out - dmin(2)*n_out**(1.0/3.0)
+
+    ! ! Print the cost matrix
+    ! mat = cost(Apos,Bpos,n)   
+    ! write(13,"(10(F5.3,X))") mat
+
+    close(13)
+
+    deallocate(Apos_mapped, Bpos_opt, &
+         Apos_mapped_prev, &
+         tBpos_opt, &
+         rBpos_opt, &
+         Bpos_opt_stretch, &
+         classes_list, &
+         classes_list_prev, &
+         n_classes_trail, &
+         stats, &
+         vecs, &
+         tmats)
+
+  end subroutine fixed_tmat
+  
   subroutine intoptimization(Apos_out, Bpos_out, Bpos_out_stretch, &
        n_out, n_A, classes_list_out, ttrans, rtrans, dmin, stats, n_peaks, &
        peak_thetas, sym, n_iter, &
@@ -2942,7 +3120,7 @@ contains
 
   end subroutine intoptimization
 
-  subroutine fixed_tmat(Apos_out, Bpos_out, Bpos_out_stretch, &
+  subroutine fixed_tmat_int(Apos_out, Bpos_out, Bpos_out_stretch, &
        n_out, n_A, classes_list_out, vec, dmin, &
        Apos, na, Bpos, nb, &
        ttrans, &
@@ -3018,8 +3196,7 @@ contains
          ttrans
 
     double precision, dimension(3,3) :: &
-         tmat, &! Transformation matrix
-         rtmat
+         tmat ! Transformation matrix
 
     double precision, allocatable, dimension(:,:) :: &
          Apos_mapped, Apos_mapped_prev, &
@@ -3029,23 +3206,14 @@ contains
          rBpos_opt
 
     integer :: &
-         i, j, k, &
-         j_in, &
-         id, &
-         n_bins, &
          n_frac, &
-         vecrep, &
-         n_empty
+         vecrep
 
     double precision, parameter, dimension(3) :: &
          zeros = (/0.0d0, 0.0d0, 0.0d0/)
-
-    double precision, allocatable, dimension(:) :: &
-         bins
     
     integer, allocatable, dimension(:) :: &
-         classes_list, &
-         bin_index
+         classes_list
 
     integer, intent(out), dimension(size(Apos,2)) :: &
          classes_list_out
@@ -3069,7 +3237,6 @@ contains
          param, &
          zdist, &
          max_vol, &
-         size_bin, &
          min_prom
 
     namelist /input2d/ &
@@ -3174,7 +3341,7 @@ contains
          atoms, n_atoms, rate1, rate2, &
          n_ana, n_out, &
          tol, tol_class, tol_std, &
-         init_class, &
+         tol_class, &
          trim(pot), param)
 
        center_vec = sum(free_trans(Bpos_opt,tmat,vec) - Apos_mapped,2) / n_out
@@ -3272,6 +3439,6 @@ contains
          Bpos_opt_stretch, &
          classes_list)
 
-  end subroutine fixed_tmat
+  end subroutine fixed_tmat_int
   
 end module transform
