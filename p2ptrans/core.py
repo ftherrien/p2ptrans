@@ -9,7 +9,7 @@ from .fmodules import hungarian as lap
 from .format_spglib import from_spglib, to_spglib
 from .fmodules import tiling as t
 from .display import displayOptimalResult, makeGif, displayTransCell, make_anim, make_fig, printMatAndDir
-from .utils import lcm, find_uvw, normal, rotate, PCA, makeInitStruc, product_no_repeat
+from .utils import lcm, find_uvw, normal, rotate, PCA, makeInitStruc
 from .analysis import findR, strainDirs
 
 def find_cell(class_list, positions, tol = 1e-5, frac_shell = 0.5, frac_correct = 0.95, max_count=1000, minvol = 1e-5):
