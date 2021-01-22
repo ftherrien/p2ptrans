@@ -502,7 +502,7 @@ def produceTransition(n_steps, tmat, dispStruc, vec_classes, outdir,
                 
     return transStruc, spgList, Tpos, color_array, atom_types
 
-def optimization(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir): 
+def optimization(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir, max_cell_size): 
     """ Creates the spheres, runs the optimization in finds the cell """
 
     foundcell = None
@@ -535,57 +535,42 @@ def optimization(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir):
     Bposst = Bposst[:,:n_map]
     Apos_map = Apos_map[:,:n_map]
 
-    dmin_old = dmin
     tmat_old = tmat
         
     print("Trying to find periodicity directly (find_cell):")        
-    foundcell, origin = find_cell(class_list, Bposst, minvol=abs(la.det(Bcell))/len(B), frac_correct = 0.95)
+    foundcell, _ = find_cell(class_list, Bposst, minvol=abs(la.det(Bcell))/len(B), frac_correct = 0.95)
 
     if foundcell is None:
 
         print("Trying to find the closest tmat that is commensurate with both cells (find_periodicity)")
         
-        tmat, foundcell = find_periodicity(tmat, Acell, Bcell, n=1000) # TESTING
-    
+        tmat, foundcell = find_periodicity(tmat, Acell, Bcell, n=max_cell_size) 
+        
         if n_map < la.det(foundcell)/la.det(Acell)*len(A):
         
-            print("WARNING: The cell found is larger the the number of mapped atoms!. Initial and final structures will have missing atoms.")
-        
-        Apos, atomsA, atom_types = makeSphere(A, mulA*ncell) # Create Apos
-    
-        Bpos, atomsB = makeSphere(B, mulB*ncell, atom_types) # Create Bpos
-    
-        atoms = mulA*atomsA
-            
-        origin = np.array([[0],[0],[0]])
-
-        Apos_in = np.asfortranarray(Apos)
-        result = tr.fixed_tmat(Apos_in, Bpos_in, tmat, vec, atoms, filename, outdir)
-        Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, vec = result
-        
-        class_list = class_list[:n_map]-class_list[:n_map].min()
-    
-        Bpos = Bpos[:,:n_map]
-        Bposst = Bposst[:,:n_map]
-        Apos_map = Apos_map[:,:n_map]
+            print("WARNING: The cell found is larger the the number of mapped atoms!. Initial and final structures will have missing atoms. If you can't affort to optimize with a larger ncell, you can find the mapping with the current tmat on a larger system by setting map_ncell (-cn)")
 
     else:
         foundcell = Acell.dot(np.round(la.inv(Acell).dot(foundcell)))
         bfoundcell = np.round(la.inv(tmat.dot(Bcell)).dot(foundcell))
         tmat = foundcell.dot(la.inv(Bcell.dot(bfoundcell)))
-    
+        
     if foundcell is not None:
+
+        Bposst = tmat.dot(la.inv(tmat_old)).dot(Bposst)
+        Bposst = Bposst + np.mean(Apos_map-Bposst, axis=1).reshape((3,1)).dot(np.ones((1,Bposst.shape[1])))
+        
         print("Found cell!")
-        if any(tmat-tmat_old) > tol:
+        if np.any(tmat-tmat_old) > tol:
             print("WARNING: tmat changed by more then the set tolerence %e."%(tol))
-        print("Change in distance after tmat adjustment: %f"%(dmin_old-dmin))
-        if abs(la.det(tmat)) != len(A)/len(B):
+            print(tmat_old, tmat)
+        if abs(abs(la.det(tmat)) - abs(mulA * la.det(Acell)/(mulB * la.det(Bcell)))) > 1e-12:
             print("WARNING: the optimal mapping is not periodic. This might be physical, check the actual mapping using the interactive mode. A transformation *involving vacancies* will be produced.") 
         
     else:
         print("WARNING: Could not find periodic cell")
 
-    return Apos, Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, atoms, atom_types, foundcell, origin
+    return Apos, Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, atoms, atom_types, foundcell, vec
                        
 def findMatching(A, B, ncell,
                  fileA='Input 1', fileB='Input 2',
@@ -594,7 +579,7 @@ def findMatching(A, B, ncell,
                  interactive=False, savedisplay=False,
                  outdir='output',
                  switch= False, prim=True,
-                 vol=False, minimize=False, test= False, primtol=primtol):
+                 vol=False, minimize=False, test= False, primtol=primtol, map_ncell = None, max_cell_size = 1000):
     """ 
     This function finds the best matching between two given structures and returns the transformation matrix and the transformation cell.
 
@@ -700,7 +685,7 @@ def findMatching(A, B, ncell,
     if minimize:
         print("==>Ready to start optimization<==")
 
-        result = optimization(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir)
+        result = optimization(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir, max_cell_size)
         pickle.dump(result, open(outdir+"/fastoptimization.dat","wb"))
         
     else:
@@ -708,11 +693,41 @@ def findMatching(A, B, ncell,
             result = pickle.load(open(outdir+"/fastoptimization.dat","rb"))
             print("==>Gathered optimization data from %s<=="%(outdir))
         except FileNotFoundError:
-            result = optimization(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir)
+            result = optimization(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir, max_cell_size)
             pickle.dump(result, open(outdir+"/fastoptimization.dat","wb"))
 
-    Apos, Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, atoms, atom_types, foundcell, origin = result
+    Apos, Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, atoms, atom_types, foundcell, vec = result
         
+    if map_ncell is not None:
+
+        # Remapping with the new exact tmat
+        
+        Apos, atomsA, atom_types = makeSphere(A, mulA*map_ncell) # Create Apos
+        
+        Bpos, atomsB = makeSphere(B, mulB*map_ncell, atom_types) # Create Bpos
+        
+        atoms = mulA*atomsA
+
+        dmin_old = dmin
+        
+        Apos_in = np.asfortranarray(Apos)
+        Bpos_in = np.asfortranarray(Bpos)
+        result = tr.fixed_tmat(Apos_in, Bpos_in, tmat, vec, atoms, filename, outdir)
+        Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, vec = result
+        
+        class_list = class_list[:n_map]-class_list[:n_map].min()
+        
+        Bpos = Bpos[:,:n_map]
+        Bposst = Bposst[:,:n_map]
+        Apos_map = Apos_map[:,:n_map]
+
+        new_result = Apos, Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, atoms, atom_types, foundcell, vec
+
+        pickle.dump(new_result, open(outdir+"/fastoptimization.dat","wb"))
+        
+        print("Change in distance after tmat adjustment: %f"%(dmin[0]-dmin_old[0]))
+    
+    
     natB = n_map // np.sum(atoms)
     nat_map = n_map // np.sum(atoms)
     nat = np.shape(Apos)[1] // np.sum(atoms)
@@ -762,6 +777,8 @@ def findMatching(A, B, ncell,
     print()
     print("-----------PERIODIC CELL-----------")
     print()
+
+    origin = np.array([[0],[0],[0]])
     
     pos_in_struc = [None]*2
     pos_in_struc[0] = Apos_map - origin.dot(np.ones((1,np.shape(Apos_map)[1])))

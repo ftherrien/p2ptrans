@@ -2490,7 +2490,7 @@ contains
     remap = .true.
 
 
-    progressfile = trim(outdir)//"/progress.txt"
+    progressfile = trim(outdir)//"/progress_find_cell.txt"
     open(13, file = trim(progressfile), status='replace')
 
     inquire(file = filename, exist=exist)
@@ -3285,7 +3285,7 @@ contains
     vecrep = 10
     min_prom = 0.6d0
 
-    progressfile = trim(outdir)//"/progress.txt"
+    progressfile = trim(outdir)//"/progress_find_cell.txt"
     open(13, file = trim(progressfile), status='replace')
 
     inquire(file = filename, exist=exist)
