@@ -155,3 +155,15 @@ def lccell(S1, S2, tol):
          
       return S1.dot(S)
 
+def reshift(cell):
+   """Reshift the z axis to the last position in the matrix and makes it positive"""
+   
+   idx = np.argmax(abs(cell[2,:]))
+   if idx == 2:
+       cell[2,2] = np.sign(cell[2,2])*cell[2,2]
+       if (cell[2,2] < 0) ^ (la.det(cell) < 0): 
+           cell[:,:2] = cell[:,1::-1]
+   else:
+       cell[:, idx], cell[:, 2] = -np.sign(la.det(cell))*np.sign(cell[2, idx])*cell[:,2], np.sign(cell[2,idx])*cell[:, idx]
+       
+   return cell

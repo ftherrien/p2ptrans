@@ -9,7 +9,7 @@ from .fmodules import hungarian as lap
 from .format_spglib import from_spglib, to_spglib
 from .fmodules import tiling as t
 from .display import displayOptimalResult, makeGif, displayTransCell, make_anim, make_fig, printMatAndDir
-from .utils import lcm, find_uvw, normal, rotate, PCA, makeInitStruc
+from .utils import lcm, find_uvw, normal, rotate, PCA, makeInitStruc, reshift
 from .analysis import findR, strainDirs
 
 def find_cell(class_list, positions, tol = 1e-5, frac_shell = 0.5, frac_correct = 0.95, max_count=1000, minvol = 1e-5):
@@ -223,8 +223,14 @@ def find_periodicity(tmat, Acell, Bcell, ratio=None, n=1000):
     # print("Final distances:", la.norm(newcellA - tmat.dot(Bcell).dot(newcellB), axis=0))
 
     tmat = newcellA.dot(la.inv(Bcell.dot(newcellB)))
-    
-    newcellA = gruber(newcellA)
+
+    if len(Acell) == 2:
+        tmpcell = np.eye(3)
+        tmpcell[:2,:2] = newcellA
+        tmpcell = reshift(gruber(tmpcell))
+        newcellA = tmpcell[:2,:2]
+    else:
+        newcellA = gruber(newcellA)
 
     if la.det(newcellA) < 0:
        newcellA[:,0] = -newcellA[:,0]
@@ -372,9 +378,9 @@ def makeStructures(cell, atoms, atom_types, natB, pos_in_struc, class_list):
                 cost_index[i,k] = index
             else:
                 cost[i,k] = 1000
-                
+    
     dist, mapping = lap.munkres(cost)
-
+    
     mapping = mapping - 1
     
     incell = np.array([cost_index[i,j] for j,i in enumerate(mapping)], dtype = int)
@@ -410,9 +416,9 @@ def makeStructures(cell, atoms, atom_types, natB, pos_in_struc, class_list):
 
     dispStruc = supercell(dispStruc, cell)
 
-    # Makes sure it is the primitive cell 
+    # Makes sure it is the primitive cell
     dispStruc = primitive(dispStruc, tolerance = tol)
-
+    
     return dispStruc, vec_classes
 
 def switchDispStruc(dispStruc, tmat, vec_classes):

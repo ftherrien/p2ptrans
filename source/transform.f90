@@ -648,7 +648,7 @@ contains
           dist_init = dist
        endif
 
-       print*, dist, vec(3,1), dist_prev - dist, "FREE", j, tmat, vec, pot, param
+       ! print*, dist, vec(3,1), dist_prev - dist, "FREE", j, tmat, vec, pot, param
 
        E = derivative(Apos, Bpos, tmat, vec, pot, param)
 
@@ -3025,7 +3025,7 @@ contains
                Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
                tol, pot, param)
 
-          print*, "FINAL:", vec(3)
+          ! print*, "FINAL:", vec(3)
 
        else
 
@@ -3356,7 +3356,7 @@ contains
                Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
                tol, pot, param)
 
-          print*, "FINAL:", vec(3)
+          ! print*, "FINAL:", vec(3)
 
        else
 
@@ -3408,7 +3408,7 @@ contains
        select case (trim(pot))
        case ("LJ")
 
-       dmin(2) = dmin(1) / n_out
+       dmin(2) = distance(Apos_mapped, Bpos_opt_stretch, eye(), zeros, trim(pot), param)
 
        dmin(3) = 0.0d0
        
