@@ -550,7 +550,7 @@ def optimization(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir, max_ce
 
         print("Trying to find the closest tmat that is commensurate with both cells (find_periodicity)")
         
-        tmat, foundcell = find_periodicity(tmat, Acell, Bcell, n=max_cell_size) 
+        tmat, foundcell = find_periodicity(tmat, Acell, Bcell, n = max_cell_size) 
         
         if n_map < la.det(foundcell)/la.det(Acell)*len(A):
         
@@ -563,8 +563,13 @@ def optimization(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir, max_ce
         
     if foundcell is not None:
 
-        Bposst = tmat.dot(la.inv(tmat_old)).dot(Bposst)
-        Bposst = Bposst + np.mean(Apos_map-Bposst, axis=1).reshape((3,1)).dot(np.ones((1,Bposst.shape[1])))
+        old_distp =  np.sum(la.norm(Bposst - Apos_map, axis=0)))
+
+        Bposst = tmat.dot(la.inv(tmat_old)).dot(Bposst - vec.reshape((3,1)).dot(np.ones((1,Bposst.shape[1]))))
+        + vec.reshape((3,1)).dot(np.ones((1,Bposst.shape[1])))
+        # TODO: Ideally vec would be readjusted here
+
+        print("Change in stretched dist:", np.sum(la.norm(Bposst - Apos_map, axis=0)) - old_distp)
         
         print("Found cell!")
         if np.any(tmat-tmat_old) > tol:
@@ -708,13 +713,23 @@ def findMatching(A, B, ncell,
 
         # Remapping with the new exact tmat
         
+        Apos, atomsA, atom_types = makeSphere(A, Apos.shape[1]/len(A)) # recreate original Apos
+        
+        Bpos, atomsB = makeSphere(B, Apos.shape[1]/len(B), atom_types) # recreate original Bpos
+        
+        center_old =  tmat.dot(np.mean(Bpos, axis=1)) - np.mean(Apos, axis=1) # Diff between centers 
+            
         Apos, atomsA, atom_types = makeSphere(A, mulA*map_ncell) # Create Apos
         
         Bpos, atomsB = makeSphere(B, mulB*map_ncell, atom_types) # Create Bpos
+
+        center_new =  tmat.dot(np.mean(Bpos, axis=1)) - np.mean(Apos, axis=1)
         
         atoms = mulA*atomsA
 
         dmin_old = dmin
+        
+        vec = center_new - center_old + vec # Adjusting old vec to new centroids
         
         Apos_in = np.asfortranarray(Apos)
         Bpos_in = np.asfortranarray(Bpos)
@@ -772,7 +787,7 @@ def findMatching(A, B, ncell,
 
     # Create gif if turned on
     if gif:
-        makeGif(Apos, Bposst, disps, vec_classes_estimate, nat, atoms)
+        makeGif(Apos, Bposst, disps, vec_classes_estimate, nat, atoms, outdir)
 
     # End program if a periodic cell couldn't be found earlier
     if foundcell is None:

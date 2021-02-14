@@ -566,11 +566,14 @@ contains
 
   end subroutine analytical_gd_free
     
-  subroutine analytical_gd_vec(tmat, vec, Apos, Bpos, n_iter, rate2, tol, pot, param)
+  subroutine analytical_gd_vec(straighten, tmat, vec, Apos, Bpos, n_iter, rate2, tol, pot, param)
 
     ! Gradient descent with respect to the vector only (3x3 matrix)
     ! ADJUST has been implemented
 
+    logical, intent(in) :: &
+         straighten
+    
     integer, intent(in) :: &
          n_iter ! Number of atoms
 
@@ -635,11 +638,13 @@ contains
        
        dist_prev = dist
        sum_pot = 0.0d0
+       if (straighten) then
        do k=1,size(Apos,2)
           if (abs(Apos(3,k) - dot_product(tmat(3,:),Bpos(:,k)) - vec(3,1)) < param) then
              sum_pot = sum_pot + c/(2**6 - 1)*(param**6/(Apos(3,k) - dot_product(tmat(3,:),Bpos(:,k)) - vec(3,1))**6 - 1.0)
           endif
        enddo
+       endif
        
        dist = distance(Apos, Bpos, tmat, vec, pot, param) + sum_pot
 
@@ -661,7 +666,7 @@ contains
           vec_prev = vec
 
           do i=1,3
-            if (i==3) then
+            if (i==3 .and. straighten) then
           
                sum_grad = 0.0d0
                do k=1,size(Apos,2)
@@ -1844,9 +1849,6 @@ contains
     double precision, intent(inout), dimension(3) :: &
          vec        ! Translation vecto
 
-    double precision, dimension(3) :: &
-         center_vec
-
     double precision, intent(inout), dimension(3,3) :: &
          tmat ! Transformation matrix
 
@@ -1889,7 +1891,6 @@ contains
          param
 
 
-    center_vec = 0.0d0
     tol_adjust = init_class
     std = 1.0d0
     classes_list = 0
@@ -1902,15 +1903,10 @@ contains
        write(13,*) "-->", j
 
        if ((remap .and. j/=1) .or. .not. minimize) then
-
-          if (.not. twodim .and. minimize) then
-             ! For interfaces when the potential is not Euclidean, this does not necessarily help
-             center_vec = sum(free_trans(Bpos_opt,tmat,vec) - Apos_mapped,2) / n_out
-          endif
           
           Apos_mapped_prev = Apos_mapped
 
-          tBpos = free_trans(Bpos,tmat,vec - center_vec)
+          tBpos = free_trans(Bpos,tmat,vec)
 
           if (check) then
 
@@ -2052,8 +2048,7 @@ contains
 
     double precision, dimension(3) :: &
          vec_rot, & ! Translation vector for the rotated unstretched matrix
-         angles, &  ! Rotation angles
-         center_vec ! Readjustment vector
+         angles  ! Rotation angles
 
     double precision :: &
          tol, &
@@ -2271,6 +2266,13 @@ contains
          init_class, &
          "Euclidean", 0.0d0)
 
+    write(13,*) "Final stretched distance:", distance(Apos_mapped, Bpos_opt,tmat,vec,"Euclidean",0.0d0)
+
+    ! Reshift after classification
+    call analytical_gd_vec(.false.,tmat, vec, &
+         Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
+         tol, "Euclidean", 0.0d0)
+    
     vec_rot = 0.0d0
 
     ! This is only to get closer since angles start from scratch.
@@ -2294,13 +2296,10 @@ contains
     write(13,*) "Final tmat"
     write(13,"(3(F7.3,X))") tmat
 
-    ! Reshift after classification
-    center_vec = sum(free_trans(Bpos_opt,tmat,vec) - Apos_mapped,2) / n_out
-
-    vec = vec - center_vec
+    write(13,*) "Final stretched distance:", distance(Apos_mapped, Bpos_opt,tmat,vec,"Euclidean",0.0d0)
     
     Bpos_opt_stretch = free_trans(Bpos_opt,tmat,vec)
-
+    
     Bpos_out(:,1:n_out) = rBpos_opt
     Bpos_out_stretch(:,1:n_out) = Bpos_opt_stretch
     Apos_out(:,1:n_out) = Apos_mapped
@@ -2682,8 +2681,7 @@ contains
     double precision, dimension(3) :: &
          vec, &     ! Translation vecto
          vec_rot, & ! Translation vector for the rotated unstretched matrix
-         angles, &       ! Rotation axis
-         center_vec
+         angles       ! Rotation axis
 
     double precision :: &
          tol, &
@@ -2995,11 +2993,6 @@ contains
             tol, zdist, trim(pot), param)
 
        write(13,*) "/======== Classification ========\\"
-       center_vec = sum(free_trans(Bpos_opt,tmat,vec) - Apos_mapped,2) / n_out
-
-       vec(1:2) = vec(1:2) - center_vec(1:2)
-       
-       vec(3) = zdist
 
        call classification(.true., .true., Apos, Bpos, Apos_mapped, Bpos_opt, & ! Output
             tmat, vec, & ! Output
@@ -3013,28 +3006,26 @@ contains
             init_class, &
             trim(pot), param)
 
-       center_vec = sum(free_trans(Bpos_opt,tmat,vec) - Apos_mapped,2) / n_out
-
-       vec(1:2) = vec(1:2) - center_vec(1:2)
        
        if (trim(pot)=="LJ") then
           
           vec(3) = zdist
 
-          call analytical_gd_vec(tmat, vec, &
+          call analytical_gd_vec(.true.,tmat, vec, &
                Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
                tol, pot, param)
 
-          ! print*, "FINAL:", vec(3)
-
        else
 
-          vec(3) = vec(3) - center_vec(3)
+          call analytical_gd_vec(.false.,tmat, vec, &
+               Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
+               tol, pot, param)
           
        endif
 
+       call init_random_seed()
 
-       angles(1) = 0.0d0
+       call random_number(angles(1)) ! So that the rotation min doesn't get stuck 
        
        ! This step is just to get the "unstretched distance"
        if (rotmin) then
@@ -3176,8 +3167,7 @@ contains
          atoms ! Number of atoms of each type
 
     double precision, dimension(3) :: &
-         angles, &  ! Rotation axis
-         center_vec
+         angles  ! Rotation axis
 
     double precision :: &
          tol, &
@@ -3344,23 +3334,19 @@ contains
          tol_class, &
          trim(pot), param)
 
-       center_vec = sum(free_trans(Bpos_opt,tmat,vec) - Apos_mapped,2) / n_out
-
-       vec(1:2) = vec(1:2) - center_vec(1:2)
-       
-       if (trim(pot)=="LJ") then
+        if (trim(pot)=="LJ") then
           
           vec(3) = zdist
 
-          call analytical_gd_vec(tmat, vec, &
+          call analytical_gd_vec(.true.,tmat, vec, &
                Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
                tol, pot, param)
 
-          ! print*, "FINAL:", vec(3)
-
        else
 
-          vec(3) = vec(3) - center_vec(3)
+          call analytical_gd_vec(.false.,tmat, vec, &
+               Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
+               tol, pot, param)
           
        endif
 
