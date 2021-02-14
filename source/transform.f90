@@ -570,10 +570,9 @@ contains
 
     ! Gradient descent with respect to the vector only (3x3 matrix)
     ! ADJUST has been implemented
-
     logical, intent(in) :: &
          straighten
-    
+
     integer, intent(in) :: &
          n_iter ! Number of atoms
 
@@ -1799,11 +1798,11 @@ contains
 
   end subroutine remove_slanting
 
-  subroutine classification(minimize, twodim, Apos, Bpos, Apos_mapped, Bpos_opt, & ! Output
+  subroutine classification(minimize_in, twodim, Apos, Bpos, Apos_mapped, Bpos_opt, & ! Output
        tmat, vec, & ! Output
        classes_list, &
        fracA, fracB, n_frac, &
-       na, nb, n_class, &
+       na, nb, n_class_in, &
        remap, check, &
        atoms, n_atoms, rate1, rate2, &
        n_ana, n_out, &
@@ -1829,7 +1828,7 @@ contains
     integer, intent(in):: &
          n_ana, &
          n_out, &
-         n_class
+         n_class_in
 
     double precision, intent(in), dimension(3,na) :: &
          Apos ! Position of the atoms
@@ -1848,6 +1847,7 @@ contains
 
     double precision, intent(inout), dimension(3) :: &
          vec        ! Translation vecto
+
 
     double precision, intent(inout), dimension(3,3) :: &
          tmat ! Transformation matrix
@@ -1868,10 +1868,13 @@ contains
     logical, intent(in) :: &
          remap, &
          check, &
+         minimize_in
+
+    logical :: &
          minimize
 
     integer :: &
-         n
+         n, n_class
 
     double precision :: &
          tol_adjust, &
@@ -1890,12 +1893,19 @@ contains
     double precision, intent(in) :: &
          param
 
+    n_class = n_class_in
+    minimize = minimize_in
 
     tol_adjust = init_class
     std = 1.0d0
     classes_list = 0
     classes_list_prev = 1
     j=0
+    if (n_class == 0) then
+       minimize = .false.
+       n_class = 1
+       tol_adjust = tol_class
+    endif
     
     do while ( std > tol_class .and. j < n_class)
        j = j + 1
@@ -1903,6 +1913,7 @@ contains
        write(13,*) "-->", j
 
        if ((remap .and. j/=1) .or. .not. minimize) then
+
           
           Apos_mapped_prev = Apos_mapped
 
@@ -2265,14 +2276,13 @@ contains
          tol, tol_class, tol_std, &
          init_class, &
          "Euclidean", 0.0d0)
-
     write(13,*) "Final stretched distance:", distance(Apos_mapped, Bpos_opt,tmat,vec,"Euclidean",0.0d0)
 
     ! Reshift after classification
     call analytical_gd_vec(.false.,tmat, vec, &
          Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
          tol, "Euclidean", 0.0d0)
-    
+
     vec_rot = 0.0d0
 
     ! This is only to get closer since angles start from scratch.
@@ -2299,7 +2309,7 @@ contains
     write(13,*) "Final stretched distance:", distance(Apos_mapped, Bpos_opt,tmat,vec,"Euclidean",0.0d0)
     
     Bpos_opt_stretch = free_trans(Bpos_opt,tmat,vec)
-    
+
     Bpos_out(:,1:n_out) = rBpos_opt
     Bpos_out_stretch(:,1:n_out) = Bpos_opt_stretch
     Apos_out(:,1:n_out) = Apos_mapped
@@ -3015,6 +3025,7 @@ contains
                Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
                tol, pot, param)
 
+
        else
 
           call analytical_gd_vec(.false.,tmat, vec, &
@@ -3076,7 +3087,7 @@ contains
        select case (trim(pot))
        case ("LJ")
 
-       dmin(k,2) = dmin(k,1) / n_out
+       dmin(k,2) = distance(Apos_mapped, Bpos_opt_stretch, eye(), zeros, trim(pot), param)
 
        dmin(k,3) = 0.0d0
        
@@ -3334,13 +3345,15 @@ contains
          tol_class, &
          trim(pot), param)
 
-        if (trim(pot)=="LJ") then
+       
+       if (trim(pot)=="LJ") then
           
           vec(3) = zdist
 
           call analytical_gd_vec(.true.,tmat, vec, &
                Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
                tol, pot, param)
+
 
        else
 

@@ -293,7 +293,9 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, out
     foundcell = [None]*n_peaks
     origin = [None]*n_peaks
     
-    for i in range(n_peaks): 
+    for i in range(n_peaks):
+
+        tmat_old = deepcopy(ttrans[i,:2,:2])
 
         ttrans[i,:,3] = ttrans[i,:,3] - ttrans[i,:,:3].dot(centroidB) + centroidA
         
@@ -323,9 +325,13 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, out
         if foundcell[i] is not None:
             print("Found cell!")
 
+            if np.any(ttrans[i,:2,:2]-tmat_old) > tol:
+                print("WARNING: tmat changed by more then the set tolerence %e."%(tol))
+                print(tmat_old, ttrans[i,:2,:2])
+            
             # Readjusting the vec after changing tmat 
             
-            dmin_old = dmin[i]
+            dmin_old = deepcopy(dmin[i])
 
             print("Readjusting for new tmat...", flush = True) 
             Apos_in = np.asfortranarray(Apos)
