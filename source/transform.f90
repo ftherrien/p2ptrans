@@ -1794,11 +1794,11 @@ contains
 
   end subroutine remove_slanting
 
-  subroutine classification(minimize, twodim, Apos, Bpos, Apos_mapped, Bpos_opt, & ! Output
+  subroutine classification(minimize_in, twodim, Apos, Bpos, Apos_mapped, Bpos_opt, & ! Output
        tmat, vec, & ! Output
        classes_list, &
        fracA, fracB, n_frac, &
-       na, nb, n_class, &
+       na, nb, n_class_in, &
        remap, check, &
        atoms, n_atoms, rate1, rate2, &
        n_ana, n_out, &
@@ -1824,7 +1824,7 @@ contains
     integer, intent(in):: &
          n_ana, &
          n_out, &
-         n_class
+         n_class_in
 
     double precision, intent(in), dimension(3,na) :: &
          Apos ! Position of the atoms
@@ -1866,10 +1866,13 @@ contains
     logical, intent(in) :: &
          remap, &
          check, &
+         minimize_in
+
+    logical :: &
          minimize
 
     integer :: &
-         n
+         n, n_class
 
     double precision :: &
          tol_adjust, &
@@ -1889,12 +1892,21 @@ contains
          param
 
 
+    n_class = n_class_in
+    minimize = minimize_in
+    
     center_vec = 0.0d0
     tol_adjust = init_class
     std = 1.0d0
     classes_list = 0
     classes_list_prev = 1
     j=0
+
+    if (n_class == 0) then
+       minimize = .false.
+       n_class = 1
+       tol_adjust = tol_class
+    endif
     
     do while ( std > tol_class .and. j < n_class)
        j = j + 1
@@ -2995,12 +3007,6 @@ contains
             tol, zdist, trim(pot), param)
 
        write(13,*) "/======== Classification ========\\"
-       center_vec = sum(free_trans(Bpos_opt,tmat,vec) - Apos_mapped,2) / n_out
-
-       vec(1:2) = vec(1:2) - center_vec(1:2)
-       
-       vec(3) = zdist
-
        call classification(.true., .true., Apos, Bpos, Apos_mapped, Bpos_opt, & ! Output
             tmat, vec, & ! Output
             classes_list, &
@@ -3085,7 +3091,7 @@ contains
        select case (trim(pot))
        case ("LJ")
 
-       dmin(k,2) = dmin(k,1) / n_out
+       dmin(k,2) = distance(Apos_mapped, Bpos_opt_stretch, eye(), zeros, trim(pot), param)
 
        dmin(k,3) = 0.0d0
        
