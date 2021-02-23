@@ -1,7 +1,8 @@
 module transform
   
   use utils
-  use hungarian
+  !use hungarian
+  use jv 
   use potential
 
   implicit none
@@ -268,8 +269,8 @@ contains
             tBpos( : , id + 1 : id + n ),n_A, n_B, &
             pot, param)
 
-       call munkres(dist_map, map, dmat, n)
-
+       !call munkres(dist_map, map, dmat, n)
+       call lapjv(dist_map, map, dmat, n)
 
        map = map + id
 
