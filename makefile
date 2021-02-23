@@ -1,8 +1,8 @@
 COMP = gfortran
 COMP2 = python3 -m numpy.f2py
 
-files = source/lap.f90 source/utils.f90 source/tiling.f90 source/potential.f90 source/transform.f90
-functions = munkres free_trans rot_mat center eye norm split det sort sphere circle distance derivative intoptimization fastoptimization
+files = source/lap.f90 source/utils.f90 source/tiling.f90 source/potential.f90 source/transform.f90 source/lapjv.f90
+functions = munkres free_trans rot_mat center eye norm split det sort sphere circle distance derivative intoptimization fastoptimization lapjv
 flags = --f90exec=gfortran --f90flags="-g -Og -fbacktrace -fopenmp" -lgomp 
 
 #-I/usr/lib64/openmpi/lib/ -L/usr/lib64/openmpi/lib/ -lmpi
