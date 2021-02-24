@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <iostream>
 
-#include "lapjv.h"
+#include "lapjv.hpp"
 
 /** Column-reduction and reduction transfer for a dense cost matrix.
  */
@@ -147,7 +147,7 @@ int_t _carr_dense(
 
 /** Find columns with minimum d[j] and put them on the SCAN list.
  */
-uint_t _find_dense(const uint_t n, uint_t lo, cost_t *d, int_t *cols, [[maybe_unused]] int_t *y)
+uint_t _find_dense(const uint_t n, uint_t lo, cost_t *d, int_t *cols, int_t *y)
 {
     uint_t hi = lo + 1;
     cost_t mind = d[cols[lo]];
