@@ -296,8 +296,6 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, out
     for i in range(n_peaks):
 
         tmat_old = deepcopy(ttrans[i,:2,:2])
-
-        ttrans[i,:,3] = ttrans[i,:,3] - ttrans[i,:,:3].dot(centroidB) + centroidA
         
         print("Looking for periodic cell for peak %d..."%(i))        
         

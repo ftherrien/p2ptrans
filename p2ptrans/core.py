@@ -563,12 +563,14 @@ def optimization(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir, max_ce
         
     if foundcell is not None:
 
-        old_distp =  np.sum(la.norm(Bposst - Apos_map, axis=0)))
+        old_distp =  np.sum(la.norm(Bposst - Apos_map, axis=0))
 
         Bposst = tmat.dot(la.inv(tmat_old)).dot(Bposst - vec.reshape((3,1)).dot(np.ones((1,Bposst.shape[1]))))
-        + vec.reshape((3,1)).dot(np.ones((1,Bposst.shape[1])))
-        # TODO: Ideally vec would be readjusted here
+        
+        vec = tr.optimize_vec(Apos_map, Bposst, vec, filename) 
 
+        Bposst = Bposst + vec.reshape((3,1)).dot(np.ones((1,Bposst.shape[1])))
+        
         print("Change in stretched dist:", np.sum(la.norm(Bposst - Apos_map, axis=0)) - old_distp)
         
         print("Found cell!")

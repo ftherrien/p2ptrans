@@ -11,7 +11,8 @@ module transform
        intoptimization, &
        closest, &
        fixed_tmat, &
-       fixed_tmat_int
+       fixed_tmat_int, &
+       optimize_vec
 
   private :: &
        init_random_seed, &
@@ -21,6 +22,7 @@ module transform
        mapping, &
        no_mapping, &
        analytical_gd_rot, &
+       analytical_gd_vec, &
        analytical_gd_free, &
        analytical_gd_slant, &
        analytical_gd_std, &
@@ -565,7 +567,7 @@ contains
     ! print*, "free", j, dist  
 
   end subroutine analytical_gd_free
-    
+  
   subroutine analytical_gd_vec(straighten, tmat, vec, Apos, Bpos, n_iter, rate2, tol, pot, param)
 
     ! Gradient descent with respect to the vector only (3x3 matrix)
@@ -588,7 +590,7 @@ contains
     double precision, dimension(3,size(Bpos,2)) :: &
          E ! position matrix
 
-    double precision, intent(inout), dimension(3,3) :: &         
+    double precision, intent(in), dimension(3,3) :: &         
          tmat     ! Transformation matrix
 
     double precision, intent(inout), dimension(3,1) :: &         
@@ -1997,6 +1999,59 @@ contains
 
   end subroutine classification
 
+  subroutine optimize_vec(vec_out, Apos, Bpos, n, vec, filename)
+
+    integer, intent(in) :: &
+         n           ! Number of atoms
+    
+    double precision, intent(in), dimension(3,n) :: &
+         Apos, &
+         Bpos        ! Bpos ordered according to the mapping
+    
+    double precision, intent(in), dimension(3) :: &         
+         vec         ! Translation vector
+
+    double precision, intent(out), dimension(3) :: &         
+         vec_out     ! Translation vector
+
+    character*200, intent(in) :: &
+         filename   ! Number of atoms
+
+    double precision :: &
+         tol, rate2
+
+    integer :: &
+         n_ana
+
+    logical :: &
+         exist
+
+    namelist /input/ &
+         tol, &
+         rate2, &
+         n_ana
+
+    ! Namelist default values
+    tol = 1.0d-4
+    rate2 = 1.0d-3
+    n_ana = 300
+
+    inquire(file = filename, exist=exist)
+
+    if (exist) then
+       open (unit = 11, file = filename, status = 'OLD')
+       read (11, input)
+       close (11)
+    endif
+
+    vec_out = vec
+
+    call analytical_gd_vec(.false., eye(), vec_out, &
+         Apos, Bpos, n_ana*1000, rate2, &
+         tol, "Euclidean", 0.0d0)
+  
+  end subroutine optimize_vec
+  
   subroutine fastoptimization(Apos_out, Bpos_out, Bpos_out_stretch, & ! Output
        n_out, n_A, classes_list_out, & ! Output
        tmat, dmin, vec, & ! Output
