@@ -652,9 +652,10 @@ contains
        if (j==1) then
           dist_prev = dist + tol + 1.0d0
           dist_init = dist
+          ! print*, "free", j, dist, sum_pot  
        endif
 
-       ! print*, dist, vec(3,1), dist_prev - dist, "FREE", j, tmat, vec, pot, param
+       ! print*, dist, sum_pot, vec(3,1), dist_prev - dist, "FREE", j
 
        E = derivative(Apos, Bpos, tmat, vec, pot, param)
 
@@ -672,12 +673,12 @@ contains
                sum_grad = 0.0d0
                do k=1,size(Apos,2)
                   if (abs(Apos(3,k) - dot_product(tmat(3,:),Bpos(:,k)) - vec(3,1)) < param) then
-                     sum_grad = sum_grad + 6*c/(2**6 -1)*param**6 / &
-                          (Apos(3,k) - dot_product(tmat(3,:), Bpos(:,k)) - vec(3,1))**7
+                     sum_grad = sum_grad + c/(2**6 -1) / &
+                          (Apos(3,k) - dot_product(tmat(3,:), Bpos(:,k)) - vec(3,1))**7 ! Divided by 6*param**6 because derivative of LJ also gets rid of that factor
                   endif
                enddo
                
-               vec(i,1) = vec(i,1) + rate2 * dist / dist_init * ( sum(E(i,:)) + sum_grad )
+               vec(i,1) = vec(i,1) + rate2 * dist / dist_init * ( sum(E(i,:)) - sum_grad )
             else
                vec(i,1) = vec(i,1) + rate2 * dist / dist_init * sum(E(i,:))
             endif
@@ -686,7 +687,7 @@ contains
 
     enddo
 
-    ! print*, "free", j, dist  
+    ! print*, "free", j, dist, sum_pot  
 
   end subroutine analytical_gd_vec
 
@@ -1431,8 +1432,8 @@ contains
                 eig2 = (tt(1,1)+tt(2,2))/2 - sqrt(((tt(1,1)-tt(2,2))/2)**2 +&
                      tt(1,2)*tt(2,1))
                 if (abs(det(tmat_local,3) - 1.0d0) < max_vol .and. &
-                     abs(eig1 - 1) < max_vol .and. &
-                     abs(eig2 - 1) < max_vol) then
+                     abs(sqrt(eig1) - 1) < max_vol .and. &
+                     abs(sqrt(eig2) - 1) < max_vol) then
              write(13,"(A, I4, A, I6, A, I6, A, F8.3, A, F8.3)") &
                   "Opt dist found for thread", thread,", iteration", j,".",vl,":", &
                   dist_cur, " ", dist_cur_rot
@@ -3071,6 +3072,7 @@ contains
             init_class, &
             trim(pot), param)
 
+       write(13,*) "Stretched distance:", distance(Apos_mapped, Bpos_opt, tmat, vec, pot, param)
        
        if (trim(pot)=="LJ") then
           
@@ -3079,6 +3081,23 @@ contains
           call analytical_gd_vec(.true.,tmat, vec, &
                Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
                tol, pot, param)
+
+          if (remap) then
+             i=0
+             ! This is necessary because .true. in analytical_gd_vec that might affect the mapping
+             do while (any(abs(Apos_mapped - Apos_mapped_prev) > 1.0d-12) .and. i < n_adjust)
+                i = i + 1
+                
+
+                Apos_mapped_prev = Apos_mapped
+                call mapping(Apos_mapped, Bpos_opt, Apos, Bpos, free_trans(Bpos, tmat, vec), &
+                     fracA, fracB, atoms, n_atoms, pot, param)
+
+                call analytical_gd_vec(.true.,tmat, vec, &
+                     Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
+                     tol, pot, param)
+             enddo
+          endif
 
 
        else
@@ -3089,6 +3108,8 @@ contains
           
        endif
 
+       write(13,*) "Stretched distance:", distance(Apos_mapped, Bpos_opt, tmat, vec, pot, param)
+       
        call init_random_seed()
 
        call random_number(angles(1)) ! So that the rotation min doesn't get stuck 
@@ -3137,6 +3158,8 @@ contains
        Bpos_out_stretch(k,:,1:n_out) = Bpos_opt_stretch
        Apos_out(k,:,1:n_out) = Apos_mapped
 
+       write(13,*) "Stretched distance:", distance(Apos_mapped, Bpos_opt, tmat, vec, pot, param)
+       
        dmin(k,1) = distance(Apos_mapped, rBpos_opt, eye(), zeros, trim(pot), param)
 
        select case (trim(pot))
@@ -3263,7 +3286,8 @@ contains
 
     integer :: &
          n_frac, &
-         vecrep
+         vecrep, &
+         i
 
     double precision, parameter, dimension(3) :: &
          zeros = (/0.0d0, 0.0d0, 0.0d0/)
@@ -3409,7 +3433,22 @@ contains
                Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
                tol, pot, param)
 
+          if (remap) then
+             i=0
+             ! This is necessary because .true. in analytical_gd_vec that might affect the mapping
+             do while (any(abs(Apos_mapped - Apos_mapped_prev) > 1.0d-12) .and. i < n_adjust)
+                i = i + 1
 
+                Apos_mapped_prev = Apos_mapped
+                call mapping(Apos_mapped, Bpos_opt, Apos, Bpos, free_trans(Bpos, tmat, vec), &
+                     fracA, fracB, atoms, n_atoms, pot, param)
+
+                call analytical_gd_vec(.true.,tmat, vec, &
+                     Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
+                     tol, pot, param)
+             enddo
+          endif
+          
        else
 
           call analytical_gd_vec(.false.,tmat, vec, &

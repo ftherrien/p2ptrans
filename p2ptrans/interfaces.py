@@ -311,7 +311,7 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, out
 
             origin[i] = np.zeros((3,1))
             
-            if n_map < la.det(foundcell)/la.det(A.cell[:2,:2])*len(A):
+            if n_map < la.det(foundcell[i])/la.det(A.cell[:2,:2])*len(A):
 
                 print("WARNING: The cell found is larger the the number of mapped atoms!. If you can affort it, try to optimize with a larger ncell (-n).")
 
