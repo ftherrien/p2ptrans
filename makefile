@@ -3,7 +3,7 @@ F90 = gfortran
 F2P = python3 -m numpy.f2py
 
 c_sources = source/lapjv.cpp
-f_sources = source/lap.f90 source/utils.f90 source/tiling.f90 source/potential.f90 source/transform.f90 source/lapjv.f90
+f_sources = source/lap.f90 source/tiling.f90 source/potential.f90 source/transform.f90 source/lapjv.f90
 functions = munkres sphere circle distance derivative intoptimization fastoptimization lapjv
 flags = --f90exec=gfortran --f90flags="-g -Og -fbacktrace -fopenmp" -lgomp 
 
