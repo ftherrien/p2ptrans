@@ -6,13 +6,18 @@ p2ptrans allows you to find the best matching between two crystal structures.
 
 ## Latest Updates
 
-Current version: 1.4.2 (10.26.2020)
+Current version: 2.0 APS2021 (3.14.2021)
 
+**03.14.2021**: VERSION 2.0 is out! See the section below for more details. 
 **10.04.2020**: Added dmin as a 4th output to the findMatching() function in p2ptrans.  
 **8.28.2020**: More detailed documentation is now available for [p2ptrans](https://p2ptrans.readthedocs.io/en/latest/p2ptrans.html) and [p2pint](https://p2ptrans.readthedocs.io/en/latest/p2pint.html).  
-**4.20.2020**: Documentation is available for Interface Matching and for using p2ptrans as a python module  
-**4.15.2020**: The Interface Matching (p2pint) is now fully functional  
-**3.2.2020**: The [documentation](https://p2ptrans.readthedocs.io) is finally available!  
+
+## What's new in 2.0
+Version 2.0 includes a new method to find the periodicity, which means p2ptrans and p2pint become much more reliable at finding the transformation or interface structures.
+
+In 3D, in many cases, this means that p2ptrans can be run with a smaller "-n" and still return a relevant result. Moreover, even if the optimal matching does not lead to the correct ratio specific volumes (a necessary condition for a one-to-one mapping), p2ptrans will return a transformation path that involves the creation of vacancies in one of the structures.
+
+In 2D, the printed information has been clarified and several bugs have been fixed (see commits for details).
 
 ## Features
 p2ptrans (and p2pint) can be used directly as a command-line interface (cli) or as a python package. It can be used for two main aspects:

@@ -20,6 +20,8 @@ Optional arguments:
                         Final Structure structure. It must also be a `POSCAR <https://www.vasp.at/wiki/index.php/Input>`_.
   -n, --ncell N_CELL
                         Minimum number of cells to tile *DEFAULT: 300*
+  -cn N_CELL
+                        If specified, number of cells used for the final mapping after tmat has been adjusted to be commensurate with both structures. If not specified, the mapping stays the same.
   -i, --interactive     Enable interactive display
   -d, --disp            Save figures
   -p, --param FILENAME
