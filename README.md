@@ -1,6 +1,6 @@
 # p2ptrans - A Structure Matching Algorithm
 
-![A cool gif](https://github.com/ftherrien/p2ptrans/blob/master/WelcomeImage.gif)
+<img src="(https://github.com/ftherrien/p2ptrans/blob/master/WelcomeImage.gif" width="200" height="200">
 
 p2ptrans allows you to find the best matching between two crystal structures.
 
@@ -8,7 +8,7 @@ p2ptrans allows you to find the best matching between two crystal structures.
 
 Current version: 2.0 APS2021 (3.14.2021)
 
-**03.14.2021**: VERSION 2.0 is out! See the section below for more details. 
+**03.14.2021**: VERSION 2.0 is out! See the section below for more details.  
 **10.04.2020**: Added dmin as a 4th output to the findMatching() function in p2ptrans.  
 **8.28.2020**: More detailed documentation is now available for [p2ptrans](https://p2ptrans.readthedocs.io/en/latest/p2ptrans.html) and [p2pint](https://p2ptrans.readthedocs.io/en/latest/p2pint.html).  
 
