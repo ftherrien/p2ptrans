@@ -11,6 +11,7 @@ def readOptions():
     parser.add_argument("-I","--initial",dest="A",type=str, default='./POSCAR_A', help="Initial Structure. It must be a POSCAR")
     parser.add_argument("-F","--final",dest="B",type=str, default='./POSCAR_B', help="Final Structure. It must be a POSCAR")
     parser.add_argument("-n","--ncell",dest="ncell",type=int, default=300, help="Minimum number of cells to tile")
+    parser.add_argument("-cn",dest="map_ncell",type=int, default=0, help="Minimum number of cells to tile for finding the periodic transformation cell")
     parser.add_argument("-i","--interactive",dest="interactive",action="store_true", default=False, help="Enable interactive display")
     parser.add_argument("-d","--disp",dest="savedisplay",action="store_true", default=False, help="Save figures")
     parser.add_argument("-p","--param", dest="filename", type=str, default='./p2p.in', help="Name of the parameter file")
@@ -49,13 +50,18 @@ def readOptions():
     crystfile = options.crystfile
     n_steps = options.n_steps
     showversion = options.version
+    if options.map_ncell == 0:
+        map_ncell = None
+    else:
+        map_ncell = options.map_ncell
     
-    return fileA, fileB, ncell, filename, interactive, savedisplay, outdir, use, switch, prim, anim, vol, minimize, test, crystfile, n_steps, showversion
+    return fileA, fileB, ncell, filename, interactive, savedisplay, outdir, use, switch, prim, anim, vol, minimize, test, crystfile, n_steps, showversion, map_ncell
 
 def main():
 
     (fileA, fileB, ncell, filename, interactive, savedisplay, outdir,
-     use, switch, prim, anim, vol, minimize, test, crystfile, n_steps, showversion) = readOptions()
+     use, switch, prim, anim, vol, minimize, test, crystfile, n_steps,
+     showversion, map_ncell) = readOptions()
 
     if showversion:
         from p2ptrans import __version__
@@ -126,7 +132,7 @@ def main():
                                                 filename=filename, interactive=interactive,
                                                 savedisplay=savedisplay, outdir=outdir,
                                                 switch=switch, prim=prim, vol=vol,
-                                                minimize=minimize, test=test)
+                                                   minimize=minimize, test=test, map_ncell=map_ncell)
     
     if test:
         print("Test run completed, rerun with: p2ptrans -u %s -m"%outdir)
@@ -147,8 +153,12 @@ def main():
     transStruc, spgList, Tpos, color_array, atom_types = result
     
     print("Spacegroups along the transition:")
-    print(" -> ".join([e for i,e in enumerate(spgList) if i==len(spgList)-1 or e!=spgList[i+1]]))
-    #This will remove repetitions that are next to each other
+    try:
+        print(" -> ".join([e for i,e in enumerate(spgList) if i==len(spgList)-1 or e!=spgList[i+1]]))
+        #This will remove repetitions that are next to each other
+    except TypeError:
+        print("WARNING: check the transition for overlapping atoms!")
+        print(spgList)
     print()
         
     # Showing some of the steps

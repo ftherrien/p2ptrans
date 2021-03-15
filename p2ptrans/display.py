@@ -114,11 +114,12 @@ def displayOptimalResult(Apos, Bpos, Bposst, disps_total, disps, class_list, vec
     ax.set_xlim([-maxXAxis, maxXAxis])
     ax.set_ylim([-maxXAxis, maxXAxis])
     ax.set_zlim([-maxXAxis, maxXAxis])
+    ax.set_axis_off()
     num_tot = 0
 
     for i,num in enumerate(atoms):
         ax.scatter(Apos.T[num_tot*nat:num_tot*nat+natA*num+1,0],Apos.T[num_tot*nat:num_tot*nat+natA*num+1,1],Apos.T[num_tot*nat:num_tot*nat+natA*num+1,2], c=colorlist[2*i])
-        ax.scatter(Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,0],Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,1],Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,2], c=colorlist[2*i], alpha=0.1)
+        ax.scatter(Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,0],Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,1],Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,2], c=colorlist[2*i], alpha=0.5)
         ax.scatter(Bpos.T[natB*num_tot:natB*(num_tot+num),0],Bpos.T[natB*num_tot:natB*(num_tot+num),1], Bpos.T[natB*num_tot:natB*(num_tot+num),2], c=colorlist[2*i+1])
         num_tot = num_tot + num
 
@@ -142,10 +143,11 @@ def displayOptimalResult(Apos, Bpos, Bposst, disps_total, disps, class_list, vec
     ax.set_xlim([-maxXAxis, maxXAxis])
     ax.set_ylim([-maxXAxis, maxXAxis])
     ax.set_zlim([-maxXAxis, maxXAxis])
+    ax.set_axis_off()
     num_tot = 0
     for i,num in enumerate(atoms):
         ax.scatter(Apos.T[num_tot*nat:num_tot*nat+natA*num+1,0],Apos.T[num_tot*nat:num_tot*nat+natA*num+1,1],Apos.T[num_tot*nat:num_tot*nat+natA*num+1,2], c=colorlist[2*i])
-        ax.scatter(Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,0],Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,1],Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,2], c=colorlist[2*i], alpha=0.1)
+        ax.scatter(Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,0],Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,1],Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,2], c=colorlist[2*i], alpha=0.5)
         ax.scatter(Bposst.T[natB*num_tot:natB*(num_tot+num),0],Bposst.T[natB*num_tot:natB*(num_tot+num),1], Bposst.T[natB*num_tot:natB*(num_tot+num),2], c=colorlist[2*i+1])
         num_tot = num_tot + num
 
@@ -162,6 +164,7 @@ def displayOptimalResult(Apos, Bpos, Bposst, disps_total, disps, class_list, vec
     ax.set_xlim([-maxXAxis, maxXAxis])
     ax.set_ylim([-maxXAxis, maxXAxis])
     ax.set_zlim([-maxXAxis, maxXAxis])
+    ax.set_axis_off()
     
     for i in range(len(vec_classes)):
         disps_class = disps[:,class_list==i]
@@ -175,7 +178,8 @@ def displayOptimalResult(Apos, Bpos, Bposst, disps_total, disps, class_list, vec
     if interactive:
         plt.show()
 
-def makeGif(Apos, Bposst, disps, vec_classes, nat, atoms):
+def makeGif(Apos, Bposst, disps, vec_classes, nat, atoms, outdir):
+    from matplotlib import animation
     fig = plt.figure("gif")
     ax = fig.add_subplot(111, projection='3d')
     def animate(i):
@@ -194,7 +198,7 @@ def makeGif(Apos, Bposst, disps, vec_classes, nat, atoms):
         num_tot = 0
         for i,num in enumerate(atoms):
             ax.scatter(Apos.T[num_tot*nat:num_tot*nat+natA*num+1,0],Apos.T[num_tot*nat:num_tot*nat+natA*num+1,1],Apos.T[num_tot*nat:num_tot*nat+natA*num+1,2], c=colorlist[2*i])
-            ax.scatter(Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,0],Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,1],Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,2], c=colorlist[2*i], alpha=0.1)
+            ax.scatter(Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,0],Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,1],Apos.T[num_tot*nat+natA*num:(num_tot + num)*nat+1,2], c=colorlist[2*i], alpha=0.5)
             ax.scatter(Bposst.T[natB*num_tot:natB*(num_tot+num),0],Bposst.T[natB*num_tot:natB*(num_tot+num),1], Bposst.T[natB*num_tot:natB*(num_tot+num),2], c=colorlist[2*i+1])
             num_tot = num_tot + num
     
@@ -207,7 +211,7 @@ def makeGif(Apos, Bposst, disps, vec_classes, nat, atoms):
     
     anim = animation.FuncAnimation(fig, animate, init_func=init_disps,
                                    frames=490, interval=30)
-    anim.save(outdir+'/Crystal+Disps.gif', fps=30, codec='gif')
+    anim.save(outdir+'/Crystal+Disps.gif', fps=15, codec='gif')
 
 def displayTransCell(disps, dispStruc, foundcell,
                      pos_in_struc, vec_classes, outdir, interactive, savedisplay):   
@@ -220,6 +224,7 @@ def displayTransCell(disps, dispStruc, foundcell,
     fig = plt.figure("Transformation Cell", figsize = [10,5])
     
     ax = fig.add_subplot(121, projection='3d')
+    ax.set_axis_off()
     ax.set_title('Transformation cell with displacements\n and atomic positions')
     for i,disp in enumerate(dispStruc):
         ax.quiver(disp.pos[0], disp.pos[1], disp.pos[2], vec_classes[int(disp.type)][0],vec_classes[int(disp.type)][1], vec_classes[int(disp.type)][2], color=colorlist[i%10])
@@ -234,6 +239,7 @@ def displayTransCell(disps, dispStruc, foundcell,
 
     # Displays displacement with the disp cell overlayed
     ax = fig.add_subplot(122, projection='3d')
+    ax.set_axis_off()
     ax.set_title('Transformation cell in displacement crystal \n as found (red), primitive (green)')
     ax.quiver(pos_in_struc.T[:,0], pos_in_struc.T[:,1], pos_in_struc.T[:,2], disps.T[:,0], disps.T[:,1], disps.T[:,2], color = "C0")
     ax.scatter(pos_in_struc.T[:,0], pos_in_struc.T[:,1], pos_in_struc.T[:,2], s=10, color = "C0")

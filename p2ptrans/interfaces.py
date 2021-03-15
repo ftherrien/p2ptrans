@@ -7,8 +7,8 @@ from .config import *
 from .fmodules import transform as tr
 from .fmodules import tiling as t
 from .display import displayStats, displayOptimalResult, displayTransCell, printMatAndDir
-from .core import makeSphere, find_cell, makeStructures, switchDispStruc 
-from .utils import scale, is_same_struc, lcm, lccell, superize
+from .core import makeSphere, find_cell, makeStructures, switchDispStruc, find_periodicity 
+from .utils import scale, is_same_struc, lcm, lccell, superize, reshift
 
 def find_type(a, rule):
     newtype = []
@@ -18,8 +18,8 @@ def find_type(a, rule):
                 newtype.append(key+"-"+str(i))
     return newtype
         
-def find_basis(dircart, ccell, tol=tol, maxi=10):
-    """ Finds a new cell for the structure where the specified plane is in the z direction """
+def find_basis(dircart, ccell, tol=tol, maxi=10, primitive = False):
+    """ Finds a new cell for the structure where a and b are orthogonal to dircart"""
 
     vectors = [dircart*1000]
     tmpz = dircart*1000
@@ -37,8 +37,9 @@ def find_basis(dircart, ccell, tol=tol, maxi=10):
                         if la.norm(pos) < la.norm(vectors[0]) and pos.dot(vectors[0]) > 0: # Is it shorter?
                             vectors[0] = pos
                     else:
-                        if la.norm(pos) < la.norm(tmpz) and pos.dot(tmpz) > 0: # Is it shorter?
-                            tmpz = pos
+                        if dircart.dot(pos) > 0:
+                            if (primitive and (dircart.dot(pos) + tol < dircart.dot(tmpz) or (abs(dircart.dot(pos) - dircart.dot(tmpz)) < tol and la.norm(pos) < la.norm(pos)))) or (not primitive and la.norm(pos) < la.norm(tmpz)):
+                                tmpz = pos
                             
     if np.allclose(vectors[0], dircart*1000, 1e-12):
         print("WARNING: Could not find lattice point in the specified z direction:", dircart)
@@ -49,19 +50,31 @@ def find_basis(dircart, ccell, tol=tol, maxi=10):
     
     # Make an array
     inplane = np.array(inplane).T
-
-    idx = np.argsort(la.norm(inplane, axis = 0))
-    for i in idx:
-        if len(vectors) < 3 and la.norm(np.cross(vectors[-1], inplane[:,i])) > tol: #Form a basis?
-            vectors.append(inplane[:,i])
-        if len(vectors) == 3:
-            break
+    
+    if primitive:
+        for i in range(len(inplane)):
+            for j in range(i):
+                area = la.norm(np.cross(inplane[:,i], inplane[:,j]))
+                if area > tol:
+                    if len(vectors) == 1:
+                        vectors.append(inplane[:,i])
+                        vectors.append(inplane[:,j])
+                    elif area < la.norm(np.cross(vectors[1], vectors[2])):
+                        vectors[1] = inplane[:,i]
+                        vectors[2] = inplane[:,j]
     else:
-        raise RuntimeError("Could not form a basis with specified uvw with and a maximum of %d unit cells"%(maxi))
+        idx = np.argsort(la.norm(inplane, axis = 0))
+        for i in idx:
+            if len(vectors) < 3 and la.norm(np.cross(vectors[-1], inplane[:,i])) > tol: #Form a basis?
+                vectors.append(inplane[:,i])
+            if len(vectors) == 3:
+                break
+        else:
+            raise RuntimeError("Could not form a basis with specified uvw with and a maximum of %d unit cells"%(maxi))
     
     cell3D = np.array(vectors[::-1]).T
 
-    
+    # I don't think this does anything
     # Expressed in terms of the cell
     inplane_cell = la.inv(cell3D).dot(inplane)
 
@@ -131,23 +144,23 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
     dircart = la.inv(ccell.T).dot(planehkl) # Transforms hkl into cartesian coord
 
     dircart = dircart/la.norm(dircart)
-
+    
     if surface is None:
         A = primitive(A, primtol) # Find the primitive cell
-    
+
     cell2D, cell3D = find_basis(dircart, A.cell, tol=tol, maxi=maxi) #Create a new cell with dircart as z
     
     A = supercell(A, cell3D) # Reorganize the atoms in the new cell 
-    
-    z = [dircart.dot(a.pos) for a in A]
 
+    z = [dircart.dot(a.pos) for a in A]
+    
     idx = list(np.argsort(z))
 
     if surface == "bottom":
         idx = idx[::-1]
         
     inplane = []
-    # Creates a list of list of indices where each list of indices correspond to a possible termination considering the rule
+    # Creates a list of lists of indices where each list of indices correspond to a possible termination considering the rule
     c = 0
     z = []
     while len(idx)>0:
@@ -168,15 +181,16 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
                 break
             
         idx = idx[1:]
-        
+
     if len(z) > 1:
         if z[0][-1] - z[-1][0] + cell2D[2,2] < max_thickness:
+            shift = A[inplane[-1][0]].pos
             for a in A:
-                a.pos = into_cell(a.pos - A[inplane[-1][0]].pos, A.cell)
+                a.pos = into_cell(a.pos - shift, A.cell)
             inplane[0] = inplane.pop() + inplane[0]
     elif len(z) == 0:
         print("WARNING: The structure does not contain the elements specified in the rule")
-        
+    
     strucs = []
     recMap = []
     reconstructure = [None]*len(inplane)
@@ -222,33 +236,24 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
             strucs.append(tmpstruc)
 
             recMap.append([reconstructure[j]])
-            
+
     for i in range(len(strucs)):
         strucs[i] = primitive(strucs[i], primtol)
         for a in strucs[i]:
             a.type=a.type.split("-")[0]
-        strucs[i] = reshift(strucs[i])
+        strucs[i] = supercell(strucs[i], reshift(strucs[i].cell))
 
     list3D = [cell3D.dot(la.inv(cell2D))]*len(strucs)
         
-    return list(zip(strucs, recMap, list3D))    
-
-def reshift(struc):
-    """Reshift the z axis to the last position in the matrix and makes it positive"""
-    
-    idx = np.argmax(abs(struc.cell[2,:]))
-    if idx == 2:
-        struc.cell[2,2] = np.sign(struc.cell[2,2])*struc.cell[2,2]
-        if (struc.cell[2,2] < 0) ^ (la.det(struc.cell) < 0): 
-            struc.cell[:,:2] = struc.cell[:,1::-1]
-    else:
-        struc.cell[:, idx], struc.cell[:, 2] = -np.sign(la.det(struc.cell))*np.sign(struc.cell[2, idx])*struc.cell[:,2], np.sign(struc.cell[2,idx])*struc.cell[:, idx]
-        
-    return supercell(struc,struc.cell)
+    return list(zip(strucs, recMap, list3D))
     
 
-def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, outdir): 
-    """ Creates the structures and finds the mapping between them """
+def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, outdir, max_cell_size): 
+    """ Creates the structures and finds the mapping between them."""
+
+    # Make sure the scale is 1 for both structures
+    A = scale(A)
+    B = scale(B)
     
     Apos, atomsA, atom_types = makeSphere(A, mulA*ncell, twoD=True) # Create Apos
     
@@ -262,6 +267,7 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, out
     
     Apos = np.asfortranarray(Apos)
     Bpos = np.asfortranarray(Bpos)
+    Bpos_in = deepcopy(Bpos)
     t_time = time.time()
     print("Optimizing... (this may take several hours)")
     print("Check progress in %s"%(outdir+"/progress.txt"), flush=True)
@@ -287,26 +293,66 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, out
     foundcell = [None]*n_peaks
     origin = [None]*n_peaks
     
-    for i in range(n_peaks): 
+    for i in range(n_peaks):
 
-        ttrans[i,:,3] = ttrans[i,:,3] - ttrans[i,:,:3].dot(centroidB) + centroidA
+        tmat_old = deepcopy(ttrans[i,:2,:2])
         
         print("Looking for periodic cell for peak %d..."%(i))        
-
-        origin[i] = np.zeros((3,1))
         
-        foundcell[i], origin[i][:2,:] = find_cell(class_list[i,:], Bposst[i,:2,:],
-                                                         minvol=abs(la.det(B.cell[:2,:2]))/len(B))
+        print("Trying to find periodicity directly (find_cell):")
+        origin[i] = np.zeros((3,1))
+        foundcell[i], origin[i][:2,:] = find_cell(class_list[i,:], Bposst[i,:2,:], minvol=abs(la.det(B.cell[:2,:2]))/len(B))
+        
+        if foundcell[i] is None:
+
+            print("Trying to find the closest tmat that is commensurate with both cells (find_periodicity)")
+            
+            ttrans[i,:2,:2], foundcell[i] = find_periodicity(ttrans[i,:2,:2], A.cell[:2,:2], B.cell[:2,:2], n=max_cell_size)
+
+            origin[i] = np.zeros((3,1))
+            
+            if n_map < la.det(foundcell[i])/la.det(A.cell[:2,:2])*len(A):
+
+                print("WARNING: The cell found is larger the the number of mapped atoms!. If you can affort it, try to optimize with a larger ncell (-n).")
+
+        else:
+            foundcell[i] = A.cell[:2,:2].dot(np.round(la.inv(A.cell[:2,:2]).dot(foundcell[i])))
+            bfoundcell = np.round(la.inv(ttrans[i,:2,:2].dot(B.cell[:2,:2])).dot(foundcell[i]))
+            ttrans[i,:2,:2] = foundcell[i].dot(la.inv(B.cell[:2,:2].dot(bfoundcell)))
         
         if foundcell[i] is not None:
             print("Found cell!")
+
+            if np.any(ttrans[i,:2,:2]-tmat_old) > tol:
+                print("WARNING: tmat changed by more then the set tolerence %e."%(tol))
+                print(tmat_old, ttrans[i,:2,:2])
+            
+            # Readjusting the vec after changing tmat 
+            
+            dmin_old = deepcopy(dmin[i])
+
+            print("Readjusting for new tmat...", flush = True) 
+            Apos_in = np.asfortranarray(Apos)
+            result = tr.fixed_tmat_int(Apos_in, Bpos_in, ttrans[i,:,:], atoms, switched, filename, outdir)
+            Apos_map_out, Bpos_out, Bposst_out, _, _, class_list_out, ttrans[i,:,3], dmin[i] = result
+            
+            ttrans[i,:,3] = ttrans[i,:,3] - ttrans[i,:,:3].dot(centroidB) + centroidA
+            
+            class_list[i,:] = class_list_out[:n_map]-class_list_out[:n_map].min()
+            
+            Bpos[i,:,:] = Bpos_out[:,:n_map]
+            Bposst[i,:,:] = Bposst_out[:,:n_map]
+            Apos_map[i,:,:] = Apos_map_out[:,:n_map]
+            
+            print("PEAK %d: Change in distance after tmat adjustment: %f"%(i, dmin[i][1]-dmin_old[1]))
+            
             tmpcell = np.eye(3)
             tmpcell[:,2] = A.cell[:,2] + B.cell[:,2]
             tmpcell[:2,:2] = foundcell[i]
             foundcell[i] = deepcopy(tmpcell) 
         else:
             print("Could not find periodic cell")
-
+            
     return (Apos, Apos_map, Bpos, Bposst, n_map, natA, class_list,
             ttrans, rtrans, dmin, stats, n_peaks, peak_thetas,
             atoms, atom_types, foundcell, origin)
@@ -387,7 +433,7 @@ def createPoscar(A, B, reconA, reconB, ttrans, dispStruc, outdir=".", layers=1, 
 
 def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", interactive=False,
                            savedisplay=False, outdir='.',
-                           minimize=False, test=False, A3D=np.eye(3), B3D=np.eye(3)):
+                           minimize=False, test=False, A3D=np.eye(3), B3D=np.eye(3), max_cell_size=1000):
 
     # Make sure the scale is 1 for both structures
     A = scale(A)
@@ -420,7 +466,7 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
     if minimize:
         print("==>Ready to start optimization<==")
 
-        result = optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, outdir)
+        result = optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, outdir, max_cell_size)
         pickle.dump(result, open(outdir+"/intoptimization.dat","wb"))
         
     else:
@@ -428,11 +474,11 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
             result = pickle.load(open(outdir+"/intoptimization.dat","rb"))
             print("==>Gathered optimization data from %s<=="%(outdir))
         except FileNotFoundError:
-            result = optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, outdir)
+            result = optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, outdir, max_cell_size)
             pickle.dump(result, open(outdir+"/intoptimization.dat","wb"))
         
     Apos, Apos_map, Bpos, Bposst, n_map, natA, class_list, ttrans, rtrans, dmin, stats, n_peaks, peak_thetas, atoms, atom_types, foundcell, origin = result
-
+    
     natB = n_map // np.sum(atoms)
     nat_map = n_map // np.sum(atoms)
     nat = np.shape(Apos)[1] // np.sum(atoms)
@@ -441,7 +487,7 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
         print("Displaying statistics...")
         if interactive:
             print("(Close the display window to continue)")
-        displayStats(stats, n_iter, peak_thetas, ttrans, dmin[:,0], n_peaks, sym, interactive, savedisplay, outdir)
+        displayStats(stats, n_iter, peak_thetas, ttrans, dmin[:,1], n_peaks, sym, interactive, savedisplay, outdir)
         print()
 
     dispStruc = [None]*n_peaks
@@ -461,7 +507,11 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
         print()
         print("Number of classes:", len(np.unique(class_list[k,:])))
         print("Number of mapped atoms:", n_map)
-        print("Total distance between structures:", dmin[k,0], dmin[k,1], dmin[k,1]/area)
+        print("Bonding energy between structures:")
+        print("----Total bonding energy (not-strained):", dmin[k,0])
+        print("--------Total bonding energy (strained):", dmin[k,1])
+        print("----Average energy per bond (n-s and s):", dmin[k,0]/n_map, dmin[k,1]/n_map)
+        print("---Average energy per Ang^2 (n-s and s):", dmin[k,0]/area, dmin[k,1]/area)
         print("Optimal angle between structures:", np.mod(peak_thetas[k]*180/np.pi,360/sym))
         print("Volume stretching factor (det(T)):", la.det(ttrans[k,:2,:2]))
         print("Cell volume ratio (initial cell volume)/(final cell volume):", mulA * la.det(Acell)/(mulB * la.det(Bcell)))
@@ -495,13 +545,14 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
             continue
 
         pos_in_struc = [None]*2
+        
         pos_in_struc[0] = Apos_map[k,:,:] - origin[k].reshape((3,1)).dot(np.ones((1,np.shape(Apos_map[k,:,:])[1])))
         pos_in_struc[1] = Bposst[k,:,:] - origin[k].reshape((3,1)).dot(np.ones((1,np.shape(Bposst[k,:,:])[1])))
 
         dispStruc[k], vec_classes[k] = makeStructures(foundcell[k], atoms, atom_types,
                                                       natB, pos_in_struc, class_list[k,:])
 
-        dispStruc[k] = reshift(dispStruc[k])
+        dispStruc[k] = supercell(dispStruc[k], reshift(dispStruc[k].cell))
 
         if len(vec_classes[k]) > len(vec_classes_estimate):
             print("WARNING: The number of classes found during the optimization is not sufficent to describe the transformation; increase the classification tolerence (tol_class)")
@@ -536,4 +587,4 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
             dispStruc[k], ttrans[k,:,:3], vec_classes[k] = switchDispStruc(dispStruc[k], ttrans[k,:,:3], vec_classes[k])
             ttrans[k,:,3] = -ttrans[k,:,:3].dot(ttrans[k,:,3])
                 
-    return ttrans, dispStruc, vec_classes, dmin[:,1].min()/area
+    return ttrans, dispStruc, vec_classes, dmin[:,0].min()
