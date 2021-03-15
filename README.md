@@ -1,6 +1,6 @@
 # p2ptrans - A Structure Matching Algorithm
 
-<img src="(https://github.com/ftherrien/p2ptrans/blob/master/WelcomeImage.gif" width="200" height="200">
+<img src="https://github.com/ftherrien/p2ptrans/blob/master/WelcomeImage.gif" width="300" height="300">
 
 p2ptrans allows you to find the best matching between two crystal structures.
 
