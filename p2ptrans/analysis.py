@@ -79,12 +79,26 @@ def strainDirs(tmat, ftf=True):
 def findHabit(U, P, eigval):
     
     # Using uniformly strained plane
-    ratio = np.sqrt(abs((eigval[2]**2 - eigval[1]**2)/(eigval[1]**2 - eigval[0]**2)))
+    if abs(eigval[1]**2 - eigval[0]**2) > tol: 
+        ratio = np.sqrt(abs((eigval[2]**2 - eigval[1]**2)/(eigval[1]**2 - eigval[0]**2)))
     
-    # uvw direction of normal in cartesian coord
-    planeHab = np.zeros((3,2))
-    planeHab[:,0] = P[:,0] + ratio*P[:,2]
-    planeHab[:,1] = P[:,0] - ratio*P[:,2]
+        # uvw direction of normal in cartesian coord
+        planeHab = np.zeros((3,2))
+        planeHab[:,0] = P[:,0] + ratio*P[:,2]
+        planeHab[:,1] = P[:,0] - ratio*P[:,2]
+
+    elif abs((eigval[2]**2 - eigval[1]**2)) < tol:
+        # Any plane is good because all three strains are equal
+        planeHab = np.zeros((3,2))
+        planeHab[:,0] = P[:,0]
+        planeHab[:,1] = -P[:,0]
+        ratio = 1
+    else:
+        planeHab = np.zeros((3,2))
+        planeHab[:,0] = P[:,2]
+        planeHab[:,1] = -P[:,2]
+        ratio = Inf
+    
     return planeHab, ratio
 
 def findR(U, P=None, planeHab=None, ratio=None):
