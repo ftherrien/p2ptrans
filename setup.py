@@ -19,4 +19,4 @@ setup(name='p2ptrans',
           'spglib',
           'pylada @ git+https://github.com/pylada/pylada-light#egg=pylada',
         ],
-      scripts=['bin/p2ptrans', 'bin/p2pint'],)
+      scripts=['bin/p2ptrans', 'bin/p2pint', 'bin/mview'],)
