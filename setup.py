@@ -15,6 +15,7 @@ setup(name='p2ptrans',
       python_requires='>=3',
       install_requires=[
           'numpy',
+          'pytest',
           'matplotlib',
           'spglib',
           'pylada @ git+https://github.com/pylada/pylada-light#egg=pylada',
