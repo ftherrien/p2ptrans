@@ -1,4 +1,6 @@
 from p2ptrans import read, analysis
+import p2ptrans
+import os, glob
 
 
 BCC_file = './BCC_POSCAR'
@@ -9,7 +11,13 @@ tol = 0.0001
 def read_FCC_BCC():
     BCC = read.poscar(BCC_file)
     FCC = read.poscar(FCC_file)
-    return BCC, FCC
+    return BCC, FCC    
+
+def cleanup():
+    for dat in glob.iglob('*dat'):
+        os.remove(dat)
+    if os.path.exists('progress.txt'):
+        os.remove('progress.txt')
 
 def test_read_poscars():
     '''Test that pylada reads test files correctly'''
@@ -48,3 +56,14 @@ def test_read_cryst():
     assert ccell2 == [[9., 8., 7.],[6., 5., 4.],[3., 2., 1.]]
     assert planehkl == [1, 2, 3]
     assert diruvw == [3, 2, 1]
+
+def test_optimize():
+    cleanup()
+    BCC, FCC = read_FCC_BCC()
+    BCC_cell = BCC.cell * BCC.scale
+    FCC_cell = FCC.cell * FCC.scale
+    # optimization(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir, max_cell_size)
+    result = p2ptrans.core.optimization(BCC, BCC_cell, 1, FCC, FCC_cell, 1, 300, './p2p.in', '.', 1000)
+    Apos, Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, atoms, atom_types, foundcell, vec = result
+    print(Apos, Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, atoms, atom_types, foundcell, vec)
+    cleanup()
