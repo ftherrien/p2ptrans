@@ -1,4 +1,9 @@
 from p2ptrans import *
+import os
+
+
+BCC_file = './BCC_POSCAR'
+FCC_file = './FCC_POSCAR'
 
 def default_options():
     # (fileA, fileB, ncell, filename, interactive, savedisplay, outdir,
@@ -9,8 +14,8 @@ def default_options():
      False, None)
 
 def read_FCC_BCC():
-    BCC = read.poscar('./BCC_POSCAR')
-    FCC = read.poscar('./FCC_POSCAR')
+    BCC = read.poscar(BCC_file)
+    FCC = read.poscar(FCC_file)
     return BCC, FCC
 
 def test_read_poscars():
@@ -30,3 +35,15 @@ def test_read_poscars():
     assert (BCC[0].pos == [0, 0, 0]).all
 
     assert BCC[0].type == FCC[0].type
+
+def test_read_cryst_defaults():
+    ccell1, ccell2, planehkl, diruvw = analysis.readCrystParam('./FILE_DNE')
+    assert (ccell1 == [[1., 0., 0.],
+                       [0., 1., 0.],
+                       [0., 0., 1.]]).all
+    assert (ccell2 == [[1., 0., 0.],
+                       [0., 1., 0.],
+                       [0., 0., 1.]]).all
+    assert planehkl == [1, 0, 0]
+    assert diruvw == [0, 1, 0]
+    
