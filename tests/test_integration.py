@@ -1,14 +1,10 @@
-from _pytest.python_api import approx
 from p2ptrans import *
 import pytest
-import os
-import glob
+import os, glob
 import numpy as np
+from test_units import read_FCC_BCC, BCC_file, FCC_file, tol 
 
 
-BCC_file = './BCC_POSCAR'
-FCC_file = './FCC_POSCAR'
-atol = 0.0001
 
 def default_options():
     # (fileA, fileB, ncell, filename, interactive, savedisplay, outdir,
@@ -18,42 +14,6 @@ def default_options():
      False, False, True, False, False, False, False, './cryst.in', 60,
      False, None)
 
-def read_FCC_BCC():
-    BCC = read.poscar(BCC_file)
-    FCC = read.poscar(FCC_file)
-    return BCC, FCC
-
-def test_read_poscars():
-    '''Test that pylada reads test files correctly'''
-    (BCC, FCC) = read_FCC_BCC()
-
-    assert BCC.scale == 2.87
-    assert (BCC.cell == [[0.5,-0.5, 0.5],
-                        [ 0.5, 0.5,-0.5],
-                        [-0.5, 0.5, 0.5]]).all
-    assert (BCC[0].pos == [0, 0,-0]).all
-    
-    assert FCC.scale == 3.57
-    assert (FCC.cell == [[0.5, 0.5, 0.0],
-                        [ 0.5, 0.0, 0.5],
-                        [ 0.0, 0.5, 0.5]]).all
-    assert (BCC[0].pos == [0, 0, 0]).all
-
-    assert BCC[0].type == FCC[0].type
-
-def test_read_cryst_defaults():
-    '''Test that the cryst param defaults are the unit matrix'''
-    ccell1, ccell2, planehkl, diruvw = analysis.readCrystParam('./FILE_DNE')
-    assert (ccell1 == [[1., 0., 0.],
-                       [0., 1., 0.],
-                       [0., 0., 1.]]).all
-    assert (ccell2 == [[1., 0., 0.],
-                       [0., 1., 0.],
-                       [0., 0., 1.]]).all
-    assert planehkl == [1, 0, 0]
-    assert diruvw == [0, 1, 0]
-
-#TODO test actual read_cryst    
 
 def cleanup():
     for dat in glob.iglob('*dat'):
@@ -90,18 +50,18 @@ def test_matching():
     
 
     # matricies can be in many diffrent forms...
-    assert (abs(tmat[0]) == pytest.approx([8.03921569e-01, 8.03921569e-01, 0], atol) or
-           abs(tmat[0]) == pytest.approx([0,  0, 8.03921569e-01]), atol)
-    assert (abs(tmat[1]) == pytest.approx([8.03921569e-01, 8.03921569e-01, 0], atol) or
-           abs(tmat[1]) == pytest.approx([0,  0, 8.03921569e-01]), atol)
-    assert (abs(tmat[2]) == pytest.approx([8.03921569e-01, 8.03921569e-01, 0], atol) or
-           abs(tmat[2]) == pytest.approx([0,  0, 8.03921569e-01]), atol)
-    assert np.linalg.det(tmat) == pytest.approx(1.0391327633537175, atol)
+    assert abs(tmat[0]) == pytest.approx([8.03921569e-01, 8.03921569e-01, 0], tol) or\
+           abs(tmat[0]) == pytest.approx([0,  0, 8.03921569e-01]), tol
+    assert abs(tmat[1]) == pytest.approx([8.03921569e-01, 8.03921569e-01, 0], tol) or\
+           abs(tmat[1]) == pytest.approx([0,  0, 8.03921569e-01]), tol
+    assert abs(tmat[2]) == pytest.approx([8.03921569e-01, 8.03921569e-01, 0], tol) or\
+           abs(tmat[2]) == pytest.approx([0,  0, 8.03921569e-01]), tol
+    assert np.linalg.det(tmat) == pytest.approx(1.0391327633537175, tol)
     
     assert abs(dispStruc.cell).flatten() == pytest.approx([1.435, 1.435, 1.435,
                                                            1.435, 1.435, 1.435,
-                                                           1.435, 1.435, 1.435], atol)
-    assert np.linalg.det(tmat) == pytest.approx(1.0391327619090698, atol)
+                                                           1.435, 1.435, 1.435], tol)
+    assert np.linalg.det(tmat) == pytest.approx(1.0391327619090698, tol)
 
     #TODO: what is this pattern?
     #assert vec_classes == pytest.approx([1.86087616e-08, -6.60150734e-09, 1.37320999e-08])
