@@ -90,12 +90,11 @@ def test_crystallography():
     BCC, FCC = read_FCC_BCC()
     eigval, U, P, Q, planeHab = analysis.crystallography(np.linalg.inv(test_tmat), FCC, BCC, ccell2, ccell1, planehkl,
                                                             diruvw, fileA=BCC_file, fileB=FCC_file)
-    print(eigval)
-    print(U)
-    print(P)
-    print(Q)
-    print(planeHab)
-    assert(False)
+    #print(eigval)
+    #print(U)
+    #print(P)
+    #print(Q)
+    #print(planeHab)
 
    
 
