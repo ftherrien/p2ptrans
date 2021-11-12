@@ -21,7 +21,7 @@ def cleanup():
     if os.path.exists('progress.txt'):
         os.remove('progress.txt')
 
-'''
+
 def test_matching():
     ''Runs a full matching, then tests that the tmats, dispCell, and first two dmins are the same''
     cleanup()
@@ -80,7 +80,7 @@ def test_matching():
     # [ 6.65349152e+01  1.67163017e-01 -9.84830562e-03]
     # [ 6.65388928e+01  1.67598176e-01 -1.17542355e-02]
     cleanup()
-'''
+
 
 def test_crystallography():
     test_tmat = [[-8.03921569e-01, -8.03921569e-01, 0],
