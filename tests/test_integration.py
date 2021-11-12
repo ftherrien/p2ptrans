@@ -23,7 +23,7 @@ def cleanup():
 
 
 def test_matching():
-    ''Runs a full matching, then tests that the tmats, dispCell, and first two dmins are the same''
+    '''Runs a full matching, then tests that the tmats, dispCell, and first two dmins are the same'''
     cleanup()
     (_, _, ncell, filename, interactive, savedisplay, outdir,
         use, switch, prim, anim, vol, minimize, test, crystfile, n_steps,
