@@ -97,7 +97,7 @@ def findHabit(U, P, eigval):
         planeHab = np.zeros((3,2))
         planeHab[:,0] = P[:,2]
         planeHab[:,1] = -P[:,2]
-        ratio = Inf
+        ratio = np.inf
     
     return planeHab, ratio
 
@@ -115,8 +115,11 @@ def findR(U, P=None, planeHab=None, ratio=None):
     R = np.zeros((2,3,3))
     
     for i in range(2):
-        V[i,:,0] = ratio*P[:,0] - (1-2*i)*P[:,2]
-        V[i,:,0] = V[i,:,0]/la.norm(V[i,:,0])
+        if np.isinf(ratio):
+            V[i,:,0] = P[:,0]
+        else:
+            V[i,:,0] = ratio*P[:,0] - (1-2*i)*P[:,2]
+            V[i,:,0] = V[i,:,0]/la.norm(V[i,:,0])
         V[i,:,1] = -(1-2*i)*P[:,1]
         V[i,:,2] = planeHab[:,i]/la.norm(planeHab[:,i])
         
