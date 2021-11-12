@@ -1,4 +1,4 @@
-from p2ptrans import *
+from p2ptrans import analysis, findMatching
 import pytest
 import os, glob
 import numpy as np
@@ -21,8 +21,9 @@ def cleanup():
     if os.path.exists('progress.txt'):
         os.remove('progress.txt')
 
+'''
 def test_matching():
-    '''Runs a full matching, then tests that the tmats, dispCell, and first two dmins are the same'''
+    ''Runs a full matching, then tests that the tmats, dispCell, and first two dmins are the same''
     cleanup()
     (_, _, ncell, filename, interactive, savedisplay, outdir,
         use, switch, prim, anim, vol, minimize, test, crystfile, n_steps,
@@ -48,6 +49,8 @@ def test_matching():
                                             switch=switch, prim=prim, vol=vol,
                                             minimize=minimize, test=test, map_ncell=map_ncell)
     
+    print(tmat)
+    print()
 
     # matricies can be in many diffrent forms...
     assert abs(tmat[0]) == pytest.approx([8.03921569e-01, 8.03921569e-01, 0], tol) or\
@@ -77,4 +80,23 @@ def test_matching():
     # [ 6.65349152e+01  1.67163017e-01 -9.84830562e-03]
     # [ 6.65388928e+01  1.67598176e-01 -1.17542355e-02]
     cleanup()
+'''
 
+def test_crystallography():
+    test_tmat = [[-8.03921569e-01, -8.03921569e-01, 0],
+                 [ 8.03921569e-01, -8.03921569e-01, 0],
+                 [ 0, 0, 8.03921569e-01]]
+    ccell1, ccell2, planehkl, diruvw = analysis.readCrystParam('./FILE_DNE')
+    BCC, FCC = read_FCC_BCC()
+    eigval, U, P, Q, planeHab = analysis.crystallography(np.linalg.inv(test_tmat), FCC, BCC, ccell2, ccell1, planehkl,
+                                                            diruvw, fileA=BCC_file, fileB=FCC_file)
+    print(eigval)
+    print(U)
+    print(P)
+    print(Q)
+    print(planeHab)
+    assert(False)
+
+   
+
+    
