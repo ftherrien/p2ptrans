@@ -67,10 +67,8 @@ def test_matching():
 
     assert dmin[0] == pytest.approx(6.65931827e+01, 0.1)
     assert dmin[1] == pytest.approx(1.67732607e-01, 0.1)
-    #TODO: what is the third dmin???
-    # [ 6.65931827e+01  1.67732607e-01 -1.17534531e-02]
-    # [ 6.65349152e+01  1.67163017e-01 -9.84830562e-03]
-    # [ 6.65388928e+01  1.67598176e-01 -1.17542355e-02]
+    assert dmin[2] == pytest.approx(-1.17534531e-02, 0.1) or \
+        dmin[2] == pytest.approx(-9.84830562e-03, 0.1) # why is it like this?
     cleanup()
 
 def test_crystallography():
