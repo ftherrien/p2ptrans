@@ -1,5 +1,6 @@
 from p2ptrans import read, analysis
 import p2ptrans
+import pytest
 import os, glob
 
 
@@ -57,11 +58,12 @@ def test_read_cryst():
     assert planehkl == [1, 2, 3]
     assert diruvw == [3, 2, 1]
 
+@pytest.mark.skip(reason="Replaced with smaller and larger tests...")
 def test_optimize():
     cleanup()
     BCC, FCC = read_FCC_BCC()
-    BCC_cell = BCC.cell * BCC.scale
-    FCC_cell = FCC.cell * FCC.scale
+    BCC_cell = BCC.cell * 2.87
+    FCC_cell = FCC.cell * 3.57
     # optimization(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir, max_cell_size)
     result = p2ptrans.core.optimization(BCC, BCC_cell, 1, FCC, FCC_cell, 1, 300, './p2p.in', '.', 1000)
     Apos, Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, atoms, atom_types, foundcell, vec = result

@@ -73,7 +73,6 @@ def test_matching():
     # [ 6.65388928e+01  1.67598176e-01 -1.17542355e-02]
     cleanup()
 
-@pytest.mark.skip(reason="Currently borked...")
 def test_crystallography():
     test_tmat = [[-8.03921569e-01, -8.03921569e-01, 0],
                  [ 8.03921569e-01, -8.03921569e-01, 0],
@@ -82,11 +81,28 @@ def test_crystallography():
     BCC, FCC = read_FCC_BCC()
     eigval, U, P, Q, planeHab = analysis.crystallography(np.linalg.inv(test_tmat), FCC, BCC, ccell2, ccell1, planehkl,
                                                             diruvw, fileA=BCC_file, fileB=FCC_file)
-    #print(eigval)
-    #print(U)
-    #print(P)
-    #print(Q)
-    #print(planeHab)
+    
+    print(eigval)
+    print(U)
+    print(P)
+    print(Q)
+    print(planeHab)
+    assert eigval == pytest.approx([0.87957185, 0.87957185, 1.24390244], tol)
+    np.testing.assert_allclose(U,[[0.88275147, 0.05278822, 0.        ],
+                [0.05278822, 0.87639223, 0.        ],
+                [0.,         0.,         1.24390244]])
+    np.testing.assert_allclose( P, [[1.,         0.06012458, 0.,       ],
+                [0. ,        0.99819088, 0.,        ],
+                [0.,         0.,         1.,        ]])
+    np.testing.assert_allclose( Q, [[0.43187329, 1.,         0.,        ],
+                [0.90193429, 0.,         0.,        ],
+                [0.,         0.,         1.,        ]])
+    np.testing.assert_allclose( planeHab, [[ 0., -0.],
+    [ 0., -0.],
+    [ 1., -1.]])
+
+if __name__ == '__main__':
+    test_crystallography()
 
    
 
