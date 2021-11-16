@@ -5,7 +5,11 @@ import numpy as np
 from pylada.crystal import Structure
 from test_units import read_FCC_BCC, BCC_file, FCC_file, tol, cleanup, assert_structs_approx_eq
 
-
+@pytest.fixture()
+def double_cleanup():
+    cleanup()
+    yield
+    cleanup()
 
 def default_options():
     # (fileA, fileB, ncell, filename, interactive, savedisplay, outdir,
@@ -15,9 +19,10 @@ def default_options():
      False, False, True, False, False, False, False, './cryst.in', 60,
      False, None)
 
+
+@pytest.mark.usefixtures("double_cleanup")
 def test_matching():
     '''Runs a full matching, then tests that the tmats, dispCell, and first two dmins are the same'''
-    cleanup()
     (_, _, ncell, filename, interactive, savedisplay, outdir,
         use, switch, prim, anim, vol, minimize, test, crystfile, n_steps,
         showversion, map_ncell) = default_options()
@@ -42,18 +47,23 @@ def test_matching():
                                             switch=switch, prim=prim, vol=vol,
                                             minimize=minimize, test=test, map_ncell=map_ncell)
     
+    print(tmat)
     # matricies can be in many diffrent forms...
-    assert abs(tmat[0]) == pytest.approx([8.03921569e-01, 8.03921569e-01, 0], tol) or\
-           abs(tmat[0]) == pytest.approx([0,  0, 8.03921569e-01]), tol
-    assert abs(tmat[1]) == pytest.approx([8.03921569e-01, 8.03921569e-01, 0], tol) or\
-           abs(tmat[1]) == pytest.approx([0,  0, 8.03921569e-01]), tol
-    assert abs(tmat[2]) == pytest.approx([8.03921569e-01, 8.03921569e-01, 0], tol) or\
-           abs(tmat[2]) == pytest.approx([0,  0, 8.03921569e-01]), tol
+    # TODO: row reduction or something?
+    weird_tmat = abs(tmat)[abs(tmat)[:, 0].argsort()]
+    print(weird_tmat)
+
+    np.testing.assert_allclose(weird_tmat, [[0, 0, 0.8039216],
+                                            [0.8039216, 0.8039216, 0],
+                                            [0.8039216, 0.8039216, 0]], 0.001, atol=1e-14)
+    #        [[0, 0.8039216, 0], # rare possiblity...
+    #         [0.8039216, 0, 0.8039216],
+    #         [0.8039216, 0, 0.8039216]]
     assert np.linalg.det(tmat) == pytest.approx(1.0391327633537175, tol)
     
-    assert abs(dispStruc.cell).flatten() == pytest.approx([1.435, 1.435, 1.435,
-                                                           1.435, 1.435, 1.435,
-                                                           1.435, 1.435, 1.435], tol)
+    np.testing.assert_allclose(abs(dispStruc.cell), [[1.435, 1.435, 1.435],
+                                                     [1.435, 1.435, 1.435],
+                                                     [1.435, 1.435, 1.435]], tol)
     assert np.linalg.det(tmat) == pytest.approx(1.0391327619090698, tol)
 
     print('ASH')
@@ -73,7 +83,6 @@ def test_matching():
             dmin[2] == pytest.approx(-9.84830562e-03, 0.1) or\
             dmin[2] == pytest.approx( 0.00861095521, 0.1) or\
             dmin[2] == pytest.approx(-0.00826468673, 0.1) # why is it like this?
-    cleanup()
 
 def test_crystallography():
     test_tmat = [[-8.03921569e-01, -8.03921569e-01, 0],
@@ -98,6 +107,7 @@ def test_crystallography():
     [ 0., -0.],
     [ 1., -1.]])
 
+@pytest.mark.usefixtures("double_cleanup")
 def test_transisiton():
     test_tmat = [[-8.03921569e-01, -8.03921569e-01, 0],
                  [ 8.03921569e-01, -8.03921569e-01, 0],
@@ -132,7 +142,6 @@ def test_transisiton():
     assert_structs_approx_eq(path[0], res0)
     assert_structs_approx_eq(path[2], res2)
     assert_structs_approx_eq(path[5], res5)
-    cleanup()
 
 
 if __name__ == '__main__':
