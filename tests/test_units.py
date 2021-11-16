@@ -20,7 +20,22 @@ def assert_structs_approx_eq(A, B, tol=0.001):
 def read_FCC_BCC():
     BCC = read.poscar(BCC_file)
     FCC = read.poscar(FCC_file)
-    return BCC, FCC    
+    return BCC, FCC 
+
+@pytest.fixture(scope="session") # session scope for matching
+def bcc():
+    return Structure([[0.5,-0.5, 0.5],
+                      [ 0.5, 0.5,-0.5],
+                      [-0.5, 0.5, 0.5]], scale=2.87, name='BCC structure')\
+           .add_atom(0., 0., 0., 'Fe')
+
+@pytest.fixture(scope="session")
+def fcc():
+    return Structure([[0.5, 0.5, 0.0],
+                    [ 0.5, 0.0, 0.5],
+                      [ 0.0, 0.5, 0.5]], scale=3.57, name='FCC structure')\
+           .add_atom(0., 0., 0., 'Fe')
+
 
 def cleanup():
     for dat in glob.iglob('*dat'):
@@ -30,20 +45,12 @@ def cleanup():
     if os.path.exists('TransPOSCARS'):
         shutil.rmtree('TransPOSCARS')
 
-def test_read_poscars():
+def test_read_poscars(bcc, fcc):
     '''Test that pylada reads test files correctly'''
-    (BCC, FCC) = read_FCC_BCC()
-    test_BCC = Structure([[0.5,-0.5, 0.5],
-                        [ 0.5, 0.5,-0.5],
-                        [-0.5, 0.5, 0.5]], scale=2.87)\
-               .add_atom(0., 0., 0., 'Fe')
-    test_FCC = Structure([[0.5, 0.5, 0.0],
-                        [ 0.5, 0.0, 0.5],
-                        [ 0.0, 0.5, 0.5]], scale=3.57)\
-               .add_atom(0., 0., 0., 'Fe')
+    (read_BCC, read_FCC) = read_FCC_BCC()
 
-    assert_structs_approx_eq(BCC, test_BCC)
-    assert_structs_approx_eq(FCC, test_FCC)
+    assert_structs_approx_eq(read_BCC, bcc)
+    assert_structs_approx_eq(read_FCC, fcc)
 
 def test_read_cryst_defaults():
     '''Test that the cryst param defaults are the unit matrix'''

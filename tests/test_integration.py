@@ -3,7 +3,13 @@ import pytest
 import os
 import numpy as np
 from pylada.crystal import Structure
-from test_units import read_FCC_BCC, BCC_file, FCC_file, tol, cleanup, assert_structs_approx_eq
+from test_units import bcc, fcc, BCC_file, FCC_file, tol, cleanup, assert_structs_approx_eq
+
+@pytest.fixture(scope="session")
+def double_cleanup_s():
+    cleanup()
+    yield
+    cleanup()
 
 @pytest.fixture()
 def double_cleanup():
@@ -16,19 +22,16 @@ def default_options():
     # use, switch, prim, anim, vol, minimize, test, crystfile, n_steps,
     # showversion, map_ncell)
     return ('./POSCAR_A', './POSCAR_B', 300, './p2p.in', False, False, '.',
-     False, False, True, False, False, False, False, './cryst.in', 60,
-     False, None)
+        False, False, True, False, False, False, False, './cryst.in', 60,
+        False, None)
 
-
-@pytest.mark.usefixtures("double_cleanup")
-def test_matching():
-    '''Runs a full matching, then tests that the tmats, dispCell, and first two dmins are the same'''
+@pytest.fixture(scope="session")
+def find_matching(bcc, fcc, double_cleanup_s):
+    '''Runs a full matching, then cleanup the files'''
     (_, _, ncell, filename, interactive, savedisplay, outdir,
         use, switch, prim, anim, vol, minimize, test, crystfile, n_steps,
         showversion, map_ncell) = default_options()
     
-    BCC, FCC = read_FCC_BCC()
-
     if not os.path.exists(outdir):
         os.makedirs(outdir)
 
@@ -40,17 +43,23 @@ def test_matching():
 
     ccell1, ccell2, planehkl, diruvw = analysis.readCrystParam('./FILE_DNE')
 
-    tmat, dispStruc, vec_classes, dmin = findMatching(BCC, FCC, ncell, fileA=BCC_file, fileB=FCC_file,
+    tmat, dispStruc, vec_classes, dmin = findMatching(bcc, fcc, ncell, fileA=BCC_file, fileB=FCC_file,
                                             ccellA=ccell1, ccellB=ccell2,
                                             filename=filename, interactive=interactive,
                                             savedisplay=savedisplay, outdir=outdir,
                                             switch=switch, prim=prim, vol=vol,
                                             minimize=minimize, test=test, map_ncell=map_ncell)
     
-    print(tmat)
+    return tmat, dispStruc, vec_classes, dmin
+
+def test_tmat(find_matching):
+    '''Test that the tmats are similar'''
+    tmat, dispStruc, vec_classes, dmin = find_matching
+
     # matricies can be in many diffrent forms...
     # TODO: row reduction or something?
     weird_tmat = abs(tmat)[abs(tmat)[:, 0].argsort()]
+    print(tmat)
     print(weird_tmat)
 
     np.testing.assert_allclose(weird_tmat, [[0, 0, 0.8039216],
@@ -60,22 +69,30 @@ def test_matching():
     #         [0.8039216, 0, 0.8039216],
     #         [0.8039216, 0, 0.8039216]]
     assert np.linalg.det(tmat) == pytest.approx(1.0391327633537175, tol)
-    
+
+def test_dispCell(find_matching):
+    '''Test that the dispCells are the same'''
+    tmat, dispStruc, vec_classes, dmin = find_matching
+    print(dispStruc)
     np.testing.assert_allclose(abs(dispStruc.cell), [[1.435, 1.435, 1.435],
                                                      [1.435, 1.435, 1.435],
                                                      [1.435, 1.435, 1.435]], tol)
-    assert np.linalg.det(tmat) == pytest.approx(1.0391327619090698, tol)
+    assert np.linalg.det(tmat) == pytest.approx(1.0391327619090698, tol)    
 
-    print('ASH')
-    print(dispStruc)
+@pytest.mark.skip(reason="No idea how to test this...")
+def test_vec_classes(find_matching):
+    tmat, dispStruc, vec_classes, dmin = find_matching 
     print(vec_classes)
-
     #TODO: what is this pattern?
     #assert vec_classes == pytest.approx([1.86087616e-08, -6.60150734e-09, 1.37320999e-08])
     # 1.15223042e-06,  8.17389458e-07, -8.06306018e-08
     # 1.86087616e-08, -6.60150734e-09, 1.37320999e-08
     # 8.92814178e-09,  3.42579574e-08, -2.57275090e-10
-    # 7.52845120e-09, -4.41008163e-09,  2.90160900e-08
+    # 7.52845120e-09, -4.41008163e-09,  2.90160900e-08   
+
+def test_dmins(find_matching):
+    '''Test that the first 2 dmins are the same and the third is in the list'''
+    tmat, dispStruc, vec_classes, dmin = find_matching  
 
     assert dmin[0] == pytest.approx(6.65931827e+01, 0.1)
     assert dmin[1] == pytest.approx(1.67732607e-01, 0.1)
@@ -84,13 +101,13 @@ def test_matching():
             dmin[2] == pytest.approx( 0.00861095521, 0.1) or\
             dmin[2] == pytest.approx(-0.00826468673, 0.1) # why is it like this?
 
-def test_crystallography():
+def test_crystallography(bcc, fcc):
+    '''Test that '''
     test_tmat = [[-8.03921569e-01, -8.03921569e-01, 0],
                  [ 8.03921569e-01, -8.03921569e-01, 0],
                  [ 0, 0, 8.03921569e-01]]
     ccell1, ccell2, planehkl, diruvw = analysis.readCrystParam('./FILE_DNE')
-    BCC, FCC = read_FCC_BCC()
-    eigval, U, P, Q, planeHab = analysis.crystallography(np.linalg.inv(test_tmat), FCC, BCC, ccell2, ccell1, planehkl,
+    eigval, U, P, Q, planeHab = analysis.crystallography(np.linalg.inv(test_tmat), fcc, bcc, ccell2, ccell1, planehkl,
                                                             diruvw, fileA=BCC_file, fileB=FCC_file)
     
     assert eigval == pytest.approx([0.87957185, 0.87957185, 1.24390244], tol)
