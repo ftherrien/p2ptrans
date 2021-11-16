@@ -3,7 +3,7 @@ import pytest
 import os
 import numpy as np
 from pylada.crystal import Structure
-from test_units import read_FCC_BCC, BCC_file, FCC_file, tol, cleanup
+from test_units import read_FCC_BCC, BCC_file, FCC_file, tol, cleanup, assert_structs_approx_eq
 
 
 
@@ -14,13 +14,6 @@ def default_options():
     return ('./POSCAR_A', './POSCAR_B', 300, './p2p.in', False, False, '.',
      False, False, True, False, False, False, False, './cryst.in', 60,
      False, None)
-
-def assert_structs_approx_eq(A, B, tol=0.001):    
-    assert len(A) == len(B)
-    np.testing.assert_allclose(A.cell, B.cell, tol)
-    for aAtom, bAtom in zip(A, B):
-        assert aAtom.type == bAtom.type
-        assert aAtom.pos == pytest.approx(bAtom.pos, tol)
 
 def test_matching():
     '''Runs a full matching, then tests that the tmats, dispCell, and first two dmins are the same'''
@@ -109,9 +102,9 @@ def test_transisiton():
     test_tmat = [[-8.03921569e-01, -8.03921569e-01, 0],
                  [ 8.03921569e-01, -8.03921569e-01, 0],
                  [ 0, 0, 8.03921569e-01]]
-    test_disp = Structure(np.array([[ 1.435, -1.435,  1.435],
-                                    [ 1.435, -1.435, -1.435],
-                                    [ 1.435,  1.435, -1.435]]))\
+    test_disp = Structure([[ 1.435, -1.435,  1.435],
+                           [ 1.435, -1.435, -1.435],
+                           [ 1.435,  1.435, -1.435]])\
     .add_atom(0.09, -2.74, 0.014, '0', atom='Fe', site=0)
     vec_classes = [np.array([ 9.40440525e-09, -3.27675309e-09,  4.11677981e-08])]
     result = produceTransition(5, test_tmat, test_disp, vec_classes,
@@ -123,22 +116,23 @@ def test_transisiton():
     assert len(path) == 6
     assert (spacegroups == ['Im-3m (229)', 'I4/mmm (139)', 'I4/mmm (139)', 'I4/mmm (139)', 'I4/mmm (139)', 'Fm-3m (225)'])
 
-    res0 = Structure(np.array([[ 1.435, -1.435,  1.435],
-                               [ 1.435, -1.435, -1.435],
-                               [ 1.435,  1.435, -1.435]]))\
+    res0 = Structure([[ 1.435, -1.435,  1.435],
+                      [ 1.435, -1.435, -1.435],
+                      [ 1.435,  1.435, -1.435]])\
         .add_atom(0.09000, -2.74000, 0.014000, 'Fe')
-    res2 = Structure(np.array([[ 1.318706, -1.413042,  1.410834],
-                               [ 1.413042, -1.318706, -1.410834],
-                               [ 1.571877,  1.571877, -1.505171]]))\
+    res2 = Structure([[ 1.318706, -1.413042,  1.410834],
+                      [ 1.413042, -1.318706, -1.410834],
+                      [ 1.571877,  1.571877, -1.505171]])\
         .add_atom(0.083026, -2.60537, 0.081111, 'Fe')
-    res5 = Structure(np.array([[ 1.144264, -1.380106,  1.374586],
-                               [ 1.380106, -1.144265, -1.374586],
-                               [ 1.777193,  1.77719283, -1.610428]]))\
+    res5 = Structure([[ 1.144264, -1.380106,  1.374586],
+                      [ 1.380106, -1.144265, -1.374586],
+                      [ 1.777193,  1.77719283, -1.610428]])\
         .add_atom(0.072567, -2.40343, 0.18178, 'Fe')
 
     assert_structs_approx_eq(path[0], res0)
     assert_structs_approx_eq(path[2], res2)
     assert_structs_approx_eq(path[5], res5)
+    cleanup()
 
 
 if __name__ == '__main__':

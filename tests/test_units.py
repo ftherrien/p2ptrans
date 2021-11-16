@@ -1,13 +1,21 @@
-from p2ptrans import read, analysis
-import p2ptrans
+from p2ptrans import read, analysis, core
+from pylada.crystal import Structure
+import numpy as np
 import pytest
-import os, glob
+import os, glob, shutil
 
 
 BCC_file = './BCC_POSCAR'
 FCC_file = './FCC_POSCAR'
 tol = 0.0001
 
+def assert_structs_approx_eq(A, B, tol=0.001):    
+    assert len(A) == len(B)
+    np.testing.assert_allclose(A.cell, B.cell, tol)
+    assert A.scale == pytest.approx(B.scale)
+    for aAtom, bAtom in zip(A, B):
+        assert aAtom.type == bAtom.type
+        assert aAtom.pos == pytest.approx(bAtom.pos, tol)
 
 def read_FCC_BCC():
     BCC = read.poscar(BCC_file)
@@ -19,24 +27,23 @@ def cleanup():
         os.remove(dat)
     if os.path.exists('progress.txt'):
         os.remove('progress.txt')
+    if os.path.exists('TransPOSCARS'):
+        shutil.rmtree('TransPOSCARS')
 
 def test_read_poscars():
     '''Test that pylada reads test files correctly'''
     (BCC, FCC) = read_FCC_BCC()
-
-    assert BCC.scale == 2.87
-    assert (BCC.cell == [[0.5,-0.5, 0.5],
+    test_BCC = Structure([[0.5,-0.5, 0.5],
                         [ 0.5, 0.5,-0.5],
-                        [-0.5, 0.5, 0.5]]).all
-    assert (BCC[0].pos == [0, 0,-0]).all
-    
-    assert FCC.scale == 3.57
-    assert (FCC.cell == [[0.5, 0.5, 0.0],
+                        [-0.5, 0.5, 0.5]], scale=2.87)\
+               .add_atom(0., 0., 0., 'Fe')
+    test_FCC = Structure([[0.5, 0.5, 0.0],
                         [ 0.5, 0.0, 0.5],
-                        [ 0.0, 0.5, 0.5]]).all
-    assert (BCC[0].pos == [0, 0, 0]).all
+                        [ 0.0, 0.5, 0.5]], scale=3.57)\
+               .add_atom(0., 0., 0., 'Fe')
 
-    assert BCC[0].type == FCC[0].type
+    assert_structs_approx_eq(BCC, test_BCC)
+    assert_structs_approx_eq(FCC, test_FCC)
 
 def test_read_cryst_defaults():
     '''Test that the cryst param defaults are the unit matrix'''
@@ -65,7 +72,7 @@ def test_optimize():
     BCC_cell = BCC.cell * 2.87
     FCC_cell = FCC.cell * 3.57
     # optimization(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir, max_cell_size)
-    result = p2ptrans.core.optimization(BCC, BCC_cell, 1, FCC, FCC_cell, 1, 300, './p2p.in', '.', 1000)
+    result = core.optimization(BCC, BCC_cell, 1, FCC, FCC_cell, 1, 300, './p2p.in', '.', 1000)
     Apos, Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, atoms, atom_types, foundcell, vec = result
     print(Apos, Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, atoms, atom_types, foundcell, vec)
     cleanup()
