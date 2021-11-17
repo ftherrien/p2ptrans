@@ -1,56 +1,17 @@
 from p2ptrans import read, analysis, core
-from pylada.crystal import Structure
-import numpy as np
+from conftest import assert_structs_approx_eq
 import pytest
-import os, glob, shutil
 
 
-BCC_file = './BCC_POSCAR'
-FCC_file = './FCC_POSCAR'
-tol = 0.0001
-
-def assert_structs_approx_eq(A, B, tol=0.001):    
-    assert len(A) == len(B)
-    np.testing.assert_allclose(A.cell, B.cell, tol)
-    assert A.scale == pytest.approx(B.scale)
-    for aAtom, bAtom in zip(A, B):
-        assert aAtom.type == bAtom.type
-        assert aAtom.pos == pytest.approx(bAtom.pos, tol)
-
-def read_FCC_BCC():
-    BCC = read.poscar(BCC_file)
-    FCC = read.poscar(FCC_file)
-    return BCC, FCC 
-
-@pytest.fixture(scope="session") # session scope for matching
-def bcc():
-    return Structure([[0.5,-0.5, 0.5],
-                      [ 0.5, 0.5,-0.5],
-                      [-0.5, 0.5, 0.5]], scale=2.87, name='BCC structure')\
-           .add_atom(0., 0., 0., 'Fe')
-
-@pytest.fixture(scope="session")
-def fcc():
-    return Structure([[0.5, 0.5, 0.0],
-                    [ 0.5, 0.0, 0.5],
-                      [ 0.0, 0.5, 0.5]], scale=3.57, name='FCC structure')\
-           .add_atom(0., 0., 0., 'Fe')
-
-
-def cleanup():
-    for dat in glob.iglob('*dat'):
-        os.remove(dat)
-    if os.path.exists('progress.txt'):
-        os.remove('progress.txt')
-    if os.path.exists('TransPOSCARS'):
-        shutil.rmtree('TransPOSCARS')
-
-def test_read_poscars(bcc, fcc):
+def test_read_poscars(bcc_fcc, bcc_fcc_filenames):
     '''Test that pylada reads test files correctly'''
-    (read_BCC, read_FCC) = read_FCC_BCC()
+    bcc, fcc = bcc_fcc
+    bcc_file, fcc_file = bcc_fcc_filenames
+    read_bcc = read.poscar(bcc_file)
+    read_fcc = read.poscar(fcc_file)
 
-    assert_structs_approx_eq(read_BCC, bcc)
-    assert_structs_approx_eq(read_FCC, fcc)
+    assert_structs_approx_eq(read_bcc, bcc)
+    assert_structs_approx_eq(read_fcc, fcc)
 
 def test_read_cryst_defaults():
     '''Test that the cryst param defaults are the unit matrix'''
@@ -73,13 +34,12 @@ def test_read_cryst():
     assert diruvw == [3, 2, 1]
 
 @pytest.mark.skip(reason="Replaced with smaller and larger tests...")
-def test_optimize():
-    cleanup()
-    BCC, FCC = read_FCC_BCC()
+def test_optimize(double_cleanup):
+    BCC, FCC = bcc_fcc()
     BCC_cell = BCC.cell * 2.87
     FCC_cell = FCC.cell * 3.57
     # optimization(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir, max_cell_size)
     result = core.optimization(BCC, BCC_cell, 1, FCC, FCC_cell, 1, 300, './p2p.in', '.', 1000)
     Apos, Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, atoms, atom_types, foundcell, vec = result
     print(Apos, Apos_map, Bpos, Bposst, n_map, natA, class_list, tmat, dmin, atoms, atom_types, foundcell, vec)
-    cleanup()
+
