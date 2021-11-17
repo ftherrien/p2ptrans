@@ -2,7 +2,7 @@ from p2ptrans import analysis, findMatching
 import pytest
 import os, glob
 import numpy as np
-from test_units import read_FCC_BCC, BCC_file, FCC_file, tol, cleanup
+from conftest import read_FCC_BCC, BCC_file, FCC_file, cleanup
 import cProfile
 
 
