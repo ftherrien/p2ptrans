@@ -42,8 +42,8 @@ def test_read_cryst():
     assert planehkl == [1, 2, 3]
     assert diruvw == [3, 2, 1]
 
-def test_p2pint_extra_params():
-    assert False
+#def test_p2pint_extra_params(): #TODO:this
+#    assert False
 
 @pytest.mark.skip(reason="Replaced with smaller and larger tests...")
 def test_optimize(double_cleanup, bcc_fcc):
