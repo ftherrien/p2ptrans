@@ -42,7 +42,7 @@ def bcc_fcc_filenames_s():
 
 
 @pytest.fixture(scope="session")
-def default_options_s():
+def p2p_default_options_s():
     '''Fixture that returns the defualt options from readOptions in the runner'''
     # (fileA, fileB, ncell, filename, interactive, savedisplay, outdir,
     # use, switch, prim, anim, vol, minimize, test, crystfile, n_steps,
@@ -50,6 +50,18 @@ def default_options_s():
     return ('./POSCAR_A', './POSCAR_B', 300, './p2p.in', False, False, '.',
         False, False, True, False, False, False, False, './cryst.in', 60,
         False, None)
+
+def p2p_int_default_options():
+    '''Fixture that returns the defualt p2pint options'''
+    # (fileA, fileB, planeA, planeB,
+    # ruleA, ruleB, ncell, n_iter, filename,
+    # interactive, savedisplay, outdir, use, minimize, test, n_iter, sym,
+    # vacuum, layers, surface, max_thickness, showversion)
+    return [['./POSCAR_A'], ['./POSCAR_B'], [0, 0, 1], [1, 1, 0],
+            {'1': {'Si'}}, {'1': {'Si'}}, 100, 1000, './p2p.in',
+            False, False, '.', False, False, False, 1000, 1,
+            10, 1, False, None, False]
+
 
 @pytest.fixture()
 def lap_test_matrix():
@@ -77,8 +89,13 @@ def cleanup():
         os.remove(dat)
     if os.path.exists('progress.txt'):
         os.remove('progress.txt')
+    if os.path.exists('out.txt'):
+        os.remove('out.txt')
     if os.path.exists('TransPOSCARS'):
         shutil.rmtree('TransPOSCARS')
+    if os.path.exists('DC_C_POSCAR-DC_Si_POSCAR'):
+        shutil.rmtree('DC_C_POSCAR-DC_Si_POSCAR')
+    
 
 @pytest.fixture()
 def double_cleanup():
