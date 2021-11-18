@@ -35,7 +35,7 @@ def find_matching(bcc_fcc_s, bcc_fcc_filenames_s, double_cleanup_s, default_opti
     return tmat, dispStruc, vec_classes, dmin
 
 def test_tmat(find_matching):
-    '''Test that the tmats are similar'''
+    '''Test that the tmat is similar to expected'''
     tmat, dispStruc, vec_classes, dmin = find_matching
 
     # matricies can be in many different forms...
@@ -53,7 +53,7 @@ def test_tmat(find_matching):
     assert np.linalg.det(tmat) == pytest.approx(1.0391327633537175, 0.0001)
 
 def test_dispCell(find_matching):
-    '''Test that the dispCells are the same'''
+    '''Test that the dispCells match expected'''
     tmat, dispStruc, vec_classes, dmin = find_matching
     print(dispStruc)
     np.testing.assert_allclose(abs(dispStruc.cell), [[1.435, 1.435, 1.435],
@@ -91,7 +91,7 @@ def test_dmin_3(find_matching):
 
 
 def test_crystallography(bcc_fcc, bcc_fcc_filenames):
-    '''Test crystallography '''
+    '''Test that the eigenval, U, P, Q, and plane habit match expected'''
     test_tmat = [[-8.03921569e-01, -8.03921569e-01, 0],
                  [ 8.03921569e-01, -8.03921569e-01, 0],
                  [ 0, 0, 8.03921569e-01]]
@@ -102,21 +102,22 @@ def test_crystallography(bcc_fcc, bcc_fcc_filenames):
                                                             diruvw, fileA=BCC_file, fileB=FCC_file)
     
     assert eigval == pytest.approx([0.87957185, 0.87957185, 1.24390244], 0.0001)
-    np.testing.assert_allclose(U,[[0.88275147, 0.05278822, 0.        ],
-                [0.05278822, 0.87639223, 0.        ],
-                [0.,         0.,         1.24390244]])
-    np.testing.assert_allclose( P, [[1.,         0.06012458, 0.,       ],
-                [0. ,        0.99819088, 0.,        ],
-                [0.,         0.,         1.,        ]])
-    np.testing.assert_allclose( Q, [[0.43187329, 1.,         0.,        ],
-                [0.90193429, 0.,         0.,        ],
-                [0.,         0.,         1.,        ]])
-    np.testing.assert_allclose( planeHab, [[ 0., -0.],
-    [ 0., -0.],
-    [ 1., -1.]])
+    np.testing.assert_allclose(U, [[0.88275147, 0.05278822, 0.        ],
+                                   [0.05278822, 0.87639223, 0.        ],
+                                   [0.,         0.,         1.24390244]])
+    np.testing.assert_allclose(P, [[1.,         0.06012458, 0.,       ],
+                                   [0. ,        0.99819088, 0.,        ],
+                                   [0.,         0.,         1.,        ]])
+    np.testing.assert_allclose(Q, [[0.43187329, 1.,         0.,        ],
+                                   [0.90193429, 0.,         0.,        ],
+                                   [0.,         0.,         1.,        ]])
+    np.testing.assert_allclose(planeHab, [[ 0., -0.],
+                                          [ 0., -0.],
+                                          [ 1., -1.]])
 
 @pytest.mark.usefixtures("double_cleanup")
-def test_transisiton():
+def test_transition():
+    '''Test that the transition pathway produced matches expected'''
     test_tmat = [[-8.03921569e-01, -8.03921569e-01, 0],
                  [ 8.03921569e-01, -8.03921569e-01, 0],
                  [ 0, 0, 8.03921569e-01]]
@@ -150,10 +151,6 @@ def test_transisiton():
     assert_structs_approx_eq(path[0], res0)
     assert_structs_approx_eq(path[2], res2)
     assert_structs_approx_eq(path[5], res5)
-
-
-if __name__ == '__main__':
-    test_crystallography()
 
    
 
