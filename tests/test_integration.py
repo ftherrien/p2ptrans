@@ -152,8 +152,8 @@ def test_transition(double_cleanup):
     assert_structs_approx_eq(path[2], res2)
     assert_structs_approx_eq(path[5], res5)
 
-
-def test_find_matching_interface(double_cleanup):
+@pytest.fixture(scope="session")
+def find_matching_interface(double_cleanup):
     (A, B, ncell, n_iter, sym, filename, interactive,
     savedisplay, term_outdir, minimize, test, A3D, B3D) = (\
     Structure(np.array([[3.57371   , 0.        , 0.        ],
@@ -173,32 +173,40 @@ def test_find_matching_interface(double_cleanup):
               [-0.70710678, -0.70710678,  0.],
               [ 0.,          0.,          1.]]))
 
-    ttrans, dispStruc, vec_classes, dmin = findMatchingInterfaces(A, B, ncell, n_iter,
-                                                                  sym=sym, filename=filename,
-                                                                  interactive=interactive,
-                                                                  savedisplay=savedisplay,
-                                                                  outdir=term_outdir,
-                                                                  minimize=minimize, test=test,
-                                                                  A3D=A3D, B3D=B3D)
+    return findMatchingInterfaces(A, B, ncell, n_iter,
+                                  sym=sym, filename=filename,
+                                  interactive=interactive,
+                                  savedisplay=savedisplay,
+                                  outdir=term_outdir,
+                                  minimize=minimize, test=test,
+                                  A3D=A3D, B3D=B3D)
 
+def test_interface_ttrans(find_matching_interface):
+    ttrans, dispStruc, vec_classes, dmin = find_matching_interface    
     test_ttrans = [[[-9.24161735e-01, -1.64674671e-16,  0., -4.45658110],
                     [ 0.,             -9.80221542e-01,  0., -4.42257600],
                     [ 0.,              0.,              1.,  2.41883261]]]
+    np.testing.assert_allclose(ttrans, test_ttrans)
 
+def test_interface_dispStruct(find_matching_interface):
+    ttrans, dispStruc, vec_classes, dmin = find_matching_interface
     test_dispStruc = [Structure(np.array([[-3.57371, 0.        ,  0.        ],
                                           [ 0.,     -7.58098371,  0.        ],
                                           [ 0.,      0.        ,  7.99572257]]), )\
     .add_atom(-0.00040768555488722376, -7.5809794819528316, 2.418832609370807, '0', atom='1', site=0)\
     .add_atom(-0.00040768555488643023, -3.790487626952828, 2.418832609370807, '1', atom='1', site=1)]
-
-    test_vec_classes = [[np.array([-0.0105564 , -0.63141314, -2.41883261]),
-                         np.array([-0.0105564 ,  0.63208415, -2.41883261])]]
-
-    test_dmin = -48.42059525792519
-
-    np.testing.assert_allclose(ttrans, test_ttrans)
     assert_structs_approx_eq(dispStruc[0], test_dispStruc[0])
+
+def test_interface_vec_classes(find_matching_interface):
+    ttrans, dispStruc, vec_classes, dmin = find_matching_interface
+    test_vec_classes = [[np.array([-0.0105564 , -0.63141314, -2.41883261]),
+                         np.array([-0.0105564 ,  0.63208415, -2.41883261])]]    
     np.testing.assert_allclose(vec_classes, test_vec_classes, 0.0001)
+
+
+def test_interface_dmin(find_matching_interface):    
+    ttrans, dispStruc, vec_classes, dmin = find_matching_interface
+    test_dmin = -48.42059525792519
     assert dmin == pytest.approx(test_dmin)
    
 
