@@ -8,35 +8,40 @@ BCC_file = './BCC_POSCAR'
 FCC_file = './FCC_POSCAR'
 
 _bcc = Structure([[0.5,-0.5, 0.5],
-                      [ 0.5, 0.5,-0.5],
-                      [-0.5, 0.5, 0.5]], scale=2.87, name='BCC structure')\
+                  [ 0.5, 0.5,-0.5],
+                  [-0.5, 0.5, 0.5]], scale=2.87, name='BCC structure')\
            .add_atom(0., 0., 0., 'Fe')
 
 _fcc = Structure([[0.5, 0.5, 0.0],
-                    [ 0.5, 0.0, 0.5],
-                      [ 0.0, 0.5, 0.5]], scale=3.57, name='FCC structure')\
+                  [ 0.5, 0.0, 0.5],
+                  [ 0.0, 0.5, 0.5]], scale=3.57, name='FCC structure')\
            .add_atom(0., 0., 0., 'Fe')
 
 @pytest.fixture(scope="session")
 def bcc_fcc_s():
+    '''Fixture that returns the test fcc and bcc structures (session scope)'''
     return _bcc, _fcc
 
 @pytest.fixture()
 def bcc_fcc():
+    '''Fixture that returns the test fcc and bcc structures'''
     return _bcc, _fcc
 
 @pytest.fixture()
 def bcc_fcc_filenames():
+    '''Fixture that returns the fcc and bcc filenames'''
     return BCC_file, FCC_file
 
 @pytest.fixture(scope='session')
 def bcc_fcc_filenames_s():
+    '''Fixture that returns the fcc and bcc filenames (session scope)'''
     return BCC_file, FCC_file
 
 
 
 @pytest.fixture(scope="session")
 def default_options_s():
+    '''Fixture that returns the defualt options from readOptions in the runner'''
     # (fileA, fileB, ncell, filename, interactive, savedisplay, outdir,
     # use, switch, prim, anim, vol, minimize, test, crystfile, n_steps,
     # showversion, map_ncell)
@@ -44,7 +49,8 @@ def default_options_s():
         False, False, True, False, False, False, False, './cryst.in', 60,
         False, None)
 
-def assert_structs_approx_eq(A, B, tol=0.001):    
+def assert_structs_approx_eq(A, B, tol=0.001):
+    '''Assert that the two structures have the same cell, scales, and atoms of the same type in the same positions'''
     assert len(A) == len(B)
     np.testing.assert_allclose(A.cell, B.cell, tol)
     assert A.scale == pytest.approx(B.scale)
@@ -54,6 +60,7 @@ def assert_structs_approx_eq(A, B, tol=0.001):
 
 
 def cleanup():
+    '''Removes dat files, the progress file, and tranPOSCARS from the current directory'''
     for dat in glob.iglob('*dat'):
         os.remove(dat)
     if os.path.exists('progress.txt'):
@@ -63,12 +70,14 @@ def cleanup():
 
 @pytest.fixture()
 def double_cleanup():
+    '''Fixture that cleans up both before and after'''
     cleanup()
     yield
     cleanup()
 
 @pytest.fixture(scope="session")
 def double_cleanup_s():
+    '''Fixture that cleans up both before and after (session scope)'''
     cleanup()
     yield
     cleanup()
