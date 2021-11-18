@@ -4,8 +4,10 @@ import os, glob, shutil
 import numpy as np
 import pytest
 
-BCC_file = './BCC_POSCAR'
-FCC_file = './FCC_POSCAR'
+BCC_filename = './BCC_POSCAR'
+FCC_filename = './FCC_POSCAR'
+testmat_filename = './testmat.txt'
+testmat_map_filename = './testmat_map.txt'
 
 _bcc = Structure([[0.5,-0.5, 0.5],
                   [ 0.5, 0.5,-0.5],
@@ -30,12 +32,12 @@ def bcc_fcc():
 @pytest.fixture()
 def bcc_fcc_filenames():
     '''Fixture that returns the fcc and bcc filenames'''
-    return BCC_file, FCC_file
+    return BCC_filename, FCC_filename
 
 @pytest.fixture(scope='session')
 def bcc_fcc_filenames_s():
     '''Fixture that returns the fcc and bcc filenames (session scope)'''
-    return BCC_file, FCC_file
+    return BCC_filename, FCC_filename
 
 
 
@@ -48,6 +50,16 @@ def default_options_s():
     return ('./POSCAR_A', './POSCAR_B', 300, './p2p.in', False, False, '.',
         False, False, True, False, False, False, False, './cryst.in', 60,
         False, None)
+
+@pytest.fixture()
+def lap_test_matrix():
+    return np.loadtxt(testmat_filename)
+
+@pytest.fixture()
+def lap_test_map():
+    return np.loadtxt(testmat_map_filename)
+
+
 
 def assert_structs_approx_eq(A, B, tol=0.001):
     '''Assert that the two structures have the same cell, scales, and atoms of the same type in the same positions'''
