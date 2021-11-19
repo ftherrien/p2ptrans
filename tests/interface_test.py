@@ -38,17 +38,28 @@ def find_matching_interface(double_cleanup_s):
     print(ttrans, dispStruc, vec_classes, dmin)
     return (ttrans, dispStruc, vec_classes, dmin)
 
-@pytest.mark.skip(reason="Too inconsistant...")
+#@pytest.mark.skip(reason="Too inconsistant...")
 def test_interface_ttrans(find_matching_interface):
-    #TODO: find pattern
     #[[[ 0.924162, -0.23104 ,  0.      , -0.893427], another possiblity...
     #  [ 0.326741,  0.980222,  0.      ,  1.895085],
     #  [ 0.      ,  0.      ,  1.      ,  2.247815]]]
-    ttrans, dispStruc, vec_classes, dmin = find_matching_interface    
-    test_ttrans = [[[ 0.92416173, -0.23104043, 0., -0.89342744],
-                    [ 0.32674051, 0.98022154,  0.,  1.89508484],
-                    [ 0.,         0.,          1.,  2.24781482]]]
-    np.testing.assert_allclose(ttrans, test_ttrans)
+    #[[[ 0.92416173, -0.23104043, 0., -0.89342744],
+    #  [ 0.32674051, 0.98022154,  0.,  1.89508484],
+    #  [ 0.,         0.,          1.,  2.24781482]]]
+    # [[[ 0.23104043 -0.92416173  0.         -3.57370943]
+    #   [ 0.98022154  0.32674051  0.          0.63191172]
+    #   [ 0.          0.          1.          2.2478148 ]]]
+    ttrans, dispStruc, vec_classes, dmin = find_matching_interface  
+    test_ttrans = np.array([[[ 0.92416173, -0.23104043,  0., -0.89342701],
+                             [ 0.32674051,  0.98022154,  0.,  1.89508287],
+                             [ 0.,          0.,          1.,  2.2478148 ]]])
+    
+    np.testing.assert_allclose(np.sort(abs(ttrans[0, 0:2,0:2]), axis=None),
+                                [0.23104 ,  0.326741,  0.924162,  0.980222], 0.001)
+    np.testing.assert_allclose(ttrans[0, 2, :3], [0, 0, 1], 0.001)
+    np.testing.assert_allclose(ttrans[0, :3, 2], [0, 0, 1], 0.001)
+    # ignores last column
+    
 
 @pytest.mark.skip(reason="Too inconsistant...")
 def test_interface_dispStruct(find_matching_interface):
