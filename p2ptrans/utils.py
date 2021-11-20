@@ -53,7 +53,7 @@ def find_uvw(stretch_dir, basis = np.eye(3), size = 10, direction_only=True):
             cur_dist = la.norm(unit_vec-vec)
             if cur_dist < min_dist[l]:
                min_dist[l] = cur_dist
-               min_uvw[:,l] = np.array([i,j,k], np.int).T
+               min_uvw[:,l] = np.array([i,j,k], int).T
 
       if direction_only:
           gcd3 = gcd(min_uvw[0,l],gcd(min_uvw[1,l], min_uvw[2,l]))
