@@ -264,7 +264,7 @@ def makeSphere(A, ncell, *atom_types, twoD=False):
 
         # Adds atoms to A and B (for cell with different types of atoms)
         Apos = []
-        atom_types = np.array([], np.str)
+        atom_types = np.array([], str)
         atomsA = np.array([], np.int)
         for a in A:
             if any(atom_types == a.type):
