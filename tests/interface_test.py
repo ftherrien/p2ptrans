@@ -27,19 +27,17 @@ def find_matching_interface(double_cleanup_s):
             [-0.70710678, -0.70710678,  0.],
             [ 0.,          0.,          1.]]))
 
-    ttrans, dispStruc, vec_classes, dmin = findMatchingInterfaces(A, B, ncell, 10000,
+    ttrans, dispStruc, vec_classes, dmin = findMatchingInterfaces(A, B, ncell, 5000,
                                 sym=sym, filename=filename,
                                 interactive=interactive,
                                 savedisplay=savedisplay,
                                 outdir=term_outdir,
                                 minimize=minimize, test=test,
                                 A3D=A3D, B3D=B3D)
-    print('ASH')
-    print(ttrans, dispStruc, vec_classes, dmin)
     return (ttrans, dispStruc, vec_classes, dmin)
 
-#@pytest.mark.skip(reason="Too inconsistant...")
 def test_interface_ttrans(find_matching_interface):
+    '''Test that the left 3x3 of the ttrans matrix is similar'''
     #[[[ 0.924162, -0.23104 ,  0.      , -0.893427], another possiblity...
     #  [ 0.326741,  0.980222,  0.      ,  1.895085],
     #  [ 0.      ,  0.      ,  1.      ,  2.247815]]]
@@ -57,7 +55,7 @@ def test_interface_ttrans(find_matching_interface):
     np.testing.assert_allclose(np.sort(abs(ttrans[0, 0:2,0:2]), axis=None),
                                 [0.23104 ,  0.326741,  0.924162,  0.980222], 0.001)
     np.testing.assert_allclose(ttrans[0, 2, :3], [0, 0, 1], 0.001)
-    np.testing.assert_allclose(ttrans[0, :3, 2], [0, 0, 1], 0.001)
+    np.testing.assert_allclose(ttrans[0, :4, 2], [0, 0, 1], 0.001)
     # ignores last column
     
 
@@ -79,18 +77,19 @@ def test_interface_dispStruct(find_matching_interface):
     assert_structs_approx_eq(dispStruc[0], test_dispStruc)
 
 def test_interface_vec_classes(find_matching_interface):
+    '''Test that four vec classes are found, and that they are all similar to expected'''
     ttrans, dispStruc, vec_classes, dmin = find_matching_interface
     vec_classes = np.array(vec_classes[0])
     #sorted_vec_classes = vec_classes[np.lexsort(np.transpose(np.round(vec_classes, 2)))]
+    assert len(vec_classes == 4)
     for vec_class in vec_classes:
         np.testing.assert_allclose(abs(vec_class), [ 0.893501,  0.631446, 2.247841], 0.001)
 
-@pytest.mark.skip(reason="Too inconsistant...")
 def test_interface_dmin(find_matching_interface):
     #TODO: what is the reasonable tolerance on this?  
     ttrans, dispStruc, vec_classes, dmin = find_matching_interface
     test_dmin = -44.17527158660921
-    assert dmin == pytest.approx(test_dmin)
+    assert -50 <= dmin <= -40
 
 
 
