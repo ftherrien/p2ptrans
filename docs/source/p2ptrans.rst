@@ -20,7 +20,7 @@ Optional arguments:
                         Final Structure structure. It must also be a `POSCAR <https://www.vasp.at/wiki/index.php/Input>`_.
   -n, --ncell N_CELL
                         Minimum number of cells to tile *DEFAULT: 300*
-  -cn N_CELL
+  -cn, N_CELL
                         If specified, number of cells used for the final mapping after tmat has been adjusted to be commensurate with both structures. If not specified, the mapping stays the same.
   -i, --interactive     Enable interactive display
   -d, --disp            Save figures
@@ -54,7 +54,7 @@ More parameters can be specified to p2ptrans via a parameter file. This file is 
    &input
    init_class = 1.0d0
    tol = 1.0d-4
-   tol_std = tol*1.0d-3
+   tol_std = 1.0d-7 ! If not specified: tol_std = tol*1.0d-3
    tol_class = 1.0d-3
    fracA = 0.09d0
    fracB = 0.3d0
@@ -66,7 +66,7 @@ More parameters can be specified to p2ptrans via a parameter file. This file is 
    max_vol = 4.0d0
    free = .false.
    check = .false.
-   savebest = trim(outdir)//"/best.dat"
+   savebest = "best.dat" ! If not specified: savebest = trim(outdir)//"/best2d.dat"
    usebest = .false.
    remap = .true.
    /

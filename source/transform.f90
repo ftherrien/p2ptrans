@@ -2016,27 +2016,48 @@ contains
          vec_out     ! Translation vector
 
     character*200, intent(in) :: &
-         filename   ! Number of atoms
+         filename   ! Namelist file name
+
+    character*200 :: &
+         savebest !Ignored
 
     double precision :: &
-         tol, rate2
+         tol, rate2, &
+         fracA, fracB, tol_std, tol_class, rate1, max_vol, init_class !Ignored
 
     integer :: &
-         n_ana
+         n_ana, &
+         n_iter, n_conv, n_adjust, n_class !Ignored
 
     logical :: &
-         exist
+         exist, &
+         slanting, free, check, usebest, remap !Ignored
 
     namelist /input/ &
          tol, &
          rate2, &
-         n_ana
-
+         n_ana, &
+         ! All other namelist values are ignored (compatibility)
+         fracA, fracB, &
+         tol_std, &
+         tol_class, &
+         rate1, &
+         slanting, &
+         n_iter, &
+         n_conv, n_adjust, &
+         n_class, &
+         max_vol, free, &
+         check, &
+         savebest, &
+         usebest, &
+         remap, &
+         init_class
+    
     ! Namelist default values
     tol = 1.0d-4
     rate2 = 1.0d-3
     n_ana = 300
-
+ 
     inquire(file = filename, exist=exist)
 
     if (exist) then
