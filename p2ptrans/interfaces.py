@@ -207,8 +207,7 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
                 tmpstruc.add_atom(*(into_cell(pos,tmpstruc.cell)),t)
         for k,a in enumerate(A):
             pos = cell2D.dot(la.inv(cell3D)).dot(a.pos-A[ix[0]].pos)
-            if (surface is None):
-                reconstructure[j].add_atom(*(into_cell(pos,reconstructure[j].cell)), a.type)
+            reconstructure[j].add_atom(*(into_cell(pos,reconstructure[j].cell)), a.type)
                 
                 
         # Removes structures that are trivially the same
