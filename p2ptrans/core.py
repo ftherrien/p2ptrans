@@ -554,7 +554,7 @@ def optimization(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir, max_ce
         
         if n_map < la.det(foundcell)/la.det(Acell)*len(A):
         
-            print("WARNING: The cell found is larger the the number of mapped atoms!. Initial and final structures will have missing atoms. If you can't affort to optimize with a larger ncell, you can find the mapping with the current tmat on a larger system by setting map_ncell (-cn)")
+            print("WARNING: The cell found is larger the the number of mapped atoms! Initial and final structures will have missing atoms. If you can't affort to optimize with a larger ncell, you can find the mapping with the current tmat on a larger system by setting map_ncell (-cn)")
 
     else:
         foundcell = Acell.dot(np.round(la.inv(Acell).dot(foundcell)))
@@ -571,12 +571,15 @@ def optimization(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir, max_ce
 
         Bposst = Bposst + vec.reshape((3,1)).dot(np.ones((1,Bposst.shape[1])))
         
-        print("Change in stretched dist:", np.sum(la.norm(Bposst - Apos_map, axis=0)) - old_distp)
+        print("Change in stretched dist: %f %%"(np.sum(la.norm(Bposst - Apos_map, axis=0)) - old_distp)/old_distp*100)
         
         print("Found cell!")
         if np.any(tmat-tmat_old) > tol:
-            print("WARNING: tmat changed by more then the set tolerence %e."%(tol))
-            print(tmat_old, tmat)
+            print("WARNING: tmat changed by more then the set tolerence (diff: %e, tol: %e). Visually inspect the matrices below, if the differences are small and the change in stretched distance (above) is small you can often ignore this warning."%(np.any(tmat-tmat_old),tol))
+            print("Optimized tmat:")
+            print(tmat_old)
+            print("Exact tmat:")
+            print(tmat)
         if abs(abs(la.det(tmat)) - abs(mulA * la.det(Acell)/(mulB * la.det(Bcell)))) > 1e-12:
             print("WARNING: the optimal mapping is not periodic. This might be physical, check the actual mapping using the interactive mode. A transformation *involving vacancies* will be produced.") 
         
@@ -690,6 +693,8 @@ def findMatching(A, B, ncell,
     print("Number of %s (%s) cells in sphere:"%(A.name, fileA), mulA*ncell)
     print("Number of %s (%s) cells in sphere:"%(B.name, fileB), mulB*ncell)
     print("Total number of atoms in each sphere:", mulA*ncell*len(A))
+    if (mulA*ncell*len(A) > 2000):
+        print("WARNING: You are attempting to optimize a very large number of atoms (>2000). If this is not what you intended, reduce the minimal number of unit cells (default: 300) using the `-n` flag.")
     print()
 
     if test:
@@ -809,14 +814,12 @@ def findMatching(A, B, ncell,
     
     dispStruc, vec_classes = makeStructures(foundcell, atoms, atom_types,
                                natB, pos_in_struc, class_list)
-
-    
     
     if len(vec_classes) > len(vec_classes_estimate):
-        print("WARNING: The number of classes found during the optimization is not sufficent to describe the transformation; increase the classification tolerence (tol_class)")
+        print("Note: the number of classes found during the optimization was smaller than what was necessary to create the interface cell.")
         print()
     elif len(vec_classes) < len(vec_classes_estimate):
-        print("WARNING: The number of classes found during the optimization is unnecessarily large; decrease the classification tolerence (tol_class)")
+        print("Note: the number of classes found during the optimization was larger than what was necessary to create the interface cell.")
         print()
         
     print("Size of the transformation cell (TC):", len(dispStruc))

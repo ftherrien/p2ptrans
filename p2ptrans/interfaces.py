@@ -207,9 +207,7 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
                 tmpstruc.add_atom(*(into_cell(pos,tmpstruc.cell)),t)
         for k,a in enumerate(A):
             pos = cell2D.dot(la.inv(cell3D)).dot(a.pos-A[ix[0]].pos)
-            if (surface is None or
-                ((surface == "top" and pos[2] > 0 - tol) or
-                 (surface == "bottom" and pos[2] < tmpstruc[-1].pos[2] + tol))):
+            if (surface is None):
                 reconstructure[j].add_atom(*(into_cell(pos,reconstructure[j].cell)), a.type)
                 
                 
@@ -313,7 +311,7 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, out
             
             if n_map < la.det(foundcell[i])/la.det(A.cell[:2,:2])*len(A):
 
-                print("WARNING: The cell found is larger the the number of mapped atoms!. If you can affort it, try to optimize with a larger ncell (-n).")
+                print("WARNING: The cell found is larger the the number of mapped atoms! If you can affort it, try to optimize with a larger ncell (-n).")
 
         else:
             foundcell[i] = A.cell[:2,:2].dot(np.round(la.inv(A.cell[:2,:2]).dot(foundcell[i])))
@@ -324,9 +322,12 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, out
             print("Found cell!")
 
             if np.any(ttrans[i,:2,:2]-tmat_old) > tol:
-                print("WARNING: tmat changed by more then the set tolerence %e."%(tol))
-                print(tmat_old, ttrans[i,:2,:2])
-            
+                print("WARNING: tmat changed by more then the set tolerence (diff: %e, tol: %e). Visually inspect the matrices below, if the differences are small and the change in distance (below) is small you can often ignore this warning."%(np.any(ttrans[i,:2,:2]-tmat_old),tol))
+                print("Optimized tmat:")
+                print(tmat_old)
+                print("Exact tmat:")
+                print(ttrans[i,:2,:2])
+                
             # Readjusting the vec after changing tmat 
             
             dmin_old = deepcopy(dmin[i])
@@ -344,7 +345,7 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, out
             Bposst[i,:,:] = Bposst_out[:,:n_map]
             Apos_map[i,:,:] = Apos_map_out[:,:n_map]
             
-            print("PEAK %d: Change in distance after tmat adjustment: %f"%(i, dmin[i][1]-dmin_old[1]))
+            print("PEAK %d: Change in distance after tmat adjustment: %f %%"%(i, (dmin[i][1]-dmin_old[1])/dmin_old[1]*100))
             
             tmpcell = np.eye(3)
             tmpcell[:,2] = A.cell[:,2] + B.cell[:,2]
@@ -458,6 +459,8 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
     print("Number of %s cells in disk:"%(A.name), mulA*ncell)
     print("Number of %s cells in disk:"%(B.name), mulB*ncell)
     print("Total number of atoms in each disk:", mulA*ncell*len(A))
+    if (mulA*ncell*len(A) > 2000):
+        print("WARNING: You are attempting to optimize a very large number of atoms (>2000). If this is not what you intended, reduce the minimal number of unit cells (default: 300) using the `-n` flag.")
     print()
 
     if test:
@@ -555,10 +558,10 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
         dispStruc[k] = supercell(dispStruc[k], reshift(dispStruc[k].cell))
 
         if len(vec_classes[k]) > len(vec_classes_estimate):
-            print("WARNING: The number of classes found during the optimization is not sufficent to describe the transformation; increase the classification tolerence (tol_class)")
+            print("Note: the number of classes found during the optimization was smaller than what was necessary to create the interface cell.")
             print()
         elif len(vec_classes[k]) < len(vec_classes_estimate):
-            print("WARNING: The number of classes found during the optimization is unnecessarily large; decrease the classification tolerence (tol_class)")
+            print("Note: the number of classes found during the optimization was larger than what was necessary to create the interface cell.")
             print()
         
         print("Number of bonds in Interface Cell (IC):", len(dispStruc[k]))
