@@ -6,7 +6,7 @@ p2ptrans allows you to find the best matching between two crystal structures.
 
 ## Latest Updates
 
-Current version: 2.0.2 (11.12.2021)
+Current version: 2.0.5 (02.10.2022)
 
 **03.14.2021**: VERSION 2.0 is out! See the section below for more details.  
 **10.04.2020**: Added dmin as a 4th output to the findMatching() function in p2ptrans.  

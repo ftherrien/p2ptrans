@@ -207,8 +207,20 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
                 tmpstruc.add_atom(*(into_cell(pos,tmpstruc.cell)),t)
         for k,a in enumerate(A):
             pos = cell2D.dot(la.inv(cell3D)).dot(a.pos-A[ix[0]].pos)
-            reconstructure[j].add_atom(*(into_cell(pos,reconstructure[j].cell)), a.type)
-                
+            if (surface is None or
+                ((surface == "top" and pos[2] > 0 - tol) or
+                 (surface == "bottom" and pos[2] < 0 + tol))):
+                reconstructure[j].add_atom(*(into_cell(pos,reconstructure[j].cell)), a.type)
+            elif (surface == "top" and pos[2] < 0 - tol):
+                pos2 = pos[2]
+                pos = into_cell(pos,reconstructure[j].cell)
+                pos[2] = pos2
+                reconstructure[j].add_atom(*(pos), a.type)
+            elif (surface == "bottom" and pos[2] > 0 + tol):
+                pos2 = pos[2]
+                pos = into_cell(pos,reconstructure[j].cell)
+                pos[2] = pos2 + reconstructure[j].cell[2,2]
+                reconstructure[j].add_atom(*(pos), a.type)
                 
         # Removes structures that are trivially the same
         for i, s in enumerate(strucs):
@@ -241,7 +253,7 @@ def readSurface(A, planehkl, rule, ccell=None, tol=tol, primtol=1e-3,
         strucs[i] = supercell(strucs[i], reshift(strucs[i].cell))
 
     list3D = [cell3D.dot(la.inv(cell2D))]*len(strucs)
-        
+    
     return list(zip(strucs, recMap, list3D))
     
 
@@ -363,13 +375,27 @@ def createPoscar(A, B, reconA, reconB, ttrans, dispStruc, outdir=".", layers=1, 
     reconA = deepcopy(reconA)
     reconB = deepcopy(reconB)
     
+    if all(reconA.cell[2,:2]==0):
+        a_shift = 0
+        for a in reconA:
+            if a.pos[2] - reconA.cell[2,2] > a_shift:
+                a_shift = a.pos[2] - reconA.cell[2,2]
+
+    if all(reconA.cell[2,:2]==0):
+        b_shift = 0
+        for b in reconB:
+            if b.pos[2] < b_shift:
+                b_shift = b.pos[2]
+        
     max_thickness = np.array([a.pos[2] for a in A]).max()
+
+    a_shift = max(max_thickness, a_shift)
     
     reconB.cell = ttrans[:,:3].dot(reconB.cell)
     shift = deepcopy(ttrans[:,3])
-    shift[2] = 0 
+    shift[2] = 0
     for b in reconB:
-        b.pos = ttrans[:,:3].dot(b.pos) + shift
+        b.pos = ttrans[:,:3].dot(b.pos) + shift - np.array([0,0,1])*b_shift
 
     if la.det(A.cell[:2,:2]) <  la.det(reconA.cell[:2,:2]):
         dispA = deepcopy(dispStruc.cell)
@@ -404,7 +430,7 @@ def createPoscar(A, B, reconA, reconB, ttrans, dispStruc, outdir=".", layers=1, 
     newB[:2,:2] = newA[:2,:2]
     
     for a in reconA:
-        a.pos[2] = a.pos[2] - max_thickness
+        a.pos[2] = a.pos[2] - a_shift
     
     reconA = supercell(reconA, superize(reconA.cell, newA))
         
@@ -419,13 +445,13 @@ def createPoscar(A, B, reconA, reconB, ttrans, dispStruc, outdir=".", layers=1, 
     reconB = supercell(reconB, reconB.cell.dot(np.array([[1,0,0],[0,1,0],[0,0,layers]])) )
 
     interface = Structure(newA)
-    interface.cell[2,2] = reconB.cell[2,2] - reconA.cell[2,2] + ttrans[2,3] - max_thickness + vacuum
+    interface.cell[2,2] = reconB.cell[2,2] - reconA.cell[2,2] + ttrans[2,3] + vacuum
     for b in reconB:
-        pos = b.pos + np.array([0,0,1])*(ttrans[2,3] - max_thickness + vacuum/2 - reconA.cell[2,2])
+        pos = b.pos + np.array([0,0,1])*(ttrans[2,3] + vacuum/2 - reconA.cell[2,2]) + np.array([0,0,1])*b_shift
         interface.add_atom(*pos, b.type)
 
     for a in reconA:
-        pos = a.pos + np.array([0,0,1])*(vacuum/2 - reconA.cell[2,2])
+        pos = a.pos + np.array([0,0,1])*(vacuum/2 - reconA.cell[2,2]) + np.array([0,0,1])*a_shift
         interface.add_atom(*pos, a.type)
 
     write.poscar(supercell(interface, interface.cell), vasp5=True, file=outdir + "/POSCAR_interface")
