@@ -40,16 +40,16 @@ def readCrystParam(crystfile):
 def strainDirs(tmat, ftf=True):
 
     if ftf:
-        eigval, P = la.eig(tmat.T.dot(tmat))
+        eigval, P = la.eigh(tmat.T.dot(tmat))
         eigval = np.sqrt(eigval)
-
+        
         idx = np.argsort(eigval)
         eigval = eigval[idx]
         P = P[:,idx]
         
         U = P.dot(np.diag(eigval)).dot(P.T)
 
-        invEigval, Q = la.eig(la.inv(tmat).T.dot(la.inv(tmat)))
+        invEigval, Q = la.eigh(la.inv(tmat).T.dot(la.inv(tmat)))
         invEigval = np.sqrt(invEigval)
         idx = np.argsort(1/invEigval)
         Q = Q[:,idx]
@@ -145,11 +145,9 @@ def crystallography(tmat, A, B, ccellA=np.eye(3), ccellB=np.eye(3), planehkl=[1,
     eigval, U, P, Q = strainDirs(tmat, ftf=ftf)
 
     print("Strain Directions in %s (%s) coordinates:"%(B.name, fileB))
-    print("    d1    d2    d3    ")
     printMatAndDir(P, ccellB)
     print()
     print("Strain Directions in %s (%s) coordinates:"%(A.name, fileA))
-    print("    d1    d2    d3    ")
     printMatAndDir(Q, ccellA)
     print()
     print("Strains + 1 (eigenvalues)")

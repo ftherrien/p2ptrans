@@ -543,7 +543,7 @@ def findMatchingInterfaces(A, B, ncell, n_iter, sym=1, filename="p2p.in", intera
         print("Optimal angle between structures:", np.mod(peak_thetas[k]*180/np.pi,360/sym))
         print("Volume stretching factor (det(T)):", la.det(ttrans[k,:2,:2]))
         print("Cell volume ratio (initial cell volume)/(final cell volume):", mulA * la.det(Acell)/(mulB * la.det(Bcell)))
-        eig, _ = la.eig(ttrans[k,:2,:2].T.dot(ttrans[k,:2,:2]))        
+        eig, _ = la.eigh(ttrans[k,:2,:2].T.dot(ttrans[k,:2,:2]))        
         print("In-plane stretching: %f %f"%(np.sqrt(eig[0]), np.sqrt(eig[1])))
         print()
         print("-----------PERIODIC CELL-----------")

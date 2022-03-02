@@ -571,11 +571,11 @@ def optimization(A, Acell, mulA, B, Bcell, mulB, ncell, filename, outdir, max_ce
 
         Bposst = Bposst + vec.reshape((3,1)).dot(np.ones((1,Bposst.shape[1])))
         
-        print("Change in stretched dist: %f %%"(np.sum(la.norm(Bposst - Apos_map, axis=0)) - old_distp)/old_distp*100)
+        print("Changed stretched dist from %f to %f (%f %%)"%(old_distp, np.sum(la.norm(Bposst - Apos_map, axis=0)), (np.sum(la.norm(Bposst - Apos_map, axis=0)) - old_distp)/old_distp*100))
         
         print("Found cell!")
-        if np.any(tmat-tmat_old) > tol:
-            print("WARNING: tmat changed by more then the set tolerence (diff: %e, tol: %e). Visually inspect the matrices below, if the differences are small and the change in stretched distance (above) is small you can often ignore this warning."%(np.any(tmat-tmat_old),tol))
+        if np.any(abs(tmat-tmat_old) > tol):
+            print("WARNING: tmat changed by more then the set tolerence (diff: %e, tol: %e). Visually inspect the matrices below, if the differences are small and the change in stretched distance (above) is small you can often ignore this warning."%(np.max(abs(tmat-tmat_old)),tol))
             print("Optimized tmat:")
             print(tmat_old)
             print("Exact tmat:")
