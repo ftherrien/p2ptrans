@@ -332,8 +332,8 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, out
         if foundcell[i] is not None:
             print("Found cell!")
 
-            if np.any(ttrans[i,:2,:2]-tmat_old) > tol:
-                print("WARNING: tmat changed by more then the set tolerence (diff: %e, tol: %e). Visually inspect the matrices below, if the differences are small and the change in distance (below) is small you can often ignore this warning."%(np.any(ttrans[i,:2,:2]-tmat_old),tol))
+            if np.any(abs(ttrans[i,:2,:2]-tmat_old) > tol):
+                print("WARNING: tmat changed by more then the set tolerence (diff: %e, tol: %e). Visually inspect the matrices below, if the differences are small and the change in distance (below) is small you can often ignore this warning."%(np.max(abs(ttrans[i,:2,:2]-tmat_old)),tol))
                 print("Optimized tmat:")
                 print(tmat_old)
                 print("Exact tmat:")
@@ -343,13 +343,14 @@ def optimization2D(A, mulA, B, mulB, ncell, n_iter, sym, switched, filename, out
             
             dmin_old = deepcopy(dmin[i])
 
-            print("Readjusting for new tmat...", flush = True) 
+            print("Readjusting for new tmat...", flush = True)
+            
             Apos_in = np.asfortranarray(Apos)
             result = tr.fixed_tmat_int(Apos_in, Bpos_in, ttrans[i,:,:], atoms, switched, filename, outdir)
             Apos_map_out, Bpos_out, Bposst_out, _, _, class_list_out, ttrans[i,:,3], dmin[i] = result
             
             ttrans[i,:,3] = ttrans[i,:,3] - ttrans[i,:,:3].dot(centroidB) + centroidA
-            
+
             class_list[i,:] = class_list_out[:n_map]-class_list_out[:n_map].min()
             
             Bpos[i,:,:] = Bpos_out[:,:n_map]

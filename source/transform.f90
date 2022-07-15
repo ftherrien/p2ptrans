@@ -568,7 +568,7 @@ contains
 
   end subroutine analytical_gd_free
   
-  subroutine analytical_gd_vec(straighten, tmat, vec, Apos, Bpos, n_iter, rate2, tol, pot, param)
+  subroutine analytical_gd_vec(straighten, tmat, vec, Apos, Bpos, n_iter, rate2, tol, pot, param, c)
 
     ! Gradient descent with respect to the vector only (3x3 matrix)
     ! ADJUST has been implemented
@@ -620,8 +620,8 @@ contains
     integer :: &
          j, i, k ! Iterator
 
-    double precision, parameter :: &
-         c = 0.001
+    double precision, intent(in) :: &
+         c
 
     nat = dble(size(Apos,2))
 
@@ -2070,7 +2070,7 @@ contains
 
     call analytical_gd_vec(.false., eye(), vec_out, &
          Apos, Bpos, n_ana*1000, rate2, &
-         tol, "Euclidean", 0.0d0)
+         tol, "Euclidean", 0.0d0, 0.0d0)
   
   end subroutine optimize_vec
   
@@ -2358,7 +2358,7 @@ contains
     ! Reshift after classification
     call analytical_gd_vec(.false.,tmat, vec, &
          Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
-         tol, "Euclidean", 0.0d0)
+         tol, "Euclidean", 0.0d0, 0.0d0)
 
     vec_rot = 0.0d0
 
@@ -2852,7 +2852,8 @@ contains
          zdist, &
          max_vol, &
          size_bin, &
-         min_prom
+         min_prom, &
+         straighten
 
     namelist /input2d/ &
          fracA, fracB, &
@@ -2874,7 +2875,8 @@ contains
          vecrep, &
          zdist, &
          min_prom, &
-         init_class
+         init_class, &
+         straighten
 
     tol = 1.0d-6
     tol_std = tol*1.0d-3
@@ -2899,6 +2901,7 @@ contains
     check = .false.
     vecrep = 10
     min_prom = 0.6d0
+    straighten = 0.001
 
     progressfile = trim(outdir)//"/progress.txt"
     open(13, file = trim(progressfile), status='replace')
@@ -3101,7 +3104,7 @@ contains
 
           call analytical_gd_vec(.true.,tmat, vec, &
                Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
-               tol, pot, param)
+               tol, pot, param, straighten)
 
           if (remap) then
              i=0
@@ -3116,7 +3119,7 @@ contains
 
                 call analytical_gd_vec(.true.,tmat, vec, &
                      Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
-                     tol, pot, param)
+                     tol, pot, param, straighten)
              enddo
           endif
 
@@ -3125,7 +3128,7 @@ contains
 
           call analytical_gd_vec(.false.,tmat, vec, &
                Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
-               tol, pot, param)
+               tol, pot, param, straighten)
           
        endif
 
@@ -3338,7 +3341,8 @@ contains
          param, &
          zdist, &
          max_vol, &
-         min_prom
+         min_prom, &
+         straighten
 
     namelist /input2d/ &
          fracA, fracB, &
@@ -3360,7 +3364,8 @@ contains
          vecrep, &
          zdist, &
          min_prom, &
-         init_class
+         init_class, &
+         straighten
 
     tol = 1.0d-6
     tol_std = tol*1.0d-3
@@ -3385,6 +3390,7 @@ contains
     check = .false.
     vecrep = 10
     min_prom = 0.6d0
+    straighten = 0.001
 
     progressfile = trim(outdir)//"/progress_find_cell.txt"
     open(13, file = trim(progressfile), status='replace')
@@ -3452,8 +3458,8 @@ contains
 
           call analytical_gd_vec(.true.,tmat, vec, &
                Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
-               tol, pot, param)
-
+               tol*1e-2, pot, param, straighten)
+          
           if (remap) then
              i=0
              ! This is necessary because .true. in analytical_gd_vec that might affect the mapping
@@ -3466,7 +3472,7 @@ contains
 
                 call analytical_gd_vec(.true.,tmat, vec, &
                      Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
-                     tol, pot, param)
+                     tol*1e-2, pot, param, straighten)
              enddo
           endif
           
@@ -3474,7 +3480,7 @@ contains
 
           call analytical_gd_vec(.false.,tmat, vec, &
                Apos_mapped, Bpos_opt, n_ana*1000, rate2,&
-               tol, pot, param)
+               tol, pot, param, straighten)
           
        endif
 

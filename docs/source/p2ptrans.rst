@@ -103,6 +103,8 @@ This is file contains all the default parameters, if an entry is not specified, 
                Use the mapping given by the order of the input structures directly (do not map atoms).
   savebest
                Name of the file to save the optimal result to at the end of the minimization, before the post-processing steps.
+  usebest
+               Rerun the post processing steps only on the optimal result from the minimization.
   remap
                If true, allows remapping during the post-processing steps.
 	       

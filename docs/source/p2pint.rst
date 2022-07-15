@@ -73,6 +73,7 @@ More parameters can be specified to p2pint via a parameter file. This file is in
    check = .false.
    vecrep = 10
    min_prom = 0.6d0
+   straighten = 0.001
    /
 
 This is file contains all the default parameters, if an entry is not specified, it will take the value shown above.
@@ -103,6 +104,8 @@ This is file contains all the default parameters, if an entry is not specified, 
                Use unrestricted minimization. Not limited to rigid rotations.
   savebest
                Name of the file to save the optimal result to at the end of the minimization, before the post-processing steps.
+  usebest
+               Rerun the post processing steps only on the optimal result from the minimization.
   remap
                If true, allows remapping during the post-processing steps.
   vecrep
@@ -118,4 +121,6 @@ This is file contains all the default parameters, if an entry is not specified, 
 	       :"Euclidean":   Euclidean distance		
   param
                Equilibrium length for the Lennard-Jones potential
+  straighten
+               Straightening factors for the bonds. Since bonds (or connections) don't have directionality, the top structure can sometimes move parallel to the bottom structure without changing the bond length. to remedy this situation, the translation vector is optimized an additional time with an extra potential along the z direction that forces the bonds to be more straight i.e. the two interface to repulse each other. The value of the straightening factor is the relative strenght of this potential when the interfaces are at a distance of half the bond length (see `param` above). It decreases exponentially to reach 0 when at a distance equal to `param` 
 
