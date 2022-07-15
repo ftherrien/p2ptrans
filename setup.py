@@ -7,7 +7,7 @@ mod = Extension(name='p2ptrans.fmodules',
         f2py_options=["only:","munkres", "free_trans", "rot_mat", "center", "eye", "norm", "split", "det", "sort", "sphere", "circle", "distance", "derivative", "closest", "fixed_tmat", "fixed_tmat_int", "intoptimization", "fastoptimization", "optimize_vec", ":"])
 
 setup(name='p2ptrans',
-      version='2.0.6',
+      version='2.1.0',
       description='An algorithm to match crystal structures',
       url='https://github.com/ftherrien/p2ptrans',
       author='Felix Therrien',
