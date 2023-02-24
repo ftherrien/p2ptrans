@@ -9,7 +9,10 @@ p2ptrans allows you to find the best matching between two crystal structures.
 Current version: 2.2.0 (02.24.2023)
 
 Improved runtime through implementation of the JVC algorithm using scipy-optimize, which solves the linear assingment problem much faster than theformer implemented munkres algorithm. This enables structure matching for larger and more complex crystal structures.
-Important: For this version, set OMP_NUM_THREADS=1 and copy the JVC.py file in the directory of execution. An additional analysis script is supported in the Analysis directory, if the shell output of p2ptrans execution is piped into a file named 'run.out'. This is useful for analysing several hundreds of independent calculations, each in a separate directory.
+
+Important: For this version, set OMP_NUM_THREADS=1 and copy the JVC.py file in the directory of execution. 
+
+An additional analysis script is supported in the Analysis directory, if the shell output of p2ptrans execution is piped into a file named 'run.out'. This is useful for analysing several hundreds of independent calculations, each in a separate directory.
 
 
 Current version: 2.1.0 (07.15.2022)
