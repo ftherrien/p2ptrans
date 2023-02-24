@@ -6,6 +6,11 @@ p2ptrans allows you to find the best matching between two crystal structures.
 
 ## Latest Updates
 
+Current version: 2.2.0 (02.24.2023)
+Improved runtime through implementation of the JVC algorithm using scipy-optimize, which solves the linear assingment problem much faster than theformer implemented munkres algorithm. This enables structure matching for larger and more complex crystal structures.
+Important: For this version, set OMP_NUM_THREADS=1 and copy the JVC.py file in the directory of execution. An additional analysis script is supported in the Analysis directory, if the shell output of p2ptrans execution is piped into a file named 'run.out'. This is useful for analysing several hundreds of independent calculations, each in a separate directory.
+
+
 Current version: 2.1.0 (07.15.2022)
 
 **03.14.2021**: VERSION 2.0 is out! See the section below for more details.  
@@ -40,8 +45,9 @@ Given the interfacial planes, p2pint finds the optimal matching between two inte
 * A POSCAR file representing the interface for each termination
 
 ## Installation
-    pip install git+https://github.com/ftherrien/p2ptrans
-
+Download the package and unzip it and run
+    pip install .
+in the base directory.
 Note: If you do not have [pylada](https://github.com/pylada/pylada-light), you will need to install the py module first:
     pip install py
 
@@ -49,7 +55,7 @@ Note: If you do not have [pylada](https://github.com/pylada/pylada-light), you w
 ### Possible Errors
 1. On certain systems, the pylada installation fails with `error: ‘v’ does not name a type`. If you encounter this error retry the installation with:
 ```
-CXXFLAGS="-std=c++11" pip install git+https://github.com/ftherrien/p2ptrans
+CXXFLAGS="-std=c++11" pip install .
 ```
  
 ## Documentation & Tutorials
