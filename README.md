@@ -50,10 +50,12 @@ Given the interfacial planes, p2pint finds the optimal matching between two inte
 
 ## Installation
 Download the package and unzip it and run
+
     pip install .
     
 in the base directory.
 Note: If you do not have [pylada](https://github.com/pylada/pylada-light), you will need to install the py module first:
+
     pip install py
 
 
