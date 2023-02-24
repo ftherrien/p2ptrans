@@ -240,13 +240,17 @@ contains
          dist_map
     integer :: &
          An_cell, & ! Number of cells
-         i,l, &
+         i,l,k, &
          id, idx, &
          n, n_A, n_B
     character*(*), intent(in) :: &
          pot
     double precision, intent(in) :: &
          param
+    integer :: m
+    integer :: fu
+    character(len=10) :: file_id
+    character(len=50) :: file_name
 
     An_cell = size(Apos,2)/sum(atoms)
 
@@ -268,7 +272,26 @@ contains
             tBpos( : , id + 1 : id + n ),n_A, n_B, &
             pot, param)
 
-       call munkres(dist_map, map, dmat, n)
+       
+       ! write dmat to file to process from python
+       open(1, file='file.dat', form="unformatted") ! Adjusted open statement
+       write(1) dmat
+       close(1)
+       
+       call system('python ./JVC.py')
+       
+       open(10, file = 'map.csv', access='sequential', form='formatted')
+       open(9, file = 'cost.csv', access='sequential', form='formatted')
+       read(9, *) dist_map
+       do k=1,n
+          read(10, *) map(k)          
+       end do
+       close(10)
+       close(9)
+       
+       
+       
+       !call munkres(dist_map, map, dmat, n)
 
 
        map = map + id
