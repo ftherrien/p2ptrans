@@ -2,6 +2,7 @@ import time
 from copy import deepcopy
 import os
 from spglib import get_spacegroup
+from scipy.optimize import linear_sum_assignment
 
 from .config import *
 from .fmodules import transform as tr
@@ -11,6 +12,7 @@ from .fmodules import tiling as t
 from .display import displayOptimalResult, makeGif, displayTransCell, make_anim, make_fig, printMatAndDir
 from .utils import lcm, find_uvw, normal, rotate, PCA, makeInitStruc, reshift
 from .analysis import findR, strainDirs
+
 
 def find_cell(class_list, positions, tol = 1e-5, frac_shell = 0.5, frac_correct = 0.95, max_count=1000, minvol = 1e-5):
     
@@ -379,6 +381,13 @@ def makeStructures(cell, atoms, atom_types, natB, pos_in_struc, class_list):
             else:
                 cost[i,k] = 1000
     
+    #results2=linear_sum_assignment(cost)
+    #cost1=[]
+    #cost1=0
+    #for i in range(len(cost)):
+    #    cost1=cost1+cost[results2[0][i],results2[1][i]]
+    #dist = cost1
+    #mapping = results2[1]
     dist, mapping = lap.munkres(cost)
     
     mapping = mapping - 1
