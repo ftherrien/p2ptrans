@@ -381,13 +381,7 @@ def makeStructures(cell, atoms, atom_types, natB, pos_in_struc, class_list):
             else:
                 cost[i,k] = 1000
     
-    #results2=linear_sum_assignment(cost)
-    #cost1=[]
-    #cost1=0
-    #for i in range(len(cost)):
-    #    cost1=cost1+cost[results2[0][i],results2[1][i]]
-    #dist = cost1
-    #mapping = results2[1]
+    
     dist, mapping = lap.munkres(cost)
     
     mapping = mapping - 1
