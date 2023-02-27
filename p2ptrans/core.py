@@ -381,7 +381,6 @@ def makeStructures(cell, atoms, atom_types, natB, pos_in_struc, class_list):
             else:
                 cost[i,k] = 1000
     
-    
     dist, mapping = lap.munkres(cost)
     
     mapping = mapping - 1
